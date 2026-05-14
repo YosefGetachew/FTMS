@@ -1,0 +1,426 @@
+:root {
+  --moa-green: #1B5E20;
+  --moa-gold: #C8A951;
+  --moa-yellow: #F2C94C;
+}
+
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f4f6f9;
+}
+
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ---------------- SIDEBAR ---------------- */
+
+.sidebar {
+  width: 240px;
+  background-color: #023302;
+  color: white;
+  padding: 20px;
+}
+
+.sidebar h2 {
+  margin-bottom: 40px;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+}
+
+.sidebar li {
+  padding: 15px 10px;
+  cursor: pointer;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.sidebar li:hover {
+  background-color: #02250a;
+}
+
+/* ---------------- MAIN CONTENT ---------------- */
+
+.main-content {
+  flex: 1;
+}
+
+.header {
+  background: rgb(3, 94, 26);
+  padding: 25px;
+  box-shadow: 0px 2px 5px rgba(2, 88, 122, 0.05);
+}
+
+/* ---------------- DASHBOARD ---------------- */
+
+.dashboard,
+.dashboard-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  padding: 30px;
+}
+
+.card,
+.stat-card,
+.report-card,
+.chart-card {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0px 4px 10px rgba(0,0,0,0.08);
+  text-align: center;
+}
+
+.card h2,
+.stat-card h3 {
+  margin-bottom: 10px;
+  color: #0f172a;
+}
+
+.card p,
+.stat-card p {
+  font-size: 28px;
+  font-weight: bold;
+  color: #2563eb;
+}
+
+/* ---------------- FORMS ---------------- */
+
+.form-container,
+.page-container {
+  padding: 30px;
+}
+
+.travel-form,
+.login-form,
+.settings-container,
+.edit-modal {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  display: grid;
+  gap: 15px;
+  box-shadow: 0px 4px 10px rgba(0,0,0,0.08);
+}
+
+.travel-form input,
+.travel-form textarea,
+.login-form input,
+.settings-group input,
+.settings-group select,
+.form-group input {
+  padding: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.travel-form textarea {
+  min-height: 120px;
+}
+
+.travel-form button,
+.login-form button,
+.save-settings-btn {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.travel-form button:hover,
+.login-form button:hover,
+.pdf-btn:hover {
+  background-color: #1d4ed8;
+}
+
+/* ---------------- TABLES ---------------- */
+
+.table-container,
+.report-table-container {
+  margin: 30px;
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0px 4px 10px rgba(0,0,0,0.08);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+table th,
+table td {
+  border: 1px solid #e5e7eb;
+  padding: 12px;
+  text-align: left;
+}
+
+table th {
+  background-color: #f3f4f6;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.search-input {
+  padding: 12px;
+  width: 280px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+}
+
+/* ---------------- LOGIN ---------------- */
+
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: #f4f6f9;
+}
+
+.login-form {
+  width: 350px;
+  padding: 40px;
+}
+
+/* ---------------- BUTTONS ---------------- */
+
+.logout-btn {
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.logout-btn:hover {
+  background-color: #b91c1c;
+}
+
+.pdf-btn {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.approve-btn {
+  background-color: #16a34a;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-right: 5px;
+}
+
+.reject-btn {
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-right: 5px;
+}
+
+.edit-btn {
+  background: orange;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-right: 5px;
+}
+
+/* ---------------- STATUS BADGES ---------------- */
+
+.status-badge {
+  padding: 6px 10px;
+  border-radius: 20px;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.status-badge.pending {
+  background-color: #f59e0b;
+}
+
+.status-badge.approved {
+  background-color: #16a34a;
+}
+
+.status-badge.rejected {
+  background-color: #dc2626;
+}
+
+/* ---------------- REPORTS ---------------- */
+
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.report-card p {
+  font-size: 30px;
+  font-weight: bold;
+}
+
+.approved-report {
+  border-left: 6px solid #16a34a;
+}
+
+.pending-report {
+  border-left: 6px solid #f59e0b;
+}
+
+.rejected-report {
+  border-left: 6px solid #dc2626;
+}
+
+/* ---------------- SETTINGS ---------------- */
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 20px;
+}
+
+.settings-group label {
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+.category-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.category-buttons button {
+  padding: 12px 18px;
+  border: none;
+  border-radius: 8px;
+  background-color: #e5e7eb;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.category-buttons button:hover {
+  background-color: #cbd5e1;
+}
+
+.active-category {
+  background-color: #2563eb !important;
+  color: white;
+}
+
+/* ---------------- MODALS ---------------- */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.edit-modal {
+  width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  gap: 15px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ---------------- ATTACHMENTS ---------------- */
+
+.attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.attachment-actions input[type="file"] {
+  border: none;
+  background: transparent;
+  font-size: 14px;
+}
+
+.attachment-link {
+  text-decoration: none;
+  background: #f1f1f1;
+  padding: 10px;
+  border-radius: 6px;
+  color: #333;
+  font-weight: 500;
+}
+
+.attachment-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  padding: 10px;
+  background: #f7f7f7;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.delete-modal {
+
+  background: white;
+
+  padding: 30px;
+
+  border-radius: 12px;
+
+  width: 400px;
+
+  text-align: center;
+
+  box-shadow:
+    0 4px 20px
+    rgba(0,0,0,0.2);
+}
+
+.delete-modal p {
+
+  margin-top: 15px;
+
+  margin-bottom: 25px;
+
+  line-height: 1.6;
+}
