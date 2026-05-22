@@ -1,23 +1,27 @@
 function Sidebar({ setActivePage }) {
-const user =
-  JSON.parse(
-    localStorage.getItem('user') || '{}'
-  );
-  return (
+  const user =
+    JSON.parse(
+      localStorage.getItem('user') || '{}'
+    );
 
+  const role = user?.role;
+
+  return (
     <div className="sidebar">
 
       <h2>FTMS</h2>
 
       <ul>
 
-        <li
-          onClick={() =>
-            setActivePage('dashboard')
-          }
-        >
-          Dashboard
-        </li>
+        {role !== 'traveler' && (
+          <li
+            onClick={() =>
+              setActivePage('dashboard')
+            }
+          >
+            Dashboard
+          </li>
+        )}
 
         <li
           onClick={() =>
@@ -37,52 +41,56 @@ const user =
 
         <li
           onClick={() =>
-            setActivePage('reports')
+            setActivePage('notifications')
           }
         >
-          Reports
+          Notifications
         </li>
 
-        {user?.role === 'admin' && (
+        <li
+          onClick={() =>
+            setActivePage('reset-password')
+          }
+        >
+          Reset Password
+        </li>
 
-  <li
-    onClick={() =>
-      setActivePage('settings')
-    }
-  >
-    Settings
-    
-  </li>
+        {role !== 'traveler' && (
+          <li
+            onClick={() =>
+              setActivePage('reports')
+            }
+          >
+            Reports
+          </li>
+        )}
 
-)}
+        {role === 'admin' && (
+          <li
+            onClick={() =>
+              setActivePage('settings')
+            }
+          >
+            Settings
+          </li>
+        )}
 
-{user?.role === 'admin' && (
+        {role === 'admin' && (
+          <li
+            onClick={() =>
+              setActivePage(
+                'user-management'
+              )
+            }
+          >
+            User Management
+          </li>
+        )}
 
-  <li
-    onClick={() =>
-      setActivePage(
-        'user-management'
-      )
-    }
-  >
-    User Management
-  </li>
-
-)}
-<li
-  onClick={() =>
-    setActivePage('notifications')
-  }
->
-  Notifications
-</li>
       </ul>
 
     </div>
-    
   );
-  
 }
 
 export default Sidebar;
-
