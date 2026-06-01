@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import API from "../services/api";
 import "./request-form.css";
 
-const Field = ({ name, label, required, hint, children, touched, errors }) => {
+const Field = ({
+  name,
+  label,
+  required,
+  hint,
+  children,
+  touched,
+  errors,
+}) => {
   const showError = Boolean(touched?.[name] && errors?.[name]);
 
   return (
@@ -29,7 +37,6 @@ const Field = ({ name, label, required, hint, children, touched, errors }) => {
 
 const StepIndicator = ({ step, setStep, step1Valid, step2Valid }) => (
   <div className="mb-8">
-    {/* spacing is handled by .stepper-row in CSS */}
     <div className="stepper-row">
       <button
         type="button"
@@ -77,14 +84,15 @@ const StepIndicator = ({ step, setStep, step1Valid, step2Valid }) => (
 const FileBox = ({ label, name, file, setFormData, handleFileChange }) => (
   <div className="filebox">
     <div className="filebox-row">
-      {/* ✅ Upload button in front (left) */}
       <label className="secondary-btn cursor-pointer filebox-upload">
         Upload
         <input
           type="file"
           name={name}
           accept="application/pdf,image/png,image/jpeg"
-          onClick={(e) => (e.currentTarget.value = null)}
+          onClick={(e) => {
+            e.currentTarget.value = null;
+          }}
           onChange={handleFileChange}
           className="hidden"
         />
@@ -118,7 +126,20 @@ const FileBox = ({ label, name, file, setFormData, handleFileChange }) => (
 
 export default function RequestForm() {
   const categoryOptions = useMemo(
-    () => ["Higher Officials", "Experts", "Affiliate Institute"],
+    () => [
+      {
+        value: "higher_official",
+        label: "Higher Officials",
+      },
+      {
+        value: "expert",
+        label: "Experts",
+      },
+      {
+        value: "affiliate_institution",
+        label: "Affiliate Institute",
+      },
+    ],
     []
   );
 
@@ -140,7 +161,6 @@ export default function RequestForm() {
       sponsor: "",
       passportNumber: "",
 
-      // ✅ attachments OPTIONAL
       passportFile: null,
       invitationLetter: null,
       torFile: null,
@@ -150,25 +170,39 @@ export default function RequestForm() {
 
   const [formData, setFormData] = useState(initialFormData);
   const [countries, setCountries] = useState([]);
-  const [organizations, setOrganizations] = useState([]);
   const [stateMinisters, setStateMinisters] = useState([]);
+  const [organizations, setOrganizations] = useState([]);
+
   const [step, setStep] = useState(1);
   const [touched, setTouched] = useState({});
-  const [notice, setNotice] = useState({ type: "", message: "" });
+  const [notice, setNotice] = useState({
+    type: "",
+    message: "",
+  });
 
   const [loading, setLoading] = useState({
-    organizations: false,
     countries: false,
     stateMinisters: false,
+    organizations: false,
     submitting: false,
   });
 
-  const markTouched = (name) => setTouched((p) => ({ ...p, [name]: true }));
+  const isAffiliate =
+    formData.travelerCategory === "affiliate_institution";
+
+  const markTouched = (name) => {
+    setTouched((prev) => ({
+      ...prev,
+      [name]: true,
+    }));
+  };
 
   const touchMany = (names) => {
     setTouched((prev) => {
       const next = { ...prev };
-      names.forEach((n) => (next[n] = true));
+      names.forEach((name) => {
+        next[name] = true;
+      });
       return next;
     });
   };
@@ -178,17 +212,27 @@ export default function RequestForm() {
     if (!name) return;
 
     setFormData((prev) => {
-      const next = { ...prev, [name]: value };
+      const next = {
+        ...prev,
+        [name]: value,
+      };
 
-      // keep dates consistent
-      if (name === "startDate" && next.endDate && next.endDate < value) {
+      if (
+        name === "startDate" &&
+        next.endDate &&
+        next.endDate < value
+      ) {
         next.endDate = "";
       }
 
-      // if travelerCategory changes away from Affiliate Institute, clear organization
-      if (name === "travelerCategory" && value !== "Affiliate Institute") {
-        next.organizationName = "";
-      }
+      if (name === "travelerCategory") {
+  if (value === "affiliate_institution") {
+    next.organizationName = "";
+    next.assignedStateMinisterId = "";
+  } else {
+    next.organizationName = "MoA";
+  }
+}
 
       return next;
     });
@@ -196,59 +240,85 @@ export default function RequestForm() {
 
   const handleFileChange = (e) => {
     const { name, files } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: files?.[0] || null }));
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: files?.[0] || null,
+    }));
   };
 
-  // ✅ Validation
   const errors = useMemo(() => {
-    const v = {};
+    const validationErrors = {};
 
-    // Step 1 required
     if (!formData.travelerCategory) {
-      v.travelerCategory = "Traveler Category is required.";
+      validationErrors.travelerCategory =
+        "Traveler Category is required.";
+    }
+if (
+  isAffiliate &&
+  !formData.organizationName
+) {
+  validationErrors.organizationName =
+    "Please select an affiliate institution.";
+}
+    if (
+      formData.travelerCategory !== "affiliate_institution" &&
+      !formData.assignedStateMinisterId
+    ) {
+      validationErrors.assignedStateMinisterId =
+        "Please select a sector.";
+    }
+
+    if (!formData.fullName.trim()) {
+      validationErrors.fullName = "Full name is required.";
+    }
+
+    if (!formData.position.trim()) {
+      validationErrors.position = "Position is required.";
+    }
+
+    if (!formData.department.trim()) {
+      validationErrors.department = "Department is required.";
+    }
+
+    const email = (formData.email || "").trim();
+
+    if (!email) {
+      validationErrors.email = "Email is required.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      validationErrors.email = "Enter a valid email address.";
+    }
+
+    if (!formData.country.trim()) {
+      validationErrors.country = "Destination country is required.";
+    }
+
+    if (!formData.startDate) {
+      validationErrors.startDate = "Start date is required.";
+    }
+
+    if (!formData.endDate) {
+      validationErrors.endDate = "End date is required.";
     }
 
     if (
-      formData.travelerCategory === "Affiliate Institute" &&
-      !formData.organizationName
+      formData.startDate &&
+      formData.endDate &&
+      formData.endDate < formData.startDate
     ) {
-      v.organizationName = "Please select an organization.";
+      validationErrors.endDate =
+        "End date must be on or after start date.";
     }
 
-    if (!formData.assignedStateMinisterId) {
-      v.assignedStateMinisterId = "Please select a sector.";
+    if (!formData.purpose.trim()) {
+      validationErrors.purpose = "Purpose is required.";
     }
 
-    if (!formData.fullName.trim()) v.fullName = "Full name is required.";
-    if (!formData.position.trim()) v.position = "Position is required.";
-    if (!formData.department.trim()) v.department = "Department is required.";
-
-    const email = (formData.email || "").trim();
-    if (!email) {
-      v.email = "Email is required.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      v.email = "Enter a valid email address.";
-    }
-
-    // Step 2 required
-    if (!formData.country.trim()) v.country = "Destination country is required.";
-    if (!formData.startDate) v.startDate = "Start date is required.";
-    if (!formData.endDate) v.endDate = "End date is required.";
-
-    if (formData.startDate && formData.endDate && formData.endDate < formData.startDate) {
-      v.endDate = "End date must be on or after start date.";
-    }
-
-    if (!formData.purpose.trim()) v.purpose = "Purpose is required.";
-
-    // Step 3 attachments OPTIONAL -> no checks
-
-    return v;
+    return validationErrors;
   }, [formData]);
 
   const step1Valid =
     !errors.travelerCategory &&
-    !errors.organizationName &&
     !errors.assignedStateMinisterId &&
     !errors.fullName &&
     !errors.position &&
@@ -256,70 +326,115 @@ export default function RequestForm() {
     !errors.email;
 
   const step2Valid =
-    !errors.country && !errors.startDate && !errors.endDate && !errors.purpose;
+    !errors.country &&
+    !errors.startDate &&
+    !errors.endDate &&
+    !errors.purpose;
 
   const canSubmit = step1Valid && step2Valid;
 
-  const fetchOrganizations = useCallback(async () => {
-    setLoading((p) => ({ ...p, organizations: true }));
-    try {
-      const response = await API.get("/affiliate-institutions");
-      setOrganizations(response.data || []);
-    } catch (err) {
-      console.error(err);
-      setNotice({ type: "error", message: "Unable to load organizations." });
-    } finally {
-      setLoading((p) => ({ ...p, organizations: false }));
-    }
-  }, []);
-
   const fetchStateMinisters = useCallback(async () => {
-    setLoading((p) => ({ ...p, stateMinisters: true }));
+    setLoading((prev) => ({
+      ...prev,
+      stateMinisters: true,
+    }));
+
     try {
       const response = await API.get("/state-ministers");
       setStateMinisters(response.data || []);
-    } catch (err) {
-      console.error(err);
-      setNotice({ type: "error", message: "Unable to load sectors." });
+    } catch (error) {
+      console.error(error);
+      setNotice({
+        type: "error",
+        message: "Unable to load sectors.",
+      });
     } finally {
-      setLoading((p) => ({ ...p, stateMinisters: false }));
+      setLoading((prev) => ({
+        ...prev,
+        stateMinisters: false,
+      }));
     }
   }, []);
+const fetchOrganizations = useCallback(async () => {
+  setLoading((prev) => ({
+    ...prev,
+    organizations: true,
+  }));
 
+  try {
+    const response = await API.get(
+      "/affiliate-institutions"
+    );
+
+    setOrganizations(response.data || []);
+  } catch (error) {
+    console.error(error);
+
+    setNotice({
+      type: "error",
+      message:
+        "Unable to load affiliate institutions.",
+    });
+  } finally {
+    setLoading((prev) => ({
+      ...prev,
+      organizations: false,
+    }));
+  }
+}, []);
   const fetchCountries = useCallback(async () => {
-    setLoading((p) => ({ ...p, countries: true }));
+    setLoading((prev) => ({
+      ...prev,
+      countries: true,
+    }));
+
     try {
-      const response = await fetch("https://restcountries.com/v3.1/all?fields=name");
+      const response = await fetch(
+        "https://restcountries.com/v3.1/all?fields=name"
+      );
+
       const data = await response.json();
 
       const countryNames = (data || [])
-        .map((c) => c?.name?.common)
+        .map((country) => country?.name?.common)
         .filter(Boolean)
         .sort((a, b) => a.localeCompare(b));
 
       setCountries(countryNames);
-    } catch (err) {
-      console.error(err);
-      setNotice({ type: "error", message: "Unable to load countries." });
+    } catch (error) {
+      console.error(error);
+      setNotice({
+        type: "error",
+        message: "Unable to load countries.",
+      });
     } finally {
-      setLoading((p) => ({ ...p, countries: false }));
+      setLoading((prev) => ({
+        ...prev,
+        countries: false,
+      }));
     }
   }, []);
 
   useEffect(() => {
-    fetchOrganizations();
-    fetchStateMinisters();
-    fetchCountries();
-  }, [fetchOrganizations, fetchStateMinisters, fetchCountries]);
+  fetchOrganizations();
+  fetchStateMinisters();
+  fetchCountries();
+}, [
+  fetchOrganizations,
+  fetchStateMinisters,
+  fetchCountries,
+]);
 
   const goNext = () => {
-    setNotice({ type: "", message: "" });
+    setNotice({
+      type: "",
+      message: "",
+    });
 
     if (step === 1) {
       touchMany([
         "travelerCategory",
-        ...(formData.travelerCategory === "Affiliate Institute" ? ["organizationName"] : []),
-        "assignedStateMinisterId",
+        ...(isAffiliate ? [] : ["assignedStateMinisterId"]),
         "fullName",
         "position",
         "department",
@@ -329,44 +444,60 @@ export default function RequestForm() {
       if (!step1Valid) {
         setNotice({
           type: "error",
-          message: "Please complete the required fields in this step.",
+          message:
+            "Please complete the required fields in this step.",
         });
         return;
       }
     }
 
     if (step === 2) {
-      touchMany(["country", "startDate", "endDate", "purpose"]);
+      touchMany([
+        "country",
+        "startDate",
+        "endDate",
+        "purpose",
+      ]);
 
       if (!step2Valid) {
         setNotice({
           type: "error",
-          message: "Please fix the highlighted fields before continuing.",
+          message:
+            "Please fix the highlighted fields before continuing.",
         });
         return;
       }
     }
 
-    setStep((p) => Math.min(3, p + 1));
+    setStep((prev) => Math.min(3, prev + 1));
   };
 
-  const goBack = () => setStep((p) => Math.max(1, p - 1));
+  const goBack = () => {
+    setStep((prev) => Math.max(1, prev - 1));
+  };
 
   const resetForm = ({ keepNotice = false } = {}) => {
-    if (!keepNotice) setNotice({ type: "", message: "" });
+    if (!keepNotice) {
+      setNotice({
+        type: "",
+        message: "",
+      });
+    }
+
     setFormData(initialFormData);
     setTouched({});
     setStep(1);
   };
 
-  // ✅ Submit ONLY by button click (never automatic)
   const submitRequest = async () => {
-    setNotice({ type: "", message: "" });
+    setNotice({
+      type: "",
+      message: "",
+    });
 
     touchMany([
       "travelerCategory",
-      ...(formData.travelerCategory === "Affiliate Institute" ? ["organizationName"] : []),
-      "assignedStateMinisterId",
+      ...(isAffiliate ? [] : ["assignedStateMinisterId"]),
       "fullName",
       "position",
       "department",
@@ -380,23 +511,36 @@ export default function RequestForm() {
     if (!canSubmit) {
       setNotice({
         type: "error",
-        message: "Please complete required fields before submitting.",
+        message:
+          "Please complete required fields before submitting.",
       });
       return;
     }
 
-    setLoading((p) => ({ ...p, submitting: true }));
+    setLoading((prev) => ({
+      ...prev,
+      submitting: true,
+    }));
 
     try {
       const data = new FormData();
+
       Object.keys(formData).forEach((key) => {
-        const val = formData[key];
-        if (val !== null && val !== undefined && val !== "") {
-          data.append(key, val);
+        const value = formData[key];
+
+        if (
+          value !== null &&
+          value !== undefined &&
+          value !== ""
+        ) {
+          data.append(key, value);
         }
       });
 
-      // ✅ Let axios set multipart headers automatically (safer)
+      if (isAffiliate) {
+  data.delete("assignedStateMinisterId");
+}
+
       await API.post("/requests", data);
 
       setNotice({
@@ -404,22 +548,30 @@ export default function RequestForm() {
         message: "Travel Request submitted successfully.",
       });
 
-      resetForm({ keepNotice: true });
-    } catch (err) {
-      console.error("Submit error:", err);
+      resetForm({
+        keepNotice: true,
+      });
+    } catch (error) {
+      console.error("Submit error:", error);
 
-      const serverMsg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
+      const serverMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
         "Error submitting request. Please try again.";
 
       setNotice({
         type: "error",
-        message: typeof serverMsg === "string" ? serverMsg : "Error submitting request.",
+        message:
+          typeof serverMessage === "string"
+            ? serverMessage
+            : "Error submitting request.",
       });
     } finally {
-      setLoading((p) => ({ ...p, submitting: false }));
+      setLoading((prev) => ({
+        ...prev,
+        submitting: false,
+      }));
     }
   };
 
@@ -428,25 +580,33 @@ export default function RequestForm() {
       <div className="mx-auto w-full max-w-[1100px]">
         <div className="mb-7">
           <div className="header-strip w-24 mb-3" />
+
           <h1 className="text-2xl font-extrabold text-slate-900">
             New Travel Request
           </h1>
+
           <p className="mt-2 text-sm text-slate-600">
-            Simple steps. Only essential details first — optional information later.
+            Simple steps. Only essential details first — optional
+            information later.
           </p>
         </div>
 
         {notice.message && (
           <div
             className={`mb-6 ${
-              notice.type === "success" ? "notice-success" : "notice-error"
+              notice.type === "success"
+                ? "notice-success"
+                : "notice-error"
             }`}
           >
             {notice.message}
           </div>
         )}
 
-        <form className="ministry-card p-6 md:p-8" onSubmit={(e) => e.preventDefault()}>
+        <form
+          className="ministry-card p-6 md:p-8"
+          onSubmit={(e) => e.preventDefault()}
+        >
           <StepIndicator
             step={step}
             setStep={setStep}
@@ -454,18 +614,20 @@ export default function RequestForm() {
             step2Valid={step2Valid}
           />
 
-          {/* STEP 1 */}
           {step === 1 && (
             <div className="space-y-8">
               <div>
-                <div className="section-title text-base">Traveler</div>
+                <div className="section-title text-base">
+                  Traveler
+                </div>
+
                 <div className="section-subtitle">
-                  Fill in traveler details. Traveler Category is mandatory.
+                  Fill in traveler details. Traveler Category is
+                  mandatory.
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                {/* ✅ Traveler Category dropdown (required) */}
                 <div className="md:col-span-2">
                   <Field
                     name="travelerCategory"
@@ -483,78 +645,98 @@ export default function RequestForm() {
                       className="ministry-input"
                     >
                       <option value="">Select Category</option>
-                      {categoryOptions.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
+
+                      {categoryOptions.map((category) => (
+                        <option
+                          key={category.value}
+                          value={category.value}
+                        >
+                          {category.label}
                         </option>
                       ))}
                     </select>
                   </Field>
                 </div>
+{isAffiliate && (
+  <div className="md:col-span-2">
+    <Field
+      name="organizationName"
+      label="Affiliate Institution"
+      required
+      touched={touched}
+      errors={errors}
+    >
+      <select
+        name="organizationName"
+        value={formData.organizationName}
+        onChange={handleChange}
+        onBlur={() =>
+          markTouched("organizationName")
+        }
+        className="ministry-input"
+      >
+        <option value="">
+          {loading.organizations
+            ? "Loading institutions..."
+            : "Select Affiliate Institution"}
+        </option>
 
-                {/* Affiliate organization only when needed */}
-                {formData.travelerCategory === "Affiliate Institute" && (
-                  <div className="md:col-span-2">
-                    <Field
-                      name="organizationName"
-                      label="Organization Name"
+        {organizations.map((org) => (
+          <option
+            key={org.id}
+            value={org.organization_name}
+          >
+            {org.organization_name}
+          </option>
+        ))}
+      </select>
+    </Field>
+  </div>
+)}
+                {!isAffiliate && (
+                  <Field
+                    name="assignedStateMinisterId"
+                    label="Sector"
+                    required
+                    touched={touched}
+                    errors={errors}
+                  >
+                    <select
+                      name="assignedStateMinisterId"
+                      value={formData.assignedStateMinisterId}
+                      onChange={handleChange}
+                      onBlur={() =>
+                        markTouched("assignedStateMinisterId")
+                      }
                       required
-                      hint="Only for Affiliate Institute travelers."
-                      touched={touched}
-                      errors={errors}
+                      disabled={loading.stateMinisters}
+                      className="ministry-input"
                     >
-                      <select
-                        name="organizationName"
-                        value={formData.organizationName}
-                        onChange={handleChange}
-                        onBlur={() => markTouched("organizationName")}
-                        required
-                        disabled={loading.organizations}
-                        className="ministry-input"
-                      >
-                        <option value="">
-                          {loading.organizations
-                            ? "Loading organizations..."
-                            : "Select Organization"}
+                      <option value="">
+                        {loading.stateMinisters
+                          ? "Loading sectors..."
+                          : "Select Sector"}
+                      </option>
+
+                      {stateMinisters.map((minister) => (
+                        <option
+                          key={minister.id}
+                          value={minister.id}
+                        >
+                          {minister.sector}
                         </option>
-                        {organizations.map((org) => (
-                          <option key={org.id} value={org.organization_name}>
-                            {org.organization_name}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                  </div>
+                      ))}
+                    </select>
+                  </Field>
                 )}
 
                 <Field
-                  name="assignedStateMinisterId"
-                  label="Sector"
+                  name="fullName"
+                  label="Full Name"
                   required
                   touched={touched}
                   errors={errors}
                 >
-                  <select
-                    name="assignedStateMinisterId"
-                    value={formData.assignedStateMinisterId}
-                    onChange={handleChange}
-                    onBlur={() => markTouched("assignedStateMinisterId")}
-                    required
-                    disabled={loading.stateMinisters}
-                    className="ministry-input"
-                  >
-                    <option value="">
-                      {loading.stateMinisters ? "Loading sectors..." : "Select Sector"}
-                    </option>
-                    {stateMinisters.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.sector}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <Field name="fullName" label="Full Name" required touched={touched} errors={errors}>
                   <input
                     name="fullName"
                     value={formData.fullName}
@@ -565,7 +747,13 @@ export default function RequestForm() {
                   />
                 </Field>
 
-                <Field name="position" label="Position" required touched={touched} errors={errors}>
+                <Field
+                  name="position"
+                  label="Position"
+                  required
+                  touched={touched}
+                  errors={errors}
+                >
                   <input
                     name="position"
                     value={formData.position}
@@ -576,7 +764,13 @@ export default function RequestForm() {
                   />
                 </Field>
 
-                <Field name="department" label="Department" required touched={touched} errors={errors}>
+                <Field
+                  name="department"
+                  label="Department"
+                  required
+                  touched={touched}
+                  errors={errors}
+                >
                   <input
                     name="department"
                     value={formData.department}
@@ -587,7 +781,13 @@ export default function RequestForm() {
                   />
                 </Field>
 
-                <Field name="email" label="Email" required touched={touched} errors={errors}>
+                <Field
+                  name="email"
+                  label="Email"
+                  required
+                  touched={touched}
+                  errors={errors}
+                >
                   <input
                     type="email"
                     name="email"
@@ -599,7 +799,13 @@ export default function RequestForm() {
                   />
                 </Field>
 
-                <Field name="phone" label="Phone Number" hint="Optional" touched={touched} errors={errors}>
+                <Field
+                  name="phone"
+                  label="Phone Number"
+                  hint="Optional"
+                  touched={touched}
+                  errors={errors}
+                >
                   <input
                     name="phone"
                     value={formData.phone}
@@ -611,18 +817,24 @@ export default function RequestForm() {
             </div>
           )}
 
-          {/* STEP 2 */}
           {step === 2 && (
             <div className="space-y-8">
               <div>
                 <div className="section-title text-base">Trip</div>
+
                 <div className="section-subtitle">
                   Provide destination, dates, and purpose.
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <Field name="country" label="Destination Country" required touched={touched} errors={errors}>
+                <Field
+                  name="country"
+                  label="Destination Country"
+                  required
+                  touched={touched}
+                  errors={errors}
+                >
                   <input
                     name="country"
                     value={formData.country}
@@ -633,14 +845,21 @@ export default function RequestForm() {
                     disabled={loading.countries}
                     required
                   />
+
                   <datalist id="countries">
-                    {countries.map((c) => (
-                      <option key={c} value={c} />
+                    {countries.map((country) => (
+                      <option key={country} value={country} />
                     ))}
                   </datalist>
                 </Field>
 
-                <Field name="startDate" label="Start Date" required touched={touched} errors={errors}>
+                <Field
+                  name="startDate"
+                  label="Start Date"
+                  required
+                  touched={touched}
+                  errors={errors}
+                >
                   <input
                     type="date"
                     name="startDate"
@@ -692,7 +911,13 @@ export default function RequestForm() {
                   </Field>
                 </div>
 
-                <Field name="sponsor" label="Sponsor / Funding Source" hint="Optional" touched={touched} errors={errors}>
+                <Field
+                  name="sponsor"
+                  label="Sponsor / Funding Source"
+                  hint="Optional"
+                  touched={touched}
+                  errors={errors}
+                >
                   <input
                     name="sponsor"
                     value={formData.sponsor}
@@ -701,7 +926,13 @@ export default function RequestForm() {
                   />
                 </Field>
 
-                <Field name="passportNumber" label="Passport Number" hint="Optional" touched={touched} errors={errors}>
+                <Field
+                  name="passportNumber"
+                  label="Passport Number"
+                  hint="Optional"
+                  touched={touched}
+                  errors={errors}
+                >
                   <input
                     name="passportNumber"
                     value={formData.passportNumber}
@@ -713,11 +944,13 @@ export default function RequestForm() {
             </div>
           )}
 
-          {/* STEP 3 */}
           {step === 3 && (
             <div className="space-y-8">
               <div>
-                <div className="section-title text-base">Attachments</div>
+                <div className="section-title text-base">
+                  Attachments
+                </div>
+
                 <div className="section-subtitle">
                   Optional — attach documents to speed up processing.
                 </div>
@@ -731,6 +964,7 @@ export default function RequestForm() {
                   setFormData={setFormData}
                   handleFileChange={handleFileChange}
                 />
+
                 <FileBox
                   label="Invitation Letter"
                   name="invitationLetter"
@@ -738,6 +972,7 @@ export default function RequestForm() {
                   setFormData={setFormData}
                   handleFileChange={handleFileChange}
                 />
+
                 <FileBox
                   label="Terms of Reference (TOR)"
                   name="torFile"
@@ -749,20 +984,28 @@ export default function RequestForm() {
 
               <div className="review-box">
                 <span className="font-semibold">Review:</span>{" "}
-                Attachments are optional. Click “Submit Request” when ready.
+                Attachments are optional. Click “Submit Request”
+                when ready.
               </div>
             </div>
           )}
 
-          {/* Footer */}
           <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <button type="button" onClick={() => resetForm()} className="secondary-btn">
+            <button
+              type="button"
+              onClick={() => resetForm()}
+              className="secondary-btn"
+            >
               Reset
             </button>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               {step > 1 && (
-                <button type="button" onClick={goBack} className="secondary-btn">
+                <button
+                  type="button"
+                  onClick={goBack}
+                  className="secondary-btn"
+                >
                   Back
                 </button>
               )}
@@ -772,7 +1015,10 @@ export default function RequestForm() {
                   type="button"
                   onClick={goNext}
                   className="primary-btn"
-                  disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid)}
+                  disabled={
+                    (step === 1 && !step1Valid) ||
+                    (step === 2 && !step2Valid)
+                  }
                 >
                   Continue
                 </button>
@@ -783,7 +1029,9 @@ export default function RequestForm() {
                   className="primary-btn"
                   disabled={loading.submitting || !canSubmit}
                 >
-                  {loading.submitting ? "Submitting..." : "Submit Request"}
+                  {loading.submitting
+                    ? "Submitting..."
+                    : "Submit Request"}
                 </button>
               )}
             </div>

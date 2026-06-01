@@ -1,8 +1,4 @@
-import {
-  useEffect,
-  useState,
-} from 'react';
-
+import { useEffect, useState } from 'react';
 import API from '../services/api';
 
 function UserManagement() {
@@ -10,20 +6,27 @@ function UserManagement() {
     fullName: '',
     email: '',
     password: '',
-    role: 'traveler',
+    role: 'admin',
   };
 
-  const roles = [
+  const officerRoles = [
     { value: 'admin', label: 'Admin' },
-    { value: 'traveler', label: 'Traveler' },
-    { value: 'state_minister', label: 'State Minister' },
     { value: 'protocol', label: 'Protocol' },
+    { value: 'state_minister', label: 'State Minister' },
     { value: 'office_head', label: 'Office Head' },
     { value: 'minister', label: 'Minister' },
+    {
+      value: 'chief_executive_officer',
+      label: 'Chief Executive Officer',
+    },
   ];
+
+  const officerRoleValues = officerRoles.map((role) => role.value);
 
   const [users, setUsers] = useState([]);
   const [formData, setFormData] = useState(initialFormData);
+  const [editingId, setEditingId] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -33,10 +36,37 @@ function UserManagement() {
   const fetchUsers = async () => {
     try {
       const response = await API.get('/users');
-      setUsers(response.data);
+      setUsers(response.data || []);
     } catch (error) {
       console.error(error);
+      alert('Failed to load users');
     }
+  };
+
+  const officers = users.filter((user) =>
+    officerRoleValues.includes(user.role)
+  );
+
+  const travelers = users.filter(
+    (user) => user.role === 'traveler'
+  );
+
+  const formatRole = (role) => {
+    const foundRole = officerRoles.find(
+      (item) => item.value === role
+    );
+
+    if (foundRole) return foundRole.label;
+
+    if (role === 'traveler') return 'Traveler';
+
+    return role || '-';
+  };
+
+  const resetForm = () => {
+    setFormData(initialFormData);
+    setEditingId(null);
+    setShowEditModal(false);
   };
 
   const handleChange = (e) => {
@@ -46,37 +76,82 @@ function UserManagement() {
     });
   };
 
-  const handleSubmit = async () => {
+  const validateForm = () => {
     if (
       !formData.fullName.trim() ||
       !formData.email.trim() ||
-      !formData.password.trim() ||
       !formData.role
     ) {
-      alert('Please complete all required fields');
-      return;
+      alert('Please complete required fields');
+      return false;
     }
+
+    if (!editingId && !formData.password.trim()) {
+      alert('Password is required for new officer');
+      return false;
+    }
+
+    if (!officerRoleValues.includes(formData.role)) {
+      alert('Only officer roles can be created here');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
 
     try {
       setLoading(true);
 
-      await API.post('/users', {
-        fullName: formData.fullName.trim(),
-        email: formData.email.trim(),
-        password: formData.password,
-        role: formData.role,
-      });
+      if (editingId) {
+        await API.put(`/users/${editingId}`, {
+          fullName: formData.fullName.trim(),
+          email: formData.email.trim(),
+          role: formData.role,
+        });
 
-      alert('User added successfully');
+        alert('Officer updated successfully');
+      } else {
+        await API.post('/users', {
+          fullName: formData.fullName.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+          role: formData.role,
+        });
 
-      setFormData(initialFormData);
+        alert('Officer added successfully');
+      }
+
+      resetForm();
       fetchUsers();
     } catch (error) {
       console.error(error);
-      alert('Failed to add user');
+      alert(
+        error.response?.data?.error ||
+          'Failed to save user'
+      );
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEdit = (user) => {
+    setEditingId(user.id);
+
+    setFormData({
+      fullName: user.full_name || '',
+      email: user.email || '',
+      password: '',
+      role: user.role || 'admin',
+    });
+
+    setShowEditModal(true);
+  };
+
+  const handleCancelEdit = () => {
+    resetForm();
   };
 
   const handleResetPassword = async (id) => {
@@ -85,15 +160,14 @@ function UserManagement() {
     if (!newPassword) return;
 
     try {
-      await API.put(
-        `/users/${id}/reset-password`,
-        { newPassword }
-      );
+      await API.put(`/users/${id}/reset-password`, {
+        newPassword,
+      });
 
       alert('Password reset successfully');
     } catch (error) {
       console.error(error);
-      alert('Password reset failed');
+      alert('Failed to reset password');
     }
   };
 
@@ -106,6 +180,7 @@ function UserManagement() {
 
     try {
       await API.delete(`/users/${id}`);
+
       alert('User deleted successfully');
       fetchUsers();
     } catch (error) {
@@ -114,77 +189,113 @@ function UserManagement() {
     }
   };
 
-  const formatRole = (role) => {
-    const foundRole =
-      roles.find((item) => item.value === role);
+  const renderUserTable = (items, emptyMessage) => (
+    <div className="report-table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
 
-    return foundRole ? foundRole.label : role;
-  };
+        <tbody>
+          {items.length === 0 ? (
+            <tr>
+              <td colSpan="4">{emptyMessage}</td>
+            </tr>
+          ) : (
+            items.map((user) => (
+              <tr key={user.id}>
+                <td>{user.full_name || '-'}</td>
+                <td>{user.email || '-'}</td>
+                <td>{formatRole(user.role)}</td>
+
+                <td>
+                  {officerRoleValues.includes(user.role) && (
+                    <button
+                      className="edit-btn"
+                      onClick={() => handleEdit(user)}
+                    >
+                      Edit
+                    </button>
+                  )}
+
+                  <button
+                    className="approve-btn"
+                    onClick={() =>
+                      handleResetPassword(user.id)
+                    }
+                  >
+                    Reset Password
+                  </button>
+
+                  <button
+                    className="delete-btn"
+                    onClick={() => handleDelete(user.id)}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <div className="page-container">
-
       <h2>User Management</h2>
 
       <div className="settings-container">
+        <h3>Add Officer</h3>
 
         <div className="settings-group">
-          <label>
-            Full Name <span className="required-star">*</span>
-          </label>
+          <label>Full Name *</label>
 
           <input
             type="text"
             name="fullName"
-            placeholder="Full Name"
             value={formData.fullName}
             onChange={handleChange}
-            required
           />
         </div>
 
         <div className="settings-group">
-          <label>
-            Email <span className="required-star">*</span>
-          </label>
+          <label>Email *</label>
 
           <input
             type="email"
             name="email"
-            placeholder="example@email.com"
             value={formData.email}
             onChange={handleChange}
-            required
           />
         </div>
 
         <div className="settings-group">
-          <label>
-            Temporary Password <span className="required-star">*</span>
-          </label>
+          <label>Temporary Password *</label>
 
           <input
             type="password"
             name="password"
-            placeholder="Temporary Password"
             value={formData.password}
             onChange={handleChange}
-            required
           />
         </div>
 
         <div className="settings-group">
-          <label>
-            Role <span className="required-star">*</span>
-          </label>
+          <label>Role *</label>
 
           <select
             name="role"
             value={formData.role}
             onChange={handleChange}
-            required
           >
-            {roles.map((role) => (
+            {officerRoles.map((role) => (
               <option
                 key={role.value}
                 value={role.value}
@@ -200,64 +311,109 @@ function UserManagement() {
           onClick={handleSubmit}
           disabled={loading}
         >
-          {loading ? 'Adding...' : 'Add User'}
+          {loading ? 'Saving...' : 'Add Officer'}
         </button>
-
       </div>
 
-      <div className="report-table-container">
+      <h3
+        style={{
+          marginTop: '35px',
+          marginBottom: '15px',
+        }}
+      >
+        Officers
+      </h3>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
+      {renderUserTable(
+        officers,
+        'No officers found'
+      )}
 
-          <tbody>
-            {users.length === 0 ? (
-              <tr>
-                <td colSpan="4">
-                  No users found
-                </td>
-              </tr>
-            ) : (
-              users.map((user) => (
-                <tr key={user.id}>
-                  <td>{user.full_name}</td>
-                  <td>{user.email}</td>
-                  <td>{formatRole(user.role)}</td>
+      <h3
+        style={{
+          marginTop: '35px',
+          marginBottom: '15px',
+        }}
+      >
+        Travelers
+      </h3>
 
-                  <td>
-                    <button
-                      className="approve-btn"
-                      onClick={() =>
-                        handleResetPassword(user.id)
-                      }
-                    >
-                      Reset Password
-                    </button>
+      {renderUserTable(
+        travelers,
+        'No travelers found'
+      )}
 
-                    <button
-                      className="delete-btn"
-                      onClick={() =>
-                        handleDelete(user.id)
-                      }
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {showEditModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Edit Officer</h3>
 
-      </div>
+            <div className="settings-group">
+              <label>Full Name</label>
 
+              <input
+                type="text"
+                name="fullName"
+                value={formData.fullName}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="settings-group">
+              <label>Email</label>
+
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="settings-group">
+              <label>Role</label>
+
+              <select
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+              >
+                {officerRoles.map((role) => (
+                  <option
+                    key={role.value}
+                    value={role.value}
+                  >
+                    {role.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '10px',
+                marginTop: '20px',
+              }}
+            >
+              <button
+                className="save-settings-btn"
+                onClick={handleSubmit}
+                disabled={loading}
+              >
+                {loading ? 'Saving...' : 'Update Officer'}
+              </button>
+
+              <button
+                className="delete-btn"
+                onClick={handleCancelEdit}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

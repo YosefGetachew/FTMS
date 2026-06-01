@@ -12,6 +12,7 @@ import Reports from './components/Reports';
 import Settings from './components/Settings';
 import UserManagement from './components/UserManagement';
 import Notifications from './components/Notifications';
+import AuditTrail from './components/AuditTrail';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] =
@@ -35,7 +36,7 @@ function App() {
   const renderPage = () => {
     switch (activePage) {
       case 'dashboard':
-        return <DashboardStats />;
+        return <DashboardStats setActivePage={setActivePage} />;
 
       case 'travel-request':
         return <RequestForm />;
@@ -46,6 +47,9 @@ function App() {
       case 'reports':
         return <Reports />;
 
+      case 'audit-trail':
+        return <AuditTrail />;  
+
       case 'settings':
         return <Settings />;
 
@@ -55,32 +59,22 @@ function App() {
       case 'notifications':
         return <Notifications />;
 
-      default:
-        return <DashboardStats />;
-
-
       case 'reset-password':
         return <ResetPassword />;
+
+      default:
+        return <DashboardStats />;
     }
   };
 
   return (
     <div className="layout">
-
-      <Sidebar
-        setActivePage={setActivePage}
-      />
+      <Sidebar setActivePage={setActivePage} />
 
       <div className="main-content">
-
-        <Topbar
-          handleLogout={handleLogout}
-        />
-
+        <Topbar handleLogout={handleLogout} />
         {renderPage()}
-
       </div>
-
     </div>
   );
 }

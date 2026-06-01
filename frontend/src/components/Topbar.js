@@ -1,3 +1,4 @@
+
 function Topbar({ handleLogout }) {
 
   const user =
@@ -46,16 +47,15 @@ function Topbar({ handleLogout }) {
 
     <div className="topbar">
 
+
       <div className="topbar-left">
 
         <div className="system-title">
-          Foreign Travel
-          Management System
+          MoA Foreign Travel Management System
         </div>
 
         <div className="system-subtitle">
-          Ministry Travel
-          Registration Platform
+          Ministry of Agriculture Foreign Travel Registration Platform
         </div>
 
       </div>

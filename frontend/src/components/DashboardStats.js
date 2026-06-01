@@ -1,199 +1,146 @@
+import { useEffect, useState } from 'react';
+
 import {
-  useEffect,
-  useState
-} from 'react';
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from 'recharts';
 
 import API from '../services/api';
 
-import {
+function DashboardStats({ setActivePage }) {
+  const user = JSON.parse(
+    localStorage.getItem('user') || '{}'
+  );
 
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  const [stats, setStats] = useState({
+    totalRequests: 0,
+    approvedRequests: 0,
+    pendingRequests: 0,
+    rejectedRequests: 0,
+  });
 
-} from 'recharts';
-
-function DashboardStats() {
-
-  const [stats, setStats] =
-    useState({
-
-      totalRequests: 0,
-      approvedRequests: 0,
-      pendingRequests: 0,
-      rejectedRequests: 0,
-    });
+  const [chartData, setChartData] = useState([]);
 
   useEffect(() => {
-
-    fetchStats();
-
+    fetchDashboardData();
   }, []);
 
-  const fetchStats = async () => {
+  const normalizeSectorData = (data) => {
+    return (data || []).map((item) => ({
+      ...item,
+      sector:
+        item.sector === 'Unassigned'
+          ? 'Affiliate Institute'
+          : item.sector || 'Affiliate Institute',
+      pending_count: Number(item.pending_count || 0),
+    }));
+  };
 
+  const fetchDashboardData = async () => {
     try {
+      const statsResponse = await API.get('/stats');
 
-      const response =
-        await API.get('/stats');
+      setStats({
+        totalRequests: statsResponse.data.totalRequests || 0,
+        approvedRequests:
+          statsResponse.data.approvedRequests || 0,
+        pendingRequests:
+          statsResponse.data.pendingRequests || 0,
+        rejectedRequests:
+          statsResponse.data.rejectedRequests || 0,
+      });
 
-      setStats(response.data);
+      const chartResponse = await API.get(
+        `/dashboard/pending-by-sector?role=${user.role}&id=${user.id}`
+      );
 
+      setChartData(
+        normalizeSectorData(chartResponse.data || [])
+      );
     } catch (error) {
-
       console.error(error);
     }
   };
 
-  const COLORS = [
-
-    '#0088FE',
-    '#00C49F',
-    '#FF8042',
-  ];
-
-  const chartData = [
-
-    {
-      name: 'Approved',
-
-      value:
-        Number(
-          stats.approvedRequests
-        ) || 0,
-    },
-
-    {
-      name: 'Pending',
-
-      value:
-        Number(
-          stats.pendingRequests
-        ) || 0,
-    },
-
-    {
-      name: 'Rejected',
-
-      value:
-        Number(
-          stats.rejectedRequests
-        ) || 0,
-    },
-  ];
+  const goToSubmittedRequests = () => {
+    if (user?.role !== 'traveler' && setActivePage) {
+      setActivePage('submitted-requests');
+    }
+  };
 
   return (
-
-    <div className="dashboard-wrapper">
-
+    <div className="dashboard-container">
       <div className="dashboard-cards">
-
         <div className="stat-card">
-
-          <h3>
-            Total Requests
-          </h3>
-
-          <p>
-            {stats.totalRequests}
-          </p>
-
+          <h3>Total Requests</h3>
+          <p>{stats.totalRequests}</p>
         </div>
 
         <div className="stat-card">
-
-          <h3>
-            Approved
-          </h3>
-
-          <p>
-            {stats.approvedRequests}
-          </p>
-
+          <h3>Approved</h3>
+          <p>{stats.approvedRequests}</p>
         </div>
 
         <div className="stat-card">
-
-          <h3>
-            Pending
-          </h3>
-
-          <p>
-            {stats.pendingRequests}
-          </p>
-
+          <h3>Pending</h3>
+          <p>{stats.pendingRequests}</p>
         </div>
 
         <div className="stat-card">
-
-          <h3>
-            Rejected
-          </h3>
-
-          <p>
-            {stats.rejectedRequests}
-          </p>
-
+          <h3>Rejected</h3>
+          <p>{stats.rejectedRequests}</p>
         </div>
-
       </div>
 
       <div className="chart-card">
+        <h3>Pending Requests by Sector</h3>
 
-        <h3>
-          Request Status Analytics
-        </h3>
+        {chartData.length === 0 ? (
+          <p>No pending requests by sector found.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
 
-        <ResponsiveContainer
-          width="100%"
-          height={400}
-        >
+              <XAxis
+                dataKey="sector"
+                interval={0}
+                angle={-15}
+                textAnchor="end"
+                height={70}
+              />
 
-          <PieChart>
+              <YAxis allowDecimals={false} />
 
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              outerRadius={140}
-              dataKey="value"
-              label
-            >
+              <Tooltip />
 
-              {chartData.map(
-                (
-                  entry,
-                  index
-                ) => (
-
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={
-                      COLORS[
-                        index %
-                        COLORS.length
-                      ]
-                    }
-                  />
-
-                )
-              )}
-
-            </Pie>
-
-            <Tooltip />
-
-            <Legend />
-
-          </PieChart>
-
-        </ResponsiveContainer>
-
+              <Bar
+                dataKey="pending_count"
+                name="Pending Requests"
+                fill="#14532d"
+                radius={[8, 8, 0, 0]}
+                label={{
+                  position: 'top',
+                  fill: '#14532d',
+                  fontWeight: 'bold',
+                }}
+                onClick={goToSubmittedRequests}
+                style={{
+                  cursor:
+                    user?.role !== 'traveler'
+                      ? 'pointer'
+                      : 'default',
+                }}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
-
     </div>
   );
 }
