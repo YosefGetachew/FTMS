@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import API from '../services/api';
 
 function RequestTable() {
@@ -6,15 +6,21 @@ function RequestTable() {
 
   const [requests, setRequests] = useState([]);
   const [search, setSearch] = useState('');
+  const [showHistorical, setShowHistorical] = useState(false);
   const [viewingRequest, setViewingRequest] = useState(null);
   const [editingRequest, setEditingRequest] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
 
-  useEffect(() => {
-    fetchRequests();
-  }, []);
+  const API_ORIGIN =
+    import.meta.env.VITE_API_ORIGIN ||
+    (import.meta.env.VITE_API_BASE_URL
+      ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, '')
+      : 'http://localhost:5000');
 
-  const fetchRequests = async () => {
+  const getPdfUrl = (id) => `${API_ORIGIN}/api/generate-pdf/${id}`;
+  const getUploadUrl = (fileName) => `${API_ORIGIN}/uploads/${fileName}`;
+
+  const fetchRequests = useCallback(async () => {
     try {
       const response = await API.get(
         `/requests?role=${user.role}&email=${user.email}&id=${user.id}`
@@ -23,8 +29,13 @@ function RequestTable() {
       setRequests(response.data || []);
     } catch (error) {
       console.error(error);
+      alert('Failed to load requests');
     }
-  };
+  }, [user.role, user.email, user.id]);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
 
   const formatDate = (date) => {
     if (!date) return '-';
@@ -66,6 +77,222 @@ function RequestTable() {
     };
 
     return stages[stage] || stage || '-';
+  };
+
+  const normalizeText = (value) => String(value || '').toLowerCase();
+
+  const isProtocol = user?.role === 'protocol';
+  const isTraveler = user?.role === 'traveler';
+  const isOfficeHead = user?.role === 'office_head';
+
+  const canApprove = [
+    'state_minister',
+    'protocol',
+    'office_head',
+    'chief_executive_officer',
+    'minister',
+    'admin',
+  ].includes(user?.role);
+
+  const canReject = [
+    'state_minister',
+    'office_head',
+    'chief_executive_officer',
+    'minister',
+    'admin',
+  ].includes(user?.role);
+
+  const canAmend = user?.role === 'protocol';
+  const canDelete = user?.role === 'admin';
+  const canViewPdf = ['protocol', 'admin'].includes(user?.role);
+
+  const submittedRequests = useMemo(() => {
+    return requests.filter((request) => {
+      const isPending =
+        request.final_status === 'pending' &&
+        request.current_stage !== 'completed';
+
+      const isAmendedForTraveler =
+        isTraveler && request.final_status === 'amended';
+
+      return isPending || isAmendedForTraveler;
+    });
+  }, [requests, isTraveler]);
+
+  const historicalRequests = useMemo(() => {
+    return requests.filter((request) => {
+      const isHistorical =
+        request.final_status === 'approved' ||
+        request.final_status === 'rejected' ||
+        request.current_stage === 'completed';
+
+      if (!isHistorical) return false;
+
+      const keyword = normalizeText(search);
+
+      if (!keyword) return true;
+
+      return (
+        normalizeText(request.full_name).includes(keyword) ||
+        normalizeText(request.sector).includes(keyword) ||
+        normalizeText(request.department).includes(keyword) ||
+        normalizeText(request.organization_name).includes(keyword) ||
+        normalizeText(request.country).includes(keyword) ||
+        normalizeText(request.purpose).includes(keyword) ||
+        normalizeText(request.status).includes(keyword) ||
+        normalizeText(request.final_status).includes(keyword) ||
+        normalizeText(request.current_stage).includes(keyword)
+      );
+    });
+  }, [requests, search]);
+
+  const updateStatus = async (id, status) => {
+    if (updatingId) return;
+
+    try {
+      setUpdatingId(id);
+
+      await API.put(`/requests/${id}/status`, {
+        status,
+        role: user.role,
+        actorEmail: user.email,
+      });
+
+      await fetchRequests();
+    } catch (error) {
+      console.error(error);
+      alert(
+        error.response?.data?.error ||
+          'Failed to update request status'
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const amendRequest = async (id) => {
+    const comment = prompt('Enter amendment comment');
+
+    if (!comment || !comment.trim()) return;
+
+    try {
+      setUpdatingId(id);
+
+      await API.put(`/requests/${id}/status`, {
+        status: 'Amended',
+        role: user.role,
+        actorEmail: user.email,
+        comment: comment.trim(),
+      });
+
+      await fetchRequests();
+    } catch (error) {
+      console.error(error);
+      alert(
+        error.response?.data?.error ||
+          'Failed to request amendment'
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const updateRequest = async () => {
+    if (!editingRequest) return;
+
+    try {
+      const data = new FormData();
+
+      data.append('travelerCategory', editingRequest.traveler_category || '');
+      data.append('organizationName', editingRequest.organization_name || '');
+      data.append('fullName', editingRequest.full_name || '');
+      data.append('position', editingRequest.position || '');
+      data.append('department', editingRequest.department || '');
+      data.append('email', editingRequest.email || '');
+      data.append('phone', editingRequest.phone || '');
+      data.append('country', editingRequest.country || '');
+      data.append('startDate', getInputDate(editingRequest.start_date));
+      data.append('endDate', getInputDate(editingRequest.end_date));
+      data.append('purpose', editingRequest.purpose || '');
+      data.append('sponsor', editingRequest.sponsor || '');
+      data.append('passportNumber', editingRequest.passport_number || '');
+
+      if (editingRequest.passportFile) {
+        data.append('passportFile', editingRequest.passportFile);
+      }
+
+      if (editingRequest.invitationLetter) {
+        data.append('invitationLetter', editingRequest.invitationLetter);
+      }
+
+      if (editingRequest.torFile) {
+        data.append('torFile', editingRequest.torFile);
+      }
+
+      await API.put(`/requests/${editingRequest.id}`, data);
+
+      alert('Request updated successfully');
+      setEditingRequest(null);
+      await fetchRequests();
+    } catch (error) {
+      console.error(error);
+      alert(
+        error.response?.data?.error ||
+          'Failed to update request'
+      );
+    }
+  };
+
+  const resubmitRequest = async (id) => {
+    if (updatingId) return;
+
+    try {
+      setUpdatingId(id);
+
+      await API.put(`/requests/${id}/resubmit`, {
+        role: user.role,
+        actorEmail: user.email,
+      });
+
+      alert('Request resubmitted successfully');
+      await fetchRequests();
+    } catch (error) {
+      console.error(error);
+      alert(
+        error.response?.data?.error ||
+          'Failed to resubmit request'
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const deleteRequest = async (id) => {
+    const confirmDelete = window.confirm(
+      'Are you sure you want to delete this request?'
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      setUpdatingId(id);
+
+      await API.delete(`/requests/${id}`);
+
+      await fetchRequests();
+    } catch (error) {
+      console.error(error);
+      alert(
+        error.response?.data?.error ||
+          'Failed to delete request'
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const openPdf = (id) => {
+    window.open(getPdfUrl(id), '_blank');
   };
 
   const renderSectorDepartment = (request) => (
@@ -122,11 +349,10 @@ function RequestTable() {
 
   const renderStatus = (request) => (
     <span
-      className={`status-badge ${
-        (request.status || '')
-          .toLowerCase()
-          .replace(/ /g, '-')
-      }`}
+      className={`status-badge ${normalizeText(request.status).replace(
+        / /g,
+        '-'
+      )}`}
     >
       {request.status || '-'}
     </span>
@@ -134,245 +360,174 @@ function RequestTable() {
 
   const renderFinalStatus = (request) => {
     if (request.final_status === 'approved') {
-      return (
-        <span className="status-badge approved">
-          Approved
-        </span>
-      );
+      return <span className="status-badge approved">Approved</span>;
     }
 
     if (request.final_status === 'rejected') {
-      return (
-        <span className="status-badge rejected">
-          Rejected
-        </span>
-      );
+      return <span className="status-badge rejected">Rejected</span>;
     }
 
-    return (
-      <span className="status-badge pending">
-        Pending
-      </span>
-    );
-  };
-
-  const updateStatus = async (id, status) => {
-    if (updatingId) return;
-
-    try {
-      setUpdatingId(id);
-
-      await API.put(`/requests/${id}/status`, {
-        status,
-        role: user.role,
-        authorEmail: user.email,
-      });
-
-      setRequests((prevRequests) =>
-        prevRequests.filter((request) => request.id !== id)
-      );
-
-      fetchRequests();
-    } catch (error) {
-      console.error(error);
-      alert(
-        error.response?.data?.error ||
-          'Failed to update request status'
-      );
-    } finally {
-      setUpdatingId(null);
+    if (request.final_status === 'amended') {
+      return <span className="status-badge amended">Amended</span>;
     }
+
+    return <span className="status-badge pending">Pending</span>;
   };
 
-  const amendRequest = async (id) => {
-    const comment = prompt('Enter amendment comment');
-    if (!comment) return;
+  const renderRequestActions = (request) => (
+    <>
+      {isProtocol && request.current_stage === 'protocol' && (
+        <button
+          className="pdf-btn"
+          disabled={updatingId === request.id}
+          onClick={() => setViewingRequest(request)}
+        >
+          View
+        </button>
+      )}
 
-    try {
-      setUpdatingId(id);
+      {canApprove &&
+        request.current_stage !== 'completed' &&
+        request.current_stage !== 'protocol_final' &&
+        request.final_status !== 'amended' && (
+          <button
+            className="approve-btn"
+            disabled={updatingId === request.id}
+            onClick={() => updateStatus(request.id, 'Approved')}
+          >
+            {updatingId === request.id
+              ? 'Processing...'
+              : user.role === 'protocol'
+              ? 'Clear'
+              : 'Approve'}
+          </button>
+        )}
 
-      await API.put(`/requests/${id}/status`, {
-        status: 'Amended',
-        role: user.role,
-        comment,
-      });
+      {isOfficeHead &&
+        request.current_stage === 'office_head' &&
+        request.final_status !== 'approved' &&
+        request.final_status !== 'rejected' && (
+          <button
+            className="edit-btn"
+            disabled={updatingId === request.id}
+            onClick={() =>
+              updateStatus(request.id, 'ForwardedToMinister')
+            }
+          >
+            {updatingId === request.id
+              ? 'Processing...'
+              : 'Forward to Minister'}
+          </button>
+        )}
 
-      setRequests((prevRequests) =>
-        prevRequests.filter((request) => request.id !== id)
-      );
+      {canReject &&
+        request.current_stage !== 'completed' &&
+        request.current_stage !== 'protocol_final' &&
+        request.final_status !== 'amended' && (
+          <button
+            className="reject-btn"
+            disabled={updatingId === request.id}
+            onClick={() => updateStatus(request.id, 'Rejected')}
+          >
+            {updatingId === request.id ? 'Processing...' : 'Reject'}
+          </button>
+        )}
 
-      fetchRequests();
-    } catch (error) {
-      console.error(error);
-      alert('Failed to request amendment');
-    } finally {
-      setUpdatingId(null);
-    }
-  };
+      {canAmend && request.current_stage === 'protocol' && (
+        <button
+          className="edit-btn"
+          disabled={updatingId === request.id}
+          onClick={() => amendRequest(request.id)}
+        >
+          Amend
+        </button>
+      )}
 
-  const updateRequest = async () => {
-    try {
-      const data = new FormData();
+      {isTraveler && request.final_status === 'amended' && (
+        <>
+          <button
+            className="edit-btn"
+            disabled={updatingId === request.id}
+            onClick={() => setEditingRequest(request)}
+          >
+            Edit
+          </button>
 
-      data.append(
-        'travelerCategory',
-        editingRequest.traveler_category || ''
-      );
-      data.append(
-        'organizationName',
-        editingRequest.organization_name || ''
-      );
-      data.append('fullName', editingRequest.full_name || '');
-      data.append('position', editingRequest.position || '');
-      data.append('department', editingRequest.department || '');
-      data.append('email', editingRequest.email || '');
-      data.append('phone', editingRequest.phone || '');
-      data.append('country', editingRequest.country || '');
-      data.append(
-        'startDate',
-        getInputDate(editingRequest.start_date)
-      );
-      data.append(
-        'endDate',
-        getInputDate(editingRequest.end_date)
-      );
-      data.append('purpose', editingRequest.purpose || '');
-      data.append('sponsor', editingRequest.sponsor || '');
-      data.append(
-        'passportNumber',
-        editingRequest.passport_number || ''
-      );
+          <button
+            className="approve-btn"
+            disabled={updatingId === request.id}
+            onClick={() => resubmitRequest(request.id)}
+          >
+            {updatingId === request.id ? 'Processing...' : 'Resubmit'}
+          </button>
+        </>
+      )}
 
-      if (editingRequest.passportFile) {
-        data.append('passportFile', editingRequest.passportFile);
-      }
+      {user?.role === 'protocol' &&
+        request.current_stage === 'protocol_final' &&
+        request.final_status === 'pending' && (
+          <>
+            <button
+              className="approve-btn"
+              disabled={updatingId === request.id}
+              onClick={() =>
+                updateStatus(request.id, 'ForeignAffairsApproved')
+              }
+            >
+              {updatingId === request.id
+                ? 'Processing...'
+                : 'Foreign Affairs Approved'}
+            </button>
 
-      if (editingRequest.invitationLetter) {
-        data.append(
-          'invitationLetter',
-          editingRequest.invitationLetter
-        );
-      }
+            <button
+              className="reject-btn"
+              disabled={updatingId === request.id}
+              onClick={() =>
+                updateStatus(request.id, 'ForeignAffairsRejected')
+              }
+            >
+              {updatingId === request.id
+                ? 'Processing...'
+                : 'Foreign Affairs Rejected'}
+            </button>
+          </>
+        )}
 
-      if (editingRequest.torFile) {
-        data.append('torFile', editingRequest.torFile);
-      }
+      {canViewPdf && (
+        <button
+          className="pdf-btn"
+          disabled={updatingId === request.id}
+          onClick={() => openPdf(request.id)}
+        >
+          PDF
+        </button>
+      )}
 
-      await API.put(`/requests/${editingRequest.id}`, data);
-
-      alert('Request updated successfully');
-      setEditingRequest(null);
-      fetchRequests();
-    } catch (error) {
-      console.error(error);
-      alert('Failed to update request');
-    }
-  };
-
-  const resubmitRequest = async (id) => {
-    try {
-      setUpdatingId(id);
-
-      await API.put(`/requests/${id}/resubmit`);
-
-      alert('Request resubmitted successfully');
-
-      setRequests((prevRequests) =>
-        prevRequests.filter((request) => request.id !== id)
-      );
-
-      fetchRequests();
-    } catch (error) {
-      console.error(error);
-      alert('Failed to resubmit request');
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const deleteRequest = async (id) => {
-    const confirmDelete = window.confirm(
-      'Are you sure you want to delete this request?'
-    );
-
-    if (!confirmDelete) return;
-
-    try {
-      await API.delete(`/requests/${id}`);
-
-      setRequests((prevRequests) =>
-        prevRequests.filter((request) => request.id !== id)
-      );
-    } catch (error) {
-      console.error(error);
-      alert('Failed to delete request');
-    }
-  };
-
-  const isProtocol = user?.role === 'protocol';
-  const isTraveler = user?.role === 'traveler';
-  const isOfficeHead = user?.role === 'office_head';
-
-  const canApprove = [
-    'state_minister',
-    'protocol',
-    'office_head',
-    'chief_executive_officer',
-    'minister',
-    'admin',
-  ].includes(user?.role);
-
-  const canReject = [
-    'state_minister',
-    'office_head',
-    'chief_executive_officer',
-    'minister',
-    'admin',
-  ].includes(user?.role);
-
-  const canAmend = user?.role === 'protocol';
-  const canDelete = user?.role === 'admin';
-  const canViewPdf = ['protocol', 'admin'].includes(user?.role);
-
-  const submittedRequests = requests.filter(
-    (request) =>
-      request.final_status === 'pending' &&
-      request.current_stage !== 'completed'
+      {canDelete && (
+        <button
+          className="delete-btn"
+          disabled={updatingId === request.id}
+          onClick={() => deleteRequest(request.id)}
+        >
+          Delete
+        </button>
+      )}
+    </>
   );
-
-  const historicalRequests = requests.filter((request) => {
-    const isHistorical =
-      request.final_status === 'approved' ||
-      request.final_status === 'rejected' ||
-      request.current_stage === 'completed';
-
-    if (!isHistorical) return false;
-
-    const keyword = search.toLowerCase();
-
-    return (
-      request.full_name?.toLowerCase().includes(keyword) ||
-      request.department?.toLowerCase().includes(keyword) ||
-      request.organization_name?.toLowerCase().includes(keyword) ||
-      request.country?.toLowerCase().includes(keyword) ||
-      request.purpose?.toLowerCase().includes(keyword) ||
-      request.status?.toLowerCase().includes(keyword) ||
-      request.final_status?.toLowerCase().includes(keyword)
-    );
-  });
 
   return (
     <div className="table-container">
       <div className="table-header">
         <h2>Submitted Requests</h2>
 
-        <input
-          type="text"
-          placeholder="Search historical travel..."
-          className="search-input"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <button
+          type="button"
+          className="edit-btn"
+          onClick={() => setShowHistorical((prev) => !prev)}
+        >
+          {showHistorical ? 'Hide Historical Travel' : 'Show Historical Travel'}
+          {historicalRequests.length > 0 ? ` (${historicalRequests.length})` : ''}
+        </button>
       </div>
 
       <table>
@@ -446,255 +601,104 @@ function RequestTable() {
                   }}
                 >
                   {request.final_status === 'amended'
-                    ? request.amendment_comment ||
-                      'Amendment requested'
+                    ? request.amendment_comment || 'Amendment requested'
                     : '-'}
                 </td>
 
-                <td>
-                  {isProtocol &&
-                    request.current_stage === 'protocol' && (
-                      <button
-                        className="pdf-btn"
-                        disabled={updatingId === request.id}
-                        onClick={() => setViewingRequest(request)}
-                      >
-                        View
-                      </button>
-                    )}
-
-                  {canApprove &&
-                    request.current_stage !== 'completed' &&
-                    request.current_stage !== 'protocol_final' && (
-                      <button
-                        className="approve-btn"
-                        disabled={updatingId === request.id}
-                        onClick={() =>
-                          updateStatus(request.id, 'Approved')
-                        }
-                      >
-                        {updatingId === request.id
-                          ? 'Processing...'
-                          : user.role === 'protocol'
-                          ? 'Clear'
-                          : 'Approve'}
-                      </button>
-                    )}
-
-                  {isOfficeHead &&
-                    request.current_stage === 'office_head' &&
-                    request.final_status !== 'approved' &&
-                    request.final_status !== 'rejected' && (
-                      <button
-                        className="edit-btn"
-                        disabled={updatingId === request.id}
-                        onClick={() =>
-                          updateStatus(
-                            request.id,
-                            'ForwardedToMinister'
-                          )
-                        }
-                      >
-                        {updatingId === request.id
-                          ? 'Processing...'
-                          : 'Forward to Minister'}
-                      </button>
-                    )}
-
-                  {canReject &&
-                    request.current_stage !== 'completed' &&
-                    request.current_stage !== 'protocol_final' && (
-                      <button
-                        className="reject-btn"
-                        disabled={updatingId === request.id}
-                        onClick={() =>
-                          updateStatus(request.id, 'Rejected')
-                        }
-                      >
-                        {updatingId === request.id
-                          ? 'Processing...'
-                          : 'Reject'}
-                      </button>
-                    )}
-
-                  {canAmend &&
-                    request.current_stage === 'protocol' && (
-                      <button
-                        className="edit-btn"
-                        disabled={updatingId === request.id}
-                        onClick={() => amendRequest(request.id)}
-                      >
-                        Amend
-                      </button>
-                    )}
-
-                  {isTraveler &&
-                    request.final_status === 'amended' && (
-                      <>
-                        <button
-                          className="edit-btn"
-                          disabled={updatingId === request.id}
-                          onClick={() => setEditingRequest(request)}
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          className="approve-btn"
-                          disabled={updatingId === request.id}
-                          onClick={() =>
-                            resubmitRequest(request.id)
-                          }
-                        >
-                          {updatingId === request.id
-                            ? 'Processing...'
-                            : 'Resubmit'}
-                        </button>
-                      </>
-                    )}
-
-                  {user?.role === 'protocol' &&
-                    request.current_stage === 'protocol_final' &&
-                    request.final_status === 'pending' && (
-                      <>
-                        <button
-                          className="approve-btn"
-                          disabled={updatingId === request.id}
-                          onClick={() =>
-                            updateStatus(
-                              request.id,
-                              'ForeignAffairsApproved'
-                            )
-                          }
-                        >
-                          {updatingId === request.id
-                            ? 'Processing...'
-                            : 'Foreign Affairs Approved'}
-                        </button>
-
-                        <button
-                          className="reject-btn"
-                          disabled={updatingId === request.id}
-                          onClick={() =>
-                            updateStatus(
-                              request.id,
-                              'ForeignAffairsRejected'
-                            )
-                          }
-                        >
-                          {updatingId === request.id
-                            ? 'Processing...'
-                            : 'Foreign Affairs Rejected'}
-                        </button>
-                      </>
-                    )}
-
-                  {canViewPdf && (
-                    <button
-                      className="pdf-btn"
-                      onClick={() =>
-                        window.open(
-                          `http://localhost:5000/api/generate-pdf/${request.id}`,
-                          '_blank'
-                        )
-                      }
-                    >
-                      PDF
-                    </button>
-                  )}
-
-                  {canDelete && (
-                    <button
-                      className="delete-btn"
-                      disabled={updatingId === request.id}
-                      onClick={() => deleteRequest(request.id)}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </td>
+                <td>{renderRequestActions(request)}</td>
               </tr>
             ))
           )}
         </tbody>
       </table>
 
-      <h2
-        style={{
-          marginTop: '40px',
-          marginBottom: '15px',
-        }}
-      >
-        Historical Travel
-      </h2>
+      {showHistorical && (
+        <>
+          <div
+            className="table-header"
+            style={{
+              marginTop: '40px',
+              marginBottom: '15px',
+            }}
+          >
+            <h2>Historical Travel</h2>
 
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>
-              Sector/
-              <br />
-              Department
-            </th>
-            <th>Destination Country</th>
-            <th>Travel Purpose</th>
-            <th>Travel Date</th>
-            <th>Final Status</th>
-            {canViewPdf && <th>PDF</th>}
-          </tr>
-        </thead>
+            <input
+              type="text"
+              placeholder="Search historical travel..."
+              className="search-input"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
 
-        <tbody>
-          {historicalRequests.length === 0 ? (
-            <tr>
-              <td colSpan={canViewPdf ? '7' : '6'}>
-                No historical requests found
-              </td>
-            </tr>
-          ) : (
-            historicalRequests.map((request) => (
-              <tr key={request.id}>
-                <td>{request.full_name || '-'}</td>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>
+                  Sector/
+                  <br />
+                  Department
+                </th>
+                <th>Destination Country</th>
+                <th>Travel Purpose</th>
+                <th>Travel Date</th>
+                <th>Final Status</th>
+                <th>Current Stage</th>
+                {canViewPdf && <th>PDF</th>}
+              </tr>
+            </thead>
 
-                {renderSectorDepartment(request)}
-
-                <td>{request.country || '-'}</td>
-
-                <td
-                  style={{
-                    maxWidth: '260px',
-                    whiteSpace: 'normal',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {request.purpose || '-'}
-                </td>
-
-                {renderTripDate(request)}
-
-                <td>{renderFinalStatus(request)}</td>
-
-                {canViewPdf && (
-                  <td>
-                    <button
-                      className="pdf-btn"
-                      onClick={() =>
-                        window.open(
-                          `http://localhost:5000/api/generate-pdf/${request.id}`,
-                          '_blank'
-                        )
-                      }
-                    >
-                      PDF
-                    </button>
+            <tbody>
+              {historicalRequests.length === 0 ? (
+                <tr>
+                  <td colSpan={canViewPdf ? '8' : '7'}>
+                    No historical requests found
                   </td>
-                )}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+                </tr>
+              ) : (
+                historicalRequests.map((request) => (
+                  <tr key={request.id}>
+                    <td>{request.full_name || '-'}</td>
+
+                    {renderSectorDepartment(request)}
+
+                    <td>{request.country || '-'}</td>
+
+                    <td
+                      style={{
+                        maxWidth: '260px',
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {request.purpose || '-'}
+                    </td>
+
+                    {renderTripDate(request)}
+
+                    <td>{renderFinalStatus(request)}</td>
+
+                    <td>{formatStage(request.current_stage)}</td>
+
+                    {canViewPdf && (
+                      <td>
+                        <button
+                          className="pdf-btn"
+                          onClick={() => openPdf(request.id)}
+                        >
+                          PDF
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </>
+      )}
 
       {viewingRequest && (
         <div className="modal-overlay">
@@ -704,60 +708,60 @@ function RequestTable() {
             <div className="request-detail-grid">
               <div>
                 <strong>Traveler Category</strong>
-                <p>{viewingRequest?.traveler_category || '-'}</p>
+                <p>{viewingRequest.traveler_category || '-'}</p>
               </div>
 
               <div>
                 <strong>Organization</strong>
-                <p>{viewingRequest?.organization_name || '-'}</p>
+                <p>{viewingRequest.organization_name || '-'}</p>
               </div>
 
               <div>
                 <strong>Traveler Name</strong>
-                <p>{viewingRequest?.full_name || '-'}</p>
+                <p>{viewingRequest.full_name || '-'}</p>
               </div>
 
               <div>
                 <strong>Position</strong>
-                <p>{viewingRequest?.position || '-'}</p>
+                <p>{viewingRequest.position || '-'}</p>
               </div>
 
               <div>
                 <strong>Department</strong>
-                <p>{viewingRequest?.department || '-'}</p>
+                <p>{viewingRequest.department || '-'}</p>
               </div>
 
               <div>
                 <strong>Email</strong>
-                <p>{viewingRequest?.email || '-'}</p>
+                <p>{viewingRequest.email || '-'}</p>
               </div>
 
               <div>
                 <strong>Phone</strong>
-                <p>{viewingRequest?.phone || '-'}</p>
+                <p>{viewingRequest.phone || '-'}</p>
               </div>
 
               <div>
                 <strong>Destination Country</strong>
-                <p>{viewingRequest?.country || '-'}</p>
+                <p>{viewingRequest.country || '-'}</p>
               </div>
 
               <div>
                 <strong>Start Date</strong>
-                <p>{formatDate(viewingRequest?.start_date)}</p>
+                <p>{formatDate(viewingRequest.start_date)}</p>
               </div>
 
               <div>
                 <strong>End Date</strong>
-                <p>{formatDate(viewingRequest?.end_date)}</p>
+                <p>{formatDate(viewingRequest.end_date)}</p>
               </div>
 
               <div>
                 <strong>Number of Days</strong>
                 <p>
                   {getTripDays(
-                    viewingRequest?.start_date,
-                    viewingRequest?.end_date
+                    viewingRequest.start_date,
+                    viewingRequest.end_date
                   )}{' '}
                   Days
                 </p>
@@ -765,40 +769,41 @@ function RequestTable() {
 
               <div>
                 <strong>Sponsor</strong>
-                <p>{viewingRequest?.sponsor || '-'}</p>
+                <p>{viewingRequest.sponsor || '-'}</p>
               </div>
 
               <div>
                 <strong>Passport Number</strong>
-                <p>{viewingRequest?.passport_number || '-'}</p>
+                <p>{viewingRequest.passport_number || '-'}</p>
               </div>
 
               <div>
                 <strong>Status</strong>
-                <p>{viewingRequest?.status || '-'}</p>
+                <p>{viewingRequest.status || '-'}</p>
+              </div>
+
+              <div>
+                <strong>Current Stage</strong>
+                <p>{formatStage(viewingRequest.current_stage)}</p>
               </div>
 
               <div className="detail-full">
                 <strong>Purpose of Travel</strong>
-                <p>{viewingRequest?.purpose || '-'}</p>
+                <p>{viewingRequest.purpose || '-'}</p>
               </div>
             </div>
 
-            <h3 style={{ marginTop: '25px' }}>
-              Attached Documents
-            </h3>
+            <h3 style={{ marginTop: '25px' }}>Attached Documents</h3>
 
             <div className="attachment-review">
-              {viewingRequest?.passport_file ? (
+              {viewingRequest.passport_file ? (
                 <a
-                  href={`http://localhost:5000/uploads/${viewingRequest.passport_file}`}
+                  href={getUploadUrl(viewingRequest.passport_file)}
                   target="_blank"
                   rel="noreferrer"
                   className="attachment-card"
                 >
-                  <div className="attachment-title">
-                    Passport Copy
-                  </div>
+                  <div className="attachment-title">Passport Copy</div>
                   <div className="attachment-name">
                     {viewingRequest.passport_file}
                   </div>
@@ -809,16 +814,14 @@ function RequestTable() {
                 </div>
               )}
 
-              {viewingRequest?.invitation_letter ? (
+              {viewingRequest.invitation_letter ? (
                 <a
-                  href={`http://localhost:5000/uploads/${viewingRequest.invitation_letter}`}
+                  href={getUploadUrl(viewingRequest.invitation_letter)}
                   target="_blank"
                   rel="noreferrer"
                   className="attachment-card"
                 >
-                  <div className="attachment-title">
-                    Invitation Letter
-                  </div>
+                  <div className="attachment-title">Invitation Letter</div>
                   <div className="attachment-name">
                     {viewingRequest.invitation_letter}
                   </div>
@@ -829,16 +832,14 @@ function RequestTable() {
                 </div>
               )}
 
-              {viewingRequest?.tor_file ? (
+              {viewingRequest.tor_file ? (
                 <a
-                  href={`http://localhost:5000/uploads/${viewingRequest.tor_file}`}
+                  href={getUploadUrl(viewingRequest.tor_file)}
                   target="_blank"
                   rel="noreferrer"
                   className="attachment-card"
                 >
-                  <div className="attachment-title">
-                    TOR Document
-                  </div>
+                  <div className="attachment-title">TOR Document</div>
                   <div className="attachment-name">
                     {viewingRequest.tor_file}
                   </div>
@@ -854,19 +855,19 @@ function RequestTable() {
               <button
                 className="approve-btn"
                 disabled={updatingId === viewingRequest.id}
-                onClick={() => {
-                  updateStatus(viewingRequest.id, 'Approved');
+                onClick={async () => {
+                  await updateStatus(viewingRequest.id, 'Approved');
                   setViewingRequest(null);
                 }}
               >
-                Clear
+                {updatingId === viewingRequest.id ? 'Processing...' : 'Clear'}
               </button>
 
               <button
                 className="edit-btn"
                 disabled={updatingId === viewingRequest.id}
-                onClick={() => {
-                  amendRequest(viewingRequest.id);
+                onClick={async () => {
+                  await amendRequest(viewingRequest.id);
                   setViewingRequest(null);
                 }}
               >
@@ -1083,23 +1084,20 @@ function RequestTable() {
               </div>
             </div>
 
-            <h3 style={{ marginTop: '25px' }}>
-              Update Attachments
-            </h3>
+            <h3 style={{ marginTop: '25px' }}>Update Attachments</h3>
 
             <div className="attachment-review">
               <div className="attachment-empty">
                 <strong>Passport Copy</strong>
                 <br />
-                Current:{' '}
-                {editingRequest.passport_file || 'Not uploaded'}
+                Current: {editingRequest.passport_file || 'Not uploaded'}
                 <input
                   type="file"
                   accept="application/pdf,image/png,image/jpeg"
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
-                      passportFile: e.target.files[0],
+                      passportFile: e.target.files?.[0],
                     })
                   }
                 />
@@ -1109,15 +1107,14 @@ function RequestTable() {
                 <strong>Invitation Letter</strong>
                 <br />
                 Current:{' '}
-                {editingRequest.invitation_letter ||
-                  'Not uploaded'}
+                {editingRequest.invitation_letter || 'Not uploaded'}
                 <input
                   type="file"
                   accept="application/pdf,image/png,image/jpeg"
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
-                      invitationLetter: e.target.files[0],
+                      invitationLetter: e.target.files?.[0],
                     })
                   }
                 />
@@ -1133,7 +1130,7 @@ function RequestTable() {
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
-                      torFile: e.target.files[0],
+                      torFile: e.target.files?.[0],
                     })
                   }
                 />
@@ -1143,6 +1140,7 @@ function RequestTable() {
             <div className="modal-actions">
               <button
                 className="approve-btn"
+                disabled={updatingId === editingRequest.id}
                 onClick={updateRequest}
               >
                 Save Changes

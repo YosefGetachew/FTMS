@@ -2,6 +2,7 @@ import './App.css';
 import { useState } from 'react';
 
 import Login from './components/Login';
+import Register from './components/Register';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
 import ResetPassword from './components/ResetPassword';
@@ -13,13 +14,14 @@ import Settings from './components/Settings';
 import UserManagement from './components/UserManagement';
 import Notifications from './components/Notifications';
 import AuditTrail from './components/AuditTrail';
+import PendingUsers from './components/PendingUsers';
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] =
-    useState(localStorage.getItem('token'));
+  const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('token'));
 
-  const [activePage, setActivePage] =
-    useState('dashboard');
+  const [activePage, setActivePage] = useState('dashboard');
+
+  const [activeAuthPage, setActiveAuthPage] = useState('login');
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -28,8 +30,17 @@ function App() {
   };
 
   if (!isLoggedIn) {
+    if (activeAuthPage === 'register') {
+      return (
+        <Register setActiveAuthPage={setActiveAuthPage} />
+      );
+    }
+
     return (
-      <Login setIsLoggedIn={setIsLoggedIn} />
+      <Login
+        setIsLoggedIn={setIsLoggedIn}
+        setActiveAuthPage={setActiveAuthPage}
+      />
     );
   }
 
@@ -48,13 +59,17 @@ function App() {
         return <Reports />;
 
       case 'audit-trail':
-        return <AuditTrail />;  
+        return <AuditTrail />;
 
       case 'settings':
         return <Settings />;
 
       case 'user-management':
         return <UserManagement />;
+        
+     case 'pending-users':
+  return <PendingUsers />;
+
 
       case 'notifications':
         return <Notifications />;
@@ -63,7 +78,7 @@ function App() {
         return <ResetPassword />;
 
       default:
-        return <DashboardStats />;
+        return <DashboardStats setActivePage={setActivePage} />;
     }
   };
 

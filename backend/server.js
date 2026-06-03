@@ -1,4 +1,3 @@
-require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
@@ -14,30 +13,123 @@ const pool = require('./config/db');
 
 const app = express();
 
-const FRONTEND_URL =
-  process.env.FRONTEND_URL || 'http://localhost:3000';
+const PORT = process.env.PORT || 5000;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-/* =========================
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://196.191.93.43:8080',
+  'http://10.10.20.118:8080',
+  FRONTEND_URL,
+].filter(Boolean);
+
+/* ============================================================
    MIDDLEWARES
-========================= */
-
-app.use(cors());
-app.use(express.json());
+============================================================ */
 
 app.use(
-  '/uploads',
-  express.static(path.join(__dirname, 'uploads'))
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(null, true);
+    },
+    credentials: true,
+  })
 );
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.get('/', (req, res) => {
   res.json({
     message: 'FTMS Backend Running',
+    status: 'OK',
   });
 });
 
-/* =========================
-   EMAIL HELPERS
-========================= */
+/* ============================================================
+   DATABASE SAFETY MIGRATION
+   This keeps your old database working with the new approval flow.
+============================================================ */
+
+const ensureDatabaseColumns = async () => {
+  try {
+    await pool.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS phone VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS position VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS organization_type VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS organization_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS sector VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS department VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS account_status VARCHAR(30) DEFAULT 'active',
+      ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true
+    `);
+
+    await pool.query(`
+      UPDATE users
+      SET account_status = 'active'
+      WHERE account_status IS NULL
+    `);
+
+    await pool.query(`
+      ALTER TABLE requests
+      ADD COLUMN IF NOT EXISTS sector VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS amendment_comment TEXT,
+      ADD COLUMN IF NOT EXISTS amended_by VARCHAR(100)
+    `);
+
+    console.log('Database columns checked successfully.');
+  } catch (error) {
+    console.error('DATABASE COLUMN CHECK ERROR:', error.message);
+  }
+};
+
+ensureDatabaseColumns();
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
+const safeText = (value, fallback = '-') => {
+  if (value === null || value === undefined || value === '') return fallback;
+  return String(value);
+};
+
+const getFrontendUrl = () => FRONTEND_URL;
+
+const sendEmailSafe = async (mailOptions, errorLabel = 'EMAIL ERROR') => {
+  try {
+    if (!mailOptions?.to) return;
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error(errorLabel, error);
+  }
+};
+
+const getFirstUserByRole = async (role) => {
+  const result = await pool.query(
+    `
+    SELECT id, full_name, email, role
+    FROM users
+    WHERE role = $1
+      AND COALESCE(account_status, 'active') = 'active'
+    ORDER BY id ASC
+    LIMIT 1
+    `,
+    [role]
+  );
+
+  return result.rows[0] || null;
+};
 
 const sendTaskEmail = async ({
   to,
@@ -48,65 +140,70 @@ const sendTaskEmail = async ({
 }) => {
   if (!to) return;
 
-  return transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to,
-    subject: `FTMS Task Assigned: ${request.full_name} - ${request.country}`,
-    html: `
-      <div style="font-family: Arial; padding: 20px; color: #333;">
-        <h2 style="color: #2563eb;">New FTMS Task Assigned</h2>
+  await sendEmailSafe(
+    {
+      from: process.env.EMAIL_USER,
+      to,
+      subject: `FTMS Task Assigned: ${safeText(request.full_name)} - ${safeText(
+        request.country
+      )}`,
+      html: `
+        <div style="font-family: Arial; padding: 20px; color: #333;">
+          <h2 style="color: #2563eb;">New FTMS Task Assigned</h2>
 
-        <p>Dear <strong>${recipientName || 'Approver'}</strong>,</p>
+          <p>Dear <strong>${safeText(recipientName, 'Approver')}</strong>,</p>
 
-        <p>A travel request has been assigned to you for review.</p>
+          <p>A travel request has been assigned to you for review.</p>
 
-        <table border="1" cellpadding="10" style="border-collapse: collapse; width: 100%; margin-top: 20px;">
-          <tr>
-            <td><strong>Traveler</strong></td>
-            <td>${request.full_name || '-'}</td>
-          </tr>
-          <tr>
-            <td><strong>Department</strong></td>
-            <td>${request.department || '-'}</td>
-          </tr>
-          <tr>
-            <td><strong>Destination</strong></td>
-            <td>${request.country || '-'}</td>
-          </tr>
-          <tr>
-            <td><strong>Travel Dates</strong></td>
-            <td>${request.start_date || '-'} to ${request.end_date || '-'}</td>
-          </tr>
-          <tr>
-            <td><strong>Purpose</strong></td>
-            <td>${request.purpose || '-'}</td>
-          </tr>
-          <tr>
-            <td><strong>Stage</strong></td>
-            <td>${stageName || '-'}</td>
-          </tr>
-        </table>
+          <table border="1" cellpadding="10" style="border-collapse: collapse; width: 100%; margin-top: 20px;">
+            <tr>
+              <td><strong>Traveler</strong></td>
+              <td>${safeText(request.full_name)}</td>
+            </tr>
+            <tr>
+              <td><strong>Department</strong></td>
+              <td>${safeText(request.department)}</td>
+            </tr>
+            <tr>
+              <td><strong>Destination</strong></td>
+              <td>${safeText(request.country)}</td>
+            </tr>
+            <tr>
+              <td><strong>Travel Dates</strong></td>
+              <td>${safeText(request.start_date)} to ${safeText(request.end_date)}</td>
+            </tr>
+            <tr>
+              <td><strong>Purpose</strong></td>
+              <td>${safeText(request.purpose)}</td>
+            </tr>
+            <tr>
+              <td><strong>Stage</strong></td>
+              <td>${safeText(stageName)}</td>
+            </tr>
+          </table>
 
-        <p style="margin-top: 20px;">
-          Please log in to FTMS and take the required action.
-        </p>
+          <p style="margin-top: 20px;">
+            Please log in to FTMS and take the required action.
+          </p>
 
-        <p>
-          <a href="${actionUrl || FRONTEND_URL}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 18px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-            Open FTMS
-          </a>
-        </p>
+          <p>
+            <a href="${actionUrl || getFrontendUrl()}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 18px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+              Open FTMS
+            </a>
+          </p>
 
-        <p style="margin-top: 30px;">
-          Ministry of Agriculture<br/>
-          Foreign Travel Management System
-        </p>
-      </div>
-    `,
-  });
+          <p style="margin-top: 30px;">
+            Ministry of Agriculture<br/>
+            Foreign Travel Management System
+          </p>
+        </div>
+      `,
+    },
+    'TASK EMAIL ERROR:'
+  );
 };
 
-const sendTravelerEmail = ({
+const sendTravelerEmail = async ({
   request,
   status,
   displayStatus,
@@ -114,8 +211,8 @@ const sendTravelerEmail = ({
 }) => {
   if (!request?.email) return;
 
-  transporter
-    .sendMail({
+  await sendEmailSafe(
+    {
       from: process.env.EMAIL_USER,
       to: request.email,
       subject:
@@ -132,39 +229,118 @@ const sendTravelerEmail = ({
             }
           </h2>
 
-          <p>Dear <strong>${request.full_name || 'Traveler'}</strong>,</p>
+          <p>Dear <strong>${safeText(request.full_name, 'Traveler')}</strong>,</p>
 
           <p>
             Your travel request to
-            <strong>${request.country || '-'}</strong>
+            <strong>${safeText(request.country)}</strong>
             has been updated.
           </p>
 
           ${
             status === 'Amended'
-              ? `<p><strong>Amendment Comment:</strong> ${
-                  amendmentComment || '-'
-                }</p>`
+              ? `<p><strong>Amendment Comment:</strong> ${safeText(
+                  amendmentComment
+                )}</p>`
               : ''
           }
 
           <table border="1" cellpadding="10" style="border-collapse: collapse; width: 100%;">
             <tr>
               <td><strong>Status</strong></td>
-              <td>${displayStatus || '-'}</td>
+              <td>${safeText(displayStatus)}</td>
             </tr>
           </table>
         </div>
       `,
-    })
-    .catch((error) => {
-      console.error('TRAVELER EMAIL ERROR:', error);
-    });
+    },
+    'TRAVELER EMAIL ERROR:'
+  );
 };
 
-/* =========================
-   AUDIT TRAIL HELPER
-========================= */
+const sendAccountActivatedEmail = async (user) => {
+  await sendEmailSafe(
+    {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: 'FTMS Account Activated',
+      html: `
+        <div style="font-family: Arial; padding: 20px; color: #333;">
+          <h2 style="color: #16a34a;">FTMS Account Activated</h2>
+
+          <p>Dear <strong>${safeText(user.full_name, 'Traveler')}</strong>,</p>
+
+          <p>
+            Your Foreign Travel Management System account has been activated
+            by the system administrator.
+          </p>
+
+          <p>You can now log in and submit your travel request.</p>
+
+          <p>
+            <a href="${getFrontendUrl()}" style="display: inline-block; background: #16a34a; color: white; padding: 12px 18px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+              Open FTMS
+            </a>
+          </p>
+
+          <p style="margin-top: 30px;">
+            Ministry of Agriculture<br/>
+            Foreign Travel Management System
+          </p>
+        </div>
+      `,
+    },
+    'ACCOUNT ACTIVATION EMAIL ERROR:'
+  );
+};
+
+const sendAccountRejectedEmail = async (user) => {
+  await sendEmailSafe(
+    {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: 'FTMS Account Request Rejected',
+      html: `
+        <div style="font-family: Arial; padding: 20px; color: #333;">
+          <h2 style="color: #dc2626;">FTMS Account Request Rejected</h2>
+
+          <p>Dear <strong>${safeText(user.full_name, 'Traveler')}</strong>,</p>
+
+          <p>
+            Your FTMS account request was not approved.
+            Please contact the system administrator for more information.
+          </p>
+
+          <p style="margin-top: 30px;">
+            Ministry of Agriculture<br/>
+            Foreign Travel Management System
+          </p>
+        </div>
+      `,
+    },
+    'ACCOUNT REJECTION EMAIL ERROR:'
+  );
+};
+
+const addNotification = async ({ userEmail, title, message }) => {
+  if (!userEmail) return;
+
+  try {
+    await pool.query(
+      `
+      INSERT INTO notifications (
+        user_email,
+        title,
+        message
+      )
+      VALUES ($1, $2, $3)
+      `,
+      [userEmail, title, message]
+    );
+  } catch (error) {
+    console.error('NOTIFICATION INSERT ERROR:', error.message);
+  }
+};
 
 const addAuditTrail = async ({
   requestId,
@@ -177,38 +353,38 @@ const addAuditTrail = async ({
   oldStatus,
   newStatus,
 }) => {
-  await pool.query(
-    `
-    INSERT INTO request_audit_trails (
-      request_id,
-      action,
-      actor_role,
-      actor_email,
-      comment,
-      old_stage,
-      new_stage,
-      old_status,
-      new_status
-    )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-    `,
-    [
-      requestId,
-      action,
-      actorRole || null,
-      actorEmail || null,
-      comment || null,
-      oldStage || null,
-      newStage || null,
-      oldStatus || null,
-      newStatus || null,
-    ]
-  );
+  try {
+    await pool.query(
+      `
+      INSERT INTO request_audit_trails (
+        request_id,
+        action,
+        actor_role,
+        actor_email,
+        comment,
+        old_stage,
+        new_stage,
+        old_status,
+        new_status
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `,
+      [
+        requestId,
+        action,
+        actorRole || null,
+        actorEmail || null,
+        comment || null,
+        oldStage || null,
+        newStage || null,
+        oldStatus || null,
+        newStatus || null,
+      ]
+    );
+  } catch (error) {
+    console.error('AUDIT TRAIL INSERT ERROR:', error.message);
+  }
 };
-
-/* =========================
-   FILE ARCHIVE HELPER
-========================= */
 
 const moveFileToArchive = (filename) => {
   if (!filename) return;
@@ -230,36 +406,113 @@ const moveFileToArchive = (filename) => {
   }
 };
 
-/* =========================
+const getStageName = (stage) => {
+  const stages = {
+    state_minister: 'State Minister Review',
+    protocol: 'Protocol Review',
+    office_head: 'Office Head Review',
+    chief_executive_officer: 'Chief Executive Officer Review',
+    minister: 'Minister Final Review',
+    protocol_final: 'Pending Foreign Affairs Response',
+    completed: 'Completed',
+    traveler: 'Traveler Amendment',
+  };
+
+  return stages[stage] || stage || '-';
+};
+
+/* ============================================================
    AUTH
-========================= */
+============================================================ */
 
 app.post('/api/register', async (req, res) => {
   try {
-    const { fullName, email, password, role } = req.body;
+    const {
+  fullName,
+  email,
+  password,
+  phone,
+  position,
+  organizationType,
+  organizationName,
+  sector,
+  department,
+} = req.body;
+
+    if (!fullName || !email || !password) {
+      return res.status(400).json({
+        error: 'Full name, email, and password are required.',
+      });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const existingUser = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE LOWER(TRIM(email)) = $1
+      `,
+      [normalizedEmail]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({
+        error: 'Email is already registered.',
+      });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
-      `
-      INSERT INTO users (
-        full_name,
-        email,
-        password,
-        role
-      )
-      VALUES ($1, $2, $3, $4)
-      RETURNING id, full_name, email, role
-      `,
-      [
-        fullName,
-        email,
-        hashedPassword,
-        role || 'traveler',
-      ]
-    );
+  `
+  INSERT INTO users (
+    full_name,
+    email,
+    password,
+    role,
+    phone,
+    position,
+    organization_type,
+    organization_name,
+    sector,
+    department,
+    account_status,
+    is_active
+  )
+  VALUES ($1, $2, $3, 'traveler', $4, $5, $6, $7, $8, $9, 'pending', false)
+  RETURNING
+    id,
+    full_name,
+    email,
+    role,
+    phone,
+    position,
+    organization_type,
+    organization_name,
+    sector,
+    department,
+    account_status,
+    is_active
+  `,
+  [
+    fullName,
+    normalizedEmail,
+    hashedPassword,
+    phone || null,
+    position || null,
+    organizationType || null,
+    organizationName || null,
+    sector || null,
+    department || null,
+  ]
+);
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({
+      message:
+        'Registration submitted successfully. Please wait for admin approval.',
+      user: result.rows[0],
+    });
   } catch (error) {
     console.error('REGISTER ERROR:', error);
     res.status(500).json({
@@ -272,33 +525,62 @@ app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({
+        error: 'Email and password are required.',
+      });
+    }
+
     const result = await pool.query(
       `
       SELECT *
       FROM users
-      WHERE email = $1
+      WHERE LOWER(TRIM(email)) = $1
       `,
-      [email]
+      [normalizeEmail(email)]
     );
 
     if (result.rows.length === 0) {
       return res.status(400).json({
-        error: 'User not found',
+        error: 'User not found.',
       });
     }
 
     const user = result.rows[0];
 
-    const isMatch = await bcrypt.compare(
-      password,
-      user.password
-    );
+    const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       return res.status(400).json({
-        error: 'Invalid credentials',
+        error: 'Invalid credentials.',
       });
     }
+
+    const accountStatus = user.account_status || 'active';
+
+if (accountStatus === 'pending') {
+  return res.status(403).json({
+    error: 'Your account is pending admin approval.',
+  });
+}
+
+if (accountStatus === 'rejected') {
+  return res.status(403).json({
+    error: 'Your account request was rejected. Please contact the admin.',
+  });
+}
+
+if (accountStatus !== 'active') {
+  return res.status(403).json({
+    error: 'Your account is not active. Please contact the admin.',
+  });
+}
+
+if (user.is_active === false) {
+  return res.status(403).json({
+    error: 'Your account is disabled. Please contact the admin.',
+  });
+}
 
     const token = jwt.sign(
       {
@@ -306,9 +588,9 @@ app.post('/api/login', async (req, res) => {
         email: user.email,
         role: user.role,
       },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'ftms_secret_key',
       {
-        expiresIn: '1h',
+        expiresIn: '8h',
       }
     );
 
@@ -319,19 +601,22 @@ app.post('/api/login', async (req, res) => {
         fullName: user.full_name,
         email: user.email,
         role: user.role,
+        sector: user.sector,
+        department: user.department,
+        accountStatus: accountStatus,
       },
     });
   } catch (error) {
     console.error('LOGIN ERROR:', error);
     res.status(500).json({
-      error: error.message,
+      error: 'Login failed.',
     });
   }
 });
 
-/* =========================
+/* ============================================================
    CREATE TRAVEL REQUEST
-========================= */
+============================================================ */
 
 app.post(
   '/api/requests',
@@ -349,6 +634,7 @@ app.post(
         fullName,
         position,
         department,
+        sector,
         country,
         startDate,
         endDate,
@@ -359,93 +645,68 @@ app.post(
         phone,
       } = req.body;
 
-      const passportFile =
-        req.files?.passportFile?.[0]?.filename || null;
+      if (!fullName || !email || !country || !startDate || !endDate) {
+        return res.status(400).json({
+          error:
+            'Full name, email, country, start date, and end date are required.',
+        });
+      }
 
+      const passportFile = req.files?.passportFile?.[0]?.filename || null;
       const invitationLetter =
         req.files?.invitationLetter?.[0]?.filename || null;
+      const torFile = req.files?.torFile?.[0]?.filename || null;
 
-      const torFile =
-        req.files?.torFile?.[0]?.filename || null;
+      const normalizedEmail = normalizeEmail(email);
 
-      const existingUser = await pool.query(
+      const existingUserResult = await pool.query(
         `
         SELECT *
         FROM users
-        WHERE email = $1
+        WHERE LOWER(TRIM(email)) = $1
         `,
-        [email]
+        [normalizedEmail]
       );
 
-      const isNewTraveler = existingUser.rows.length === 0;
-      let userRole = 'traveler';
-
-      if (isNewTraveler) {
-        const temporaryPassword =
-          passportNumber || phone || 'ChangeMe123';
-
-        const hashedPassword = await bcrypt.hash(
-          temporaryPassword,
-          10
-        );
-
-        await pool.query(
-          `
-          INSERT INTO users (
-            full_name,
-            email,
-            password,
-            role
-          )
-          VALUES ($1, $2, $3, $4)
-          `,
-          [
-            fullName,
-            email,
-            hashedPassword,
-            'traveler',
-          ]
-        );
-      } else {
-        userRole = existingUser.rows[0]?.role || 'traveler';
-      }
+      const existingUser = existingUserResult.rows[0] || null;
+      const userRole = existingUser?.role || 'traveler';
 
       let initialStage = 'state_minister';
-let initialAssignedStateMinisterId =
-  assignedStateMinisterId || null;
+      let initialAssignedStateMinisterId = assignedStateMinisterId || null;
 
-if (travelerCategory === 'affiliate_institution') {
-  initialStage = 'protocol';
-  initialAssignedStateMinisterId = null;
-} else if (
-  userRole === 'state_minister' ||
-  userRole === 'chief_executive_officer'
-) {
-  initialStage = 'protocol';
-  initialAssignedStateMinisterId = null;
-} else if (userRole === 'office_head') {
-  initialStage = 'minister';
-  initialAssignedStateMinisterId = null;
-} else if (assignedStateMinisterId) {
-  const approverResult = await pool.query(
-    `
-    SELECT role
-    FROM users
-    WHERE id = $1
-    `,
-    [assignedStateMinisterId]
-  );
+      if (travelerCategory === 'affiliate_institution') {
+        initialStage = 'protocol';
+        initialAssignedStateMinisterId = null;
+      } else if (
+        userRole === 'state_minister' ||
+        userRole === 'chief_executive_officer'
+      ) {
+        initialStage = 'protocol';
+        initialAssignedStateMinisterId = null;
+      } else if (userRole === 'office_head') {
+        initialStage = 'minister';
+        initialAssignedStateMinisterId = null;
+      } else if (assignedStateMinisterId) {
+        const approverResult = await pool.query(
+          `
+          SELECT role
+          FROM users
+          WHERE id = $1
+            AND COALESCE(account_status, 'active') = 'active'
+          `,
+          [assignedStateMinisterId]
+        );
 
-  const approverRole = approverResult.rows[0]?.role;
+        const approverRole = approverResult.rows[0]?.role;
 
-  if (
-    approverRole === 'state_minister' ||
-    approverRole === 'office_head' ||
-    approverRole === 'chief_executive_officer'
-  ) {
-    initialStage = approverRole;
-  }
-}
+        if (
+          approverRole === 'state_minister' ||
+          approverRole === 'office_head' ||
+          approverRole === 'chief_executive_officer'
+        ) {
+          initialStage = approverRole;
+        }
+      }
 
       const result = await pool.query(
         `
@@ -458,6 +719,7 @@ if (travelerCategory === 'affiliate_institution') {
           full_name,
           position,
           department,
+          sector,
           country,
           start_date,
           end_date,
@@ -472,45 +734,45 @@ if (travelerCategory === 'affiliate_institution') {
           status
         )
         VALUES (
-          $1, $2, $3, $4, $5,
-          $6, $7, $8, $9, $10,
-          $11, $12, $13, $14, $15,
-          $16, $17, $18, $19, $20
+          $1, $2, $3, $4, 'pending',
+          $5, $6, $7, $8, $9,
+          $10, $11, $12, $13, $14,
+          $15, $16, $17, $18, $19,
+          'Pending'
         )
         RETURNING *
         `,
         [
-          travelerCategory,
-          organizationName,
+          travelerCategory || 'ministry_staff',
+          organizationName || null,
           initialAssignedStateMinisterId,
           initialStage,
-          'pending',
           fullName,
-          position,
-          department,
+          position || null,
+          department || null,
+          sector || existingUser?.sector || null,
           country,
           startDate,
           endDate,
-          purpose,
-          sponsor,
-          passportNumber,
-          email,
-          phone,
+          purpose || null,
+          sponsor || null,
+          passportNumber || null,
+          normalizedEmail,
+          phone || null,
           passportFile,
           invitationLetter,
           torFile,
-          'Pending',
         ]
       );
 
       const createdRequest = result.rows[0];
 
       if (
-  initialStage === 'state_minister' ||
-  initialStage === 'office_head' ||
-  initialStage === 'chief_executive_officer'
-) {
-        const stateMinisterResult = await pool.query(
+        initialStage === 'state_minister' ||
+        initialStage === 'office_head' ||
+        initialStage === 'chief_executive_officer'
+      ) {
+        const approverResult = await pool.query(
           `
           SELECT full_name, email
           FROM users
@@ -519,71 +781,43 @@ if (travelerCategory === 'affiliate_institution') {
           [initialAssignedStateMinisterId]
         );
 
-        if (stateMinisterResult.rows.length > 0) {
-          const stateMinister = stateMinisterResult.rows[0];
+        const approver = approverResult.rows[0];
 
-          sendTaskEmail({
-            to: stateMinister.email,
-            recipientName: stateMinister.full_name,
+        if (approver) {
+          await sendTaskEmail({
+            to: approver.email,
+            recipientName: approver.full_name,
             request: createdRequest,
-            stageName: 
-            initialStage === 'state_minister'
-            ? 'State Minister Review'
-            : initialStage === 'office_head'
-            ? 'Office Head Review'
-            : 'Chief Executive Officer Review',
-            actionUrl: FRONTEND_URL,
-          }).catch((error) => {
-            console.error('STATE MINISTER EMAIL ERROR:', error);
+            stageName: getStageName(initialStage),
+            actionUrl: getFrontendUrl(),
           });
         }
       }
 
       if (initialStage === 'protocol') {
-        const protocolResult = await pool.query(
-          `
-          SELECT full_name, email
-          FROM users
-          WHERE role = 'protocol'
-          LIMIT 1
-          `
-        );
+        const protocolUser = await getFirstUserByRole('protocol');
 
-        if (protocolResult.rows.length > 0) {
-          const protocolUser = protocolResult.rows[0];
-
-          sendTaskEmail({
+        if (protocolUser) {
+          await sendTaskEmail({
             to: protocolUser.email,
             recipientName: protocolUser.full_name,
             request: createdRequest,
             stageName: 'Protocol Review',
-            actionUrl: FRONTEND_URL,
-          }).catch((error) => {
-            console.error('PROTOCOL EMAIL ERROR:', error);
+            actionUrl: getFrontendUrl(),
           });
         }
       }
 
-      await pool.query(
-        `
-        INSERT INTO notifications (
-          user_email,
-          title,
-          message
-        )
-        VALUES ($1, $2, $3)
-        `,
-        [
-          email,
-          'Travel Request Submitted',
-          `Your travel request to ${country} has been submitted.`,
-        ]
-      );
+      await addNotification({
+        userEmail: normalizedEmail,
+        title: 'Travel Request Submitted',
+        message: `Your travel request to ${country} has been submitted.`,
+      });
 
-      transporter
-        .sendMail({
+      await sendEmailSafe(
+        {
           from: process.env.EMAIL_USER,
-          to: email,
+          to: normalizedEmail,
           subject: 'Travel Request Submitted',
           html: `
             <div style="font-family: Arial; padding: 20px; color: #333;">
@@ -591,22 +825,22 @@ if (travelerCategory === 'affiliate_institution') {
                 Foreign Travel Request Submitted
               </h2>
 
-              <p>Dear <strong>${fullName}</strong>,</p>
+              <p>Dear <strong>${safeText(fullName)}</strong>,</p>
 
               <p>Your foreign travel request has been submitted successfully.</p>
 
               <table border="1" cellpadding="10" style="border-collapse: collapse; width: 100%; margin-top: 20px;">
                 <tr>
                   <td><strong>Destination Country</strong></td>
-                  <td>${country}</td>
+                  <td>${safeText(country)}</td>
                 </tr>
                 <tr>
                   <td><strong>Travel Dates</strong></td>
-                  <td>${startDate} to ${endDate}</td>
+                  <td>${safeText(startDate)} to ${safeText(endDate)}</td>
                 </tr>
                 <tr>
                   <td><strong>Purpose</strong></td>
-                  <td>${purpose}</td>
+                  <td>${safeText(purpose)}</td>
                 </tr>
                 <tr>
                   <td><strong>Status</strong></td>
@@ -614,54 +848,15 @@ if (travelerCategory === 'affiliate_institution') {
                 </tr>
               </table>
 
-              ${
-                isNewTraveler
-                  ? `
-                    <h3 style="margin-top: 30px; color: #2563eb;">
-                      Traveler Portal Access
-                    </h3>
-
-                    <table border="1" cellpadding="10" style="border-collapse: collapse; width: 100%; margin-top: 10px;">
-                      <tr>
-                        <td><strong>Login URL</strong></td>
-                        <td>${FRONTEND_URL}</td>
-                      </tr>
-                      <tr>
-                        <td><strong>Username</strong></td>
-                        <td>${email}</td>
-                      </tr>
-                      <tr>
-                        <td><strong>Temporary Password</strong></td>
-                        <td>${passportNumber || phone || 'ChangeMe123'}</td>
-                      </tr>
-                    </table>
-
-                    <p style="margin-top: 20px; color: #d97706;">
-                      Please reset your password after first login.
-                    </p>
-                  `
-                  : `
-                    <h3 style="margin-top: 30px; color: #2563eb;">
-                      Traveler Portal Access
-                    </h3>
-
-                    <p>
-                      You already have an FTMS account with the username:
-                      <strong>${email}</strong>
-                    </p>
-
-                    <p style="color: #d97706;">
-                      For security reasons, your password is not sent again.
-                      Please log in using your existing password.
-                    </p>
-                  `
-              }
+              <p style="margin-top: 20px;">
+                You can log in to FTMS to track your request after your account
+                has been activated by the system administrator.
+              </p>
             </div>
           `,
-        })
-        .catch((error) => {
-          console.error('TRAVELER SUBMISSION EMAIL ERROR:', error);
-        });
+        },
+        'TRAVELER SUBMISSION EMAIL ERROR:'
+      );
 
       res.status(201).json(createdRequest);
     } catch (error) {
@@ -672,9 +867,10 @@ if (travelerCategory === 'affiliate_institution') {
     }
   }
 );
-/* =========================
+
+/* ============================================================
    GET REQUESTS
-========================= */
+============================================================ */
 
 app.get('/api/requests', async (req, res) => {
   try {
@@ -683,24 +879,24 @@ app.get('/api/requests', async (req, res) => {
     let result;
 
     const baseSelect = `
-  SELECT
-    r.*,
-    CASE
-      WHEN r.traveler_category = 'affiliate_institution'
-      THEN 'Affiliate Institute'
-      ELSE COALESCE(
-        r.sector,
-        sm.sector,
-        traveler.sector,
-        'Unassigned'
-      )
-    END AS sector
-  FROM requests r
-  LEFT JOIN users sm
-    ON r.assigned_state_minister_id = sm.id
-  LEFT JOIN users traveler
-    ON LOWER(TRIM(r.email)) = LOWER(TRIM(traveler.email))
-`;
+      SELECT
+        r.*,
+        CASE
+          WHEN r.traveler_category = 'affiliate_institution'
+          THEN 'Affiliate Institute'
+          ELSE COALESCE(
+            r.sector,
+            sm.sector,
+            traveler.sector,
+            'Unassigned'
+          )
+        END AS sector
+      FROM requests r
+      LEFT JOIN users sm
+        ON r.assigned_state_minister_id = sm.id
+      LEFT JOIN users traveler
+        ON LOWER(TRIM(r.email)) = LOWER(TRIM(traveler.email))
+    `;
 
     if (role === 'admin') {
       result = await pool.query(`
@@ -721,16 +917,11 @@ app.get('/api/requests', async (req, res) => {
         `
         ${baseSelect}
         WHERE
-          (
-            r.assigned_state_minister_id = $1
-            AND r.current_stage = 'state_minister'
-            AND r.final_status = 'pending'
-          )
+          r.assigned_state_minister_id = $1
           OR r.final_status IN ('approved', 'rejected')
         ORDER BY
           CASE
-            WHEN r.assigned_state_minister_id = $1
-             AND r.current_stage = 'state_minister'
+            WHEN r.current_stage = 'state_minister'
              AND r.final_status = 'pending'
             THEN 0
             ELSE 1
@@ -801,7 +992,7 @@ app.get('/api/requests', async (req, res) => {
       `);
     } else {
       return res.status(403).json({
-        error: 'Unauthorized role',
+        error: 'Unauthorized role.',
       });
     }
 
@@ -814,9 +1005,9 @@ app.get('/api/requests', async (req, res) => {
   }
 });
 
-/* =========================
+/* ============================================================
    UPDATE AMENDED REQUEST
-========================= */
+============================================================ */
 
 app.put(
   '/api/requests/:id',
@@ -835,6 +1026,7 @@ app.put(
         fullName,
         position,
         department,
+        sector,
         email,
         phone,
         country,
@@ -845,14 +1037,10 @@ app.put(
         passportNumber,
       } = req.body;
 
-      const passportFile =
-        req.files?.passportFile?.[0]?.filename || null;
-
+      const passportFile = req.files?.passportFile?.[0]?.filename || null;
       const invitationLetter =
         req.files?.invitationLetter?.[0]?.filename || null;
-
-      const torFile =
-        req.files?.torFile?.[0]?.filename || null;
+      const torFile = req.files?.torFile?.[0]?.filename || null;
 
       const result = await pool.query(
         `
@@ -863,18 +1051,19 @@ app.put(
           full_name = COALESCE($3, full_name),
           position = COALESCE($4, position),
           department = COALESCE($5, department),
-          email = COALESCE($6, email),
-          phone = COALESCE($7, phone),
-          country = COALESCE($8, country),
-          start_date = COALESCE($9, start_date),
-          end_date = COALESCE($10, end_date),
-          purpose = COALESCE($11, purpose),
-          sponsor = COALESCE($12, sponsor),
-          passport_number = COALESCE($13, passport_number),
-          passport_file = COALESCE($14, passport_file),
-          invitation_letter = COALESCE($15, invitation_letter),
-          tor_file = COALESCE($16, tor_file)
-        WHERE id = $17
+          sector = COALESCE($6, sector),
+          email = COALESCE($7, email),
+          phone = COALESCE($8, phone),
+          country = COALESCE($9, country),
+          start_date = COALESCE($10, start_date),
+          end_date = COALESCE($11, end_date),
+          purpose = COALESCE($12, purpose),
+          sponsor = COALESCE($13, sponsor),
+          passport_number = COALESCE($14, passport_number),
+          passport_file = COALESCE($15, passport_file),
+          invitation_letter = COALESCE($16, invitation_letter),
+          tor_file = COALESCE($17, tor_file)
+        WHERE id = $18
         RETURNING *
         `,
         [
@@ -883,7 +1072,8 @@ app.put(
           fullName || null,
           position || null,
           department || null,
-          email || null,
+          sector || null,
+          email ? normalizeEmail(email) : null,
           phone || null,
           country || null,
           startDate || null,
@@ -900,12 +1090,12 @@ app.put(
 
       if (result.rows.length === 0) {
         return res.status(404).json({
-          error: 'Request not found',
+          error: 'Request not found.',
         });
       }
 
       res.json({
-        message: 'Request updated successfully',
+        message: 'Request updated successfully.',
         request: result.rows[0],
       });
     } catch (error) {
@@ -917,9 +1107,9 @@ app.put(
   }
 );
 
-/* =========================
+/* ============================================================
    UPDATE REQUEST STATUS
-========================= */
+============================================================ */
 
 app.put('/api/requests/:id/status', async (req, res) => {
   try {
@@ -939,7 +1129,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
 
     if (!existingRequest) {
       return res.status(404).json({
-        error: 'Request not found',
+        error: 'Request not found.',
       });
     }
 
@@ -954,21 +1144,21 @@ app.put('/api/requests/:id/status', async (req, res) => {
     }
 
     const allowedStagesByRole = {
-  state_minister: ['state_minister'],
-  office_head: ['office_head'],
-  chief_executive_officer: ['chief_executive_officer'],
-  protocol: ['protocol', 'protocol_final'],
-  minister: ['minister'],
-  admin: [
-    'state_minister',
-    'office_head',
-    'chief_executive_officer',
-    'protocol',
-    'minister',
-    'protocol_final',
-    'traveler',
-  ],
-};
+      state_minister: ['state_minister'],
+      office_head: ['office_head'],
+      chief_executive_officer: ['chief_executive_officer'],
+      protocol: ['protocol', 'protocol_final'],
+      minister: ['minister'],
+      admin: [
+        'state_minister',
+        'office_head',
+        'chief_executive_officer',
+        'protocol',
+        'minister',
+        'protocol_final',
+        'traveler',
+      ],
+    };
 
     const allowedStages = allowedStagesByRole[role];
 
@@ -1016,8 +1206,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
         existingRequest.current_stage !== 'protocol_final'
       ) {
         return res.status(403).json({
-          error:
-            'Only Protocol can approve Foreign Affairs response.',
+          error: 'Only Protocol can approve Foreign Affairs response.',
         });
       }
 
@@ -1030,8 +1219,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
         existingRequest.current_stage !== 'protocol_final'
       ) {
         return res.status(403).json({
-          error:
-            'Only Protocol can reject Foreign Affairs response.',
+          error: 'Only Protocol can reject Foreign Affairs response.',
         });
       }
 
@@ -1043,37 +1231,26 @@ app.put('/api/requests/:id/status', async (req, res) => {
       finalStatus = 'rejected';
       displayStatus = 'Rejected';
     } else if (status === 'Approved') {
-     if (role === 'state_minister') {
-  nextStage = 'protocol';
-  finalStatus = 'pending';
-  displayStatus = 'Approved by State Minister';
-} else if (role === 'chief_executive_officer') {
-  nextStage = 'protocol';
-  finalStatus = 'pending';
-  displayStatus = 'Approved by Chief Executive Officer';
-} else if (role === 'office_head') {
-  if (existingRequest.status === 'Cleared by Protocol') {
-    nextStage = 'completed';
-    finalStatus = 'approved';
-    displayStatus = 'Approved by Office Head';
-  } else {
-    nextStage = 'protocol';
-    finalStatus = 'pending';
-    displayStatus = 'Approved by Office Head';
-  }
-} 
-      else if (role === 'protocol') {
+      if (role === 'state_minister') {
+        nextStage = 'protocol';
+        finalStatus = 'pending';
+        displayStatus = 'Approved by State Minister';
+      } else if (role === 'chief_executive_officer') {
+        nextStage = 'protocol';
+        finalStatus = 'pending';
+        displayStatus = 'Approved by Chief Executive Officer';
+      } else if (role === 'protocol') {
         nextStage = 'office_head';
         finalStatus = 'pending';
         displayStatus = 'Cleared by Protocol';
       } else if (role === 'office_head') {
-        nextStage = 'completed';
-        finalStatus = 'approved';
+        nextStage = 'protocol_final';
+        finalStatus = 'pending';
         displayStatus = 'Approved by Office Head';
       } else if (role === 'minister') {
         nextStage = 'protocol_final';
         finalStatus = 'pending';
-        displayStatus = 'Pending Foreign Affairs Response';
+        displayStatus = 'Approved by Minister';
       } else if (role === 'admin') {
         nextStage = 'completed';
         finalStatus = 'approved';
@@ -1112,46 +1289,35 @@ app.put('/api/requests/:id/status', async (req, res) => {
     );
 
     const request = updateResult.rows[0];
+
     await addAuditTrail({
-  requestId: request.id,
-  action: status,
-  actorRole: role,
-  actorEmail,
-  comment,
-  oldStage: existingRequest.current_stage,
-  newStage: nextStage,
-  oldStatus: existingRequest.final_status,
-  newStatus: finalStatus,
-});
+      requestId: request.id,
+      action: status,
+      actorRole: role,
+      actorEmail,
+      comment,
+      oldStage: existingRequest.current_stage,
+      newStage: nextStage,
+      oldStatus: existingRequest.final_status,
+      newStatus: finalStatus,
+    });
 
-    if (
-  finalStatus === 'approved' ||
-  finalStatus === 'rejected'
-) {
-  moveFileToArchive(request.passport_file);
-  moveFileToArchive(request.invitation_letter);
-  moveFileToArchive(request.tor_file);
-}
+    if (finalStatus === 'approved' || finalStatus === 'rejected') {
+      moveFileToArchive(request.passport_file);
+      moveFileToArchive(request.invitation_letter);
+      moveFileToArchive(request.tor_file);
+    }
 
-    await pool.query(
-      `
-      INSERT INTO notifications (
-        user_email,
-        title,
-        message
-      )
-      VALUES ($1, $2, $3)
-      `,
-      [
-        request.email,
-        'Travel Request Updated',
+    await addNotification({
+      userEmail: request.email,
+      title: 'Travel Request Updated',
+      message:
         status === 'Amended'
           ? `Your travel request to ${request.country} requires amendment: ${amendmentComment}`
           : `Your travel request to ${request.country} is now ${displayStatus}.`,
-      ]
-    );
+    });
 
-    sendTravelerEmail({
+    await sendTravelerEmail({
       request,
       status,
       displayStatus,
@@ -1161,77 +1327,32 @@ app.put('/api/requests/:id/status', async (req, res) => {
     let nextApprover = null;
     let nextStageName = '';
 
-    if (
-      nextStage === 'protocol' &&
-      status !== 'Amended'
-    ) {
-      const approverResult = await pool.query(
-        `
-        SELECT full_name, email
-        FROM users
-        WHERE role = 'protocol'
-        LIMIT 1
-        `
-      );
-
-      nextApprover = approverResult.rows[0];
+    if (nextStage === 'protocol' && status !== 'Amended') {
+      nextApprover = await getFirstUserByRole('protocol');
       nextStageName = 'Protocol Review';
     } else if (nextStage === 'protocol_final') {
-      const approverResult = await pool.query(
-        `
-        SELECT full_name, email
-        FROM users
-        WHERE role = 'protocol'
-        LIMIT 1
-        `
-      );
-
-      nextApprover = approverResult.rows[0];
+      nextApprover = await getFirstUserByRole('protocol');
       nextStageName = 'Pending Foreign Affairs Response';
     } else if (nextStage === 'office_head') {
-      const approverResult = await pool.query(
-        `
-        SELECT full_name, email
-        FROM users
-        WHERE role = 'office_head'
-        LIMIT 1
-        `
-      );
-
-      nextApprover = approverResult.rows[0];
+      nextApprover = await getFirstUserByRole('office_head');
       nextStageName = 'Office Head Review';
     } else if (nextStage === 'minister') {
-      const approverResult = await pool.query(
-        `
-        SELECT full_name, email
-        FROM users
-        WHERE role = 'minister'
-        LIMIT 1
-        `
-      );
-
-      nextApprover = approverResult.rows[0];
+      nextApprover = await getFirstUserByRole('minister');
       nextStageName = 'Minister Final Review';
     }
 
-    if (
-      nextApprover &&
-      nextStage !== 'completed' &&
-      status !== 'Amended'
-    ) {
-      sendTaskEmail({
+    if (nextApprover && nextStage !== 'completed' && status !== 'Amended') {
+      await sendTaskEmail({
         to: nextApprover.email,
         recipientName: nextApprover.full_name,
         request,
         stageName: nextStageName,
-        actionUrl: FRONTEND_URL,
-      }).catch((error) => {
-        console.error('NEXT APPROVER EMAIL ERROR:', error);
+        actionUrl: getFrontendUrl(),
       });
     }
 
     res.json({
-      message: 'Status updated successfully',
+      message: 'Status updated successfully.',
       status: displayStatus,
       currentStage: nextStage,
       finalStatus,
@@ -1244,13 +1365,14 @@ app.put('/api/requests/:id/status', async (req, res) => {
   }
 });
 
-/* =========================
+/* ============================================================
    RESUBMIT AMENDED REQUEST
-========================= */
+============================================================ */
 
 app.put('/api/requests/:id/resubmit', async (req, res) => {
   try {
     const { id } = req.params;
+    const { actorEmail, role } = req.body;
 
     const existingRequestResult = await pool.query(
       `
@@ -1265,11 +1387,17 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
 
     if (!existingRequest) {
       return res.status(404).json({
-        error: 'Request not found',
+        error: 'Request not found.',
       });
     }
 
-    await pool.query(
+    if (existingRequest.final_status !== 'amended') {
+      return res.status(400).json({
+        error: 'Only amended requests can be resubmitted.',
+      });
+    }
+
+    const updateResult = await pool.query(
       `
       UPDATE requests
       SET
@@ -1277,46 +1405,39 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
         final_status = 'pending',
         status = 'Resubmitted to Protocol'
       WHERE id = $1
+      RETURNING *
       `,
       [id]
     );
 
-    const requestResult = await pool.query(
-      `
-      SELECT *
-      FROM requests
-      WHERE id = $1
-      `,
-      [id]
-    );
+    const request = updateResult.rows[0];
 
-    const request = requestResult.rows[0];
+    await addAuditTrail({
+      requestId: request.id,
+      action: 'Resubmitted',
+      actorRole: role || 'traveler',
+      actorEmail: actorEmail || request.email,
+      comment: 'Traveler resubmitted amended request.',
+      oldStage: existingRequest.current_stage,
+      newStage: 'protocol',
+      oldStatus: existingRequest.final_status,
+      newStatus: 'pending',
+    });
 
-    const protocolResult = await pool.query(
-      `
-      SELECT full_name, email
-      FROM users
-      WHERE role = 'protocol'
-      LIMIT 1
-      `
-    );
+    const protocolUser = await getFirstUserByRole('protocol');
 
-    if (protocolResult.rows.length > 0) {
-      const protocolUser = protocolResult.rows[0];
-
-      sendTaskEmail({
+    if (protocolUser) {
+      await sendTaskEmail({
         to: protocolUser.email,
         recipientName: protocolUser.full_name,
         request,
         stageName: 'Protocol Review',
-        actionUrl: FRONTEND_URL,
-      }).catch((error) => {
-        console.error('RESUBMIT EMAIL ERROR:', error);
+        actionUrl: getFrontendUrl(),
       });
     }
 
     res.json({
-      message: 'Request resubmitted successfully',
+      message: 'Request resubmitted successfully.',
     });
   } catch (error) {
     console.error('RESUBMIT REQUEST ERROR:', error);
@@ -1326,9 +1447,9 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
   }
 });
 
-/* =========================
+/* ============================================================
    DELETE REQUEST
-========================= */
+============================================================ */
 
 app.delete('/api/requests/:id', async (req, res) => {
   try {
@@ -1341,7 +1462,7 @@ app.delete('/api/requests/:id', async (req, res) => {
     );
 
     res.json({
-      message: 'Request deleted successfully',
+      message: 'Request deleted successfully.',
     });
   } catch (error) {
     console.error('DELETE REQUEST ERROR:', error);
@@ -1351,9 +1472,9 @@ app.delete('/api/requests/:id', async (req, res) => {
   }
 });
 
-/* =========================
-   AUDIT TRAIL
-========================= */
+/* ============================================================
+   REQUEST AUDIT TRAIL
+============================================================ */
 
 app.get('/api/requests/:id/audit-trail', async (req, res) => {
   try {
@@ -1380,16 +1501,16 @@ app.get('/api/requests/:id/audit-trail', async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
-    console.error('GET AUDIT TRAIL ERROR:', error);
+    console.error('GET REQUEST AUDIT TRAIL ERROR:', error);
     res.status(500).json({
       error: error.message,
     });
   }
 });
 
-/* =========================
+/* ============================================================
    SECTOR APPROVERS
-========================= */
+============================================================ */
 
 app.get('/api/state-ministers', async (req, res) => {
   try {
@@ -1400,7 +1521,8 @@ app.get('/api/state-ministers', async (req, res) => {
         sector,
         full_name,
         email,
-        role
+        role,
+        account_status
       FROM users
       WHERE role IN (
         'state_minister',
@@ -1423,13 +1545,7 @@ app.get('/api/state-ministers', async (req, res) => {
 
 app.post('/api/state-ministers', async (req, res) => {
   try {
-    const {
-      sector,
-      fullName,
-      email,
-      password,
-      role,
-    } = req.body;
+    const { sector, fullName, email, password, role } = req.body;
 
     if (!sector || !fullName || !email || !password || !role) {
       return res.status(400).json({
@@ -1450,6 +1566,23 @@ app.post('/api/state-ministers', async (req, res) => {
       });
     }
 
+    const normalizedEmail = normalizeEmail(email);
+
+    const existingUser = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE LOWER(TRIM(email)) = $1
+      `,
+      [normalizedEmail]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({
+        error: 'Email is already registered.',
+      });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
@@ -1459,18 +1592,14 @@ app.post('/api/state-ministers', async (req, res) => {
         full_name,
         email,
         password,
-        role
-      )
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, sector, full_name, email, role
-      `,
-      [
-        sector,
-        fullName,
-        email,
-        hashedPassword,
         role,
-      ]
+        account_status,
+        is_active
+      )
+      VALUES ($1, $2, $3, $4, $5, 'active', true)
+      RETURNING id, sector, full_name, email, role, account_status
+      `,
+      [sector, fullName, normalizedEmail, hashedPassword, role]
     );
 
     res.status(201).json(result.rows[0]);
@@ -1484,12 +1613,7 @@ app.post('/api/state-ministers', async (req, res) => {
 
 app.put('/api/state-ministers/:id', async (req, res) => {
   try {
-    const {
-      sector,
-      fullName,
-      email,
-      role,
-    } = req.body;
+    const { sector, fullName, email, role } = req.body;
 
     const allowedRoles = [
       'state_minister',
@@ -1513,15 +1637,9 @@ app.put('/api/state-ministers/:id', async (req, res) => {
         email = $3,
         role = $4
       WHERE id = $5
-      RETURNING id, sector, full_name, email, role
+      RETURNING id, sector, full_name, email, role, account_status
       `,
-      [
-        sector,
-        fullName,
-        email,
-        role,
-        req.params.id,
-      ]
+      [sector, fullName, normalizeEmail(email), role, req.params.id]
     );
 
     if (result.rows.length === 0) {
@@ -1531,7 +1649,7 @@ app.put('/api/state-ministers/:id', async (req, res) => {
     }
 
     res.json({
-      message: 'Sector approver updated successfully',
+      message: 'Sector approver updated successfully.',
       approver: result.rows[0],
     });
   } catch (error) {
@@ -1559,7 +1677,7 @@ app.delete('/api/state-ministers/:id', async (req, res) => {
     );
 
     res.json({
-      message: 'Sector approver deleted successfully',
+      message: 'Sector approver deleted successfully.',
     });
   } catch (error) {
     console.error('DELETE SECTOR APPROVER ERROR:', error);
@@ -1569,15 +1687,25 @@ app.delete('/api/state-ministers/:id', async (req, res) => {
   }
 });
 
-/* =========================
-   USERS
-========================= */
+/* ============================================================
+   USERS AND ACCOUNT APPROVAL
+============================================================ */
 
 app.get('/api/users', async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT id, full_name, email, role, is_active
+      SELECT
+        id,
+        full_name,
+        email,
+        phone,
+        position,
+        sector,
+        department,
+        role,
+        is_active,
+        account_status
       FROM users
       ORDER BY id DESC
       `
@@ -1592,9 +1720,70 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
+app.get('/api/users/pending', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        full_name,
+        email,
+        phone,
+        position,
+        sector,
+        department,
+        role,
+        account_status
+      FROM users
+      WHERE account_status = 'pending'
+      ORDER BY id DESC
+      `
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('GET PENDING USERS ERROR:', error);
+    res.status(500).json({
+      error: 'Failed to fetch pending users.',
+    });
+  }
+});
+
 app.post('/api/users', async (req, res) => {
   try {
-    const { fullName, email, password, role } = req.body;
+    const {
+      fullName,
+      email,
+      password,
+      role,
+      phone,
+      position,
+      sector,
+      department,
+    } = req.body;
+
+    if (!fullName || !email || !password || !role) {
+      return res.status(400).json({
+        error: 'Full name, email, password, and role are required.',
+      });
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+
+    const existingUser = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE LOWER(TRIM(email)) = $1
+      `,
+      [normalizedEmail]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({
+        error: 'Email is already registered.',
+      });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -1604,16 +1793,35 @@ app.post('/api/users', async (req, res) => {
         full_name,
         email,
         password,
-        role
+        role,
+        phone,
+        position,
+        sector,
+        department,
+        account_status,
+        is_active
       )
-      VALUES ($1, $2, $3, $4)
-      RETURNING id, full_name, email, role
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', true)
+      RETURNING
+        id,
+        full_name,
+        email,
+        role,
+        phone,
+        position,
+        sector,
+        department,
+        account_status
       `,
       [
         fullName,
-        email,
+        normalizedEmail,
         hashedPassword,
         role,
+        phone || null,
+        position || null,
+        sector || null,
+        department || null,
       ]
     );
 
@@ -1626,30 +1834,160 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-app.put('/api/users/:id', async (req, res) => {
+app.put('/api/users/:id/approve', async (req, res) => {
   try {
     const { id } = req.params;
-    const { fullName, email, role } = req.body;
 
-    await pool.query(
+    const result = await pool.query(
       `
       UPDATE users
       SET
-        full_name = $1,
-        email = $2,
-        role = $3
-      WHERE id = $4
-      `,
-      [
-        fullName,
+        account_status = 'active',
+        is_active = true
+      WHERE id = $1
+      RETURNING
+        id,
+        full_name,
         email,
         role,
+        phone,
+        position,
+        sector,
+        department,
+        account_status
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'User not found.',
+      });
+    }
+
+    await sendAccountActivatedEmail(result.rows[0]);
+
+    res.json({
+      message: 'User account approved and activated successfully.',
+      user: result.rows[0],
+    });
+  } catch (error) {
+    console.error('APPROVE USER ERROR:', error);
+    res.status(500).json({
+      error: 'Failed to approve user.',
+    });
+  }
+});
+
+app.put('/api/users/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `
+      UPDATE users
+      SET
+        account_status = 'rejected',
+        is_active = false
+      WHERE id = $1
+      RETURNING
+        id,
+        full_name,
+        email,
+        role,
+        phone,
+        position,
+        sector,
+        department,
+        account_status
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'User not found.',
+      });
+    }
+
+    await sendAccountRejectedEmail(result.rows[0]);
+
+    res.json({
+      message: 'User account request rejected.',
+      user: result.rows[0],
+    });
+  } catch (error) {
+    console.error('REJECT USER ERROR:', error);
+    res.status(500).json({
+      error: 'Failed to reject user.',
+    });
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      fullName,
+      email,
+      role,
+      phone,
+      position,
+      sector,
+      department,
+      accountStatus,
+      isActive,
+    } = req.body;
+
+    const result = await pool.query(
+      `
+      UPDATE users
+      SET
+        full_name = COALESCE($1, full_name),
+        email = COALESCE($2, email),
+        role = COALESCE($3, role),
+        phone = COALESCE($4, phone),
+        position = COALESCE($5, position),
+        sector = COALESCE($6, sector),
+        department = COALESCE($7, department),
+        account_status = COALESCE($8, account_status),
+        is_active = COALESCE($9, is_active)
+      WHERE id = $10
+      RETURNING
+        id,
+        full_name,
+        email,
+        role,
+        phone,
+        position,
+        sector,
+        department,
+        is_active,
+        account_status
+      `,
+      [
+        fullName || null,
+        email ? normalizeEmail(email) : null,
+        role || null,
+        phone || null,
+        position || null,
+        sector || null,
+        department || null,
+        accountStatus || null,
+        typeof isActive === 'boolean' ? isActive : null,
         id,
       ]
     );
 
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'User not found.',
+      });
+    }
+
     res.json({
-      message: 'User updated successfully',
+      message: 'User updated successfully.',
+      user: result.rows[0],
     });
   } catch (error) {
     console.error('UPDATE USER ERROR:', error);
@@ -1670,7 +2008,7 @@ app.delete('/api/users/:id', async (req, res) => {
     );
 
     res.json({
-      message: 'User deleted successfully',
+      message: 'User deleted successfully.',
     });
   } catch (error) {
     console.error('DELETE USER ERROR:', error);
@@ -1684,6 +2022,12 @@ app.put('/api/users/:id/reset-password', async (req, res) => {
   try {
     const { newPassword } = req.body;
 
+    if (!newPassword) {
+      return res.status(400).json({
+        error: 'New password is required.',
+      });
+    }
+
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     await pool.query(
@@ -1692,14 +2036,11 @@ app.put('/api/users/:id/reset-password', async (req, res) => {
       SET password = $1
       WHERE id = $2
       `,
-      [
-        hashedPassword,
-        req.params.id,
-      ]
+      [hashedPassword, req.params.id]
     );
 
     res.json({
-      message: 'Password reset successfully',
+      message: 'Password reset successfully.',
     });
   } catch (error) {
     console.error('RESET PASSWORD ERROR:', error);
@@ -1714,6 +2055,12 @@ app.put('/api/users/:id/change-password', async (req, res) => {
     const { id } = req.params;
     const { currentPassword, newPassword } = req.body;
 
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        error: 'Current password and new password are required.',
+      });
+    }
+
     const result = await pool.query(
       `
       SELECT *
@@ -1725,20 +2072,17 @@ app.put('/api/users/:id/change-password', async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(404).json({
-        error: 'User not found',
+        error: 'User not found.',
       });
     }
 
     const user = result.rows[0];
 
-    const isMatch = await bcrypt.compare(
-      currentPassword,
-      user.password
-    );
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
 
     if (!isMatch) {
       return res.status(400).json({
-        error: 'Current password is incorrect',
+        error: 'Current password is incorrect.',
       });
     }
 
@@ -1750,14 +2094,11 @@ app.put('/api/users/:id/change-password', async (req, res) => {
       SET password = $1
       WHERE id = $2
       `,
-      [
-        hashedPassword,
-        id,
-      ]
+      [hashedPassword, id]
     );
 
     res.json({
-      message: 'Password updated successfully',
+      message: 'Password updated successfully.',
     });
   } catch (error) {
     console.error('CHANGE PASSWORD ERROR:', error);
@@ -1767,31 +2108,31 @@ app.put('/api/users/:id/change-password', async (req, res) => {
   }
 });
 
-/* =========================
-   STATS
-========================= */
+/* ============================================================
+   STATS AND DASHBOARD
+============================================================ */
 
 app.get('/api/stats', async (req, res) => {
   try {
     const total = await pool.query(`
-      SELECT COUNT(*)
+      SELECT COUNT(*)::int AS count
       FROM requests
     `);
 
     const approved = await pool.query(`
-      SELECT COUNT(*)
+      SELECT COUNT(*)::int AS count
       FROM requests
       WHERE final_status = 'approved'
     `);
 
     const pending = await pool.query(`
-      SELECT COUNT(*)
+      SELECT COUNT(*)::int AS count
       FROM requests
       WHERE final_status = 'pending'
     `);
 
     const rejected = await pool.query(`
-      SELECT COUNT(*)
+      SELECT COUNT(*)::int AS count
       FROM requests
       WHERE final_status = 'rejected'
     `);
@@ -1847,7 +2188,6 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
         GROUP BY ${sectorExpression}
         ORDER BY pending_count DESC
       `);
-
     } else if (role === 'state_minister') {
       result = await pool.query(
         `
@@ -1865,7 +2205,6 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
         `,
         [id]
       );
-
     } else if (
       role === 'office_head' ||
       role === 'chief_executive_officer' ||
@@ -1885,7 +2224,6 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
         `,
         [role]
       );
-
     } else if (role === 'protocol') {
       result = await pool.query(`
         SELECT
@@ -1898,7 +2236,6 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
         GROUP BY ${sectorExpression}
         ORDER BY pending_count DESC
       `);
-
     } else {
       result = { rows: [] };
     }
@@ -1912,9 +2249,9 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
   }
 });
 
-/* =========================
+/* ============================================================
    REPORTS
-========================= */
+============================================================ */
 
 app.get('/api/reports/status-summary', async (req, res) => {
   try {
@@ -1977,18 +2314,12 @@ app.get('/api/reports/monthly-requests', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
-        TO_CHAR(
-          DATE_TRUNC('month', start_date),
-          'Mon YYYY'
-        ) AS month,
-        DATE_TRUNC(
-          'month',
-          start_date
-        ) AS month_date,
+        TO_CHAR(DATE_TRUNC('month', start_date), 'Mon YYYY') AS month,
+        DATE_TRUNC('month', start_date) AS month_date,
         COUNT(*)::int AS total
       FROM requests
       WHERE start_date IS NOT NULL
-      AND final_status = 'approved'
+        AND final_status = 'approved'
       GROUP BY DATE_TRUNC('month', start_date)
       ORDER BY DATE_TRUNC('month', start_date)
     `);
@@ -2024,9 +2355,9 @@ app.get('/api/reports/stage-summary', async (req, res) => {
   }
 });
 
-/* =========================
+/* ============================================================
    PDF GENERATION
-========================= */
+============================================================ */
 
 app.get('/api/generate-pdf/:id', async (req, res) => {
   try {
@@ -2043,7 +2374,7 @@ app.get('/api/generate-pdf/:id', async (req, res) => {
 
     if (!request) {
       return res.status(404).json({
-        error: 'Request not found',
+        error: 'Request not found.',
       });
     }
 
@@ -2064,7 +2395,10 @@ app.get('/api/generate-pdf/:id', async (req, res) => {
       'NotoSansEthiopic-Regular.ttf'
     );
 
-    const doc = new PDFDocument();
+    const doc = new PDFDocument({
+      margin: 50,
+    });
+
     const stream = fs.createWriteStream(filePath);
 
     doc.pipe(stream);
@@ -2073,34 +2407,31 @@ app.get('/api/generate-pdf/:id', async (req, res) => {
       doc.font(fontPath);
     }
 
-    doc.fontSize(22).text(
-      'Ministry of Agriculture',
-      { align: 'center' }
-    );
-
+    doc.fontSize(22).text('Ministry of Agriculture', { align: 'center' });
     doc.moveDown();
-
-    doc.fontSize(18).text(
-      'Foreign Travel Approval Letter',
-      { align: 'center' }
-    );
-
+    doc.fontSize(18).text('Foreign Travel Approval Letter', {
+      align: 'center',
+    });
     doc.moveDown(2);
 
     doc.fontSize(13);
-    doc.text(`Traveler Name: ${request.full_name || '-'}`);
+    doc.text(`Traveler Name: ${safeText(request.full_name)}`);
     doc.moveDown();
-    doc.text(`Department: ${request.department || '-'}`);
+    doc.text(`Department: ${safeText(request.department)}`);
     doc.moveDown();
-    doc.text(`Destination Country: ${request.country || '-'}`);
+    doc.text(`Destination Country: ${safeText(request.country)}`);
     doc.moveDown();
-    doc.text(`Travel Dates: ${request.start_date || '-'} to ${request.end_date || '-'}`);
+    doc.text(
+      `Travel Dates: ${safeText(request.start_date)} to ${safeText(
+        request.end_date
+      )}`
+    );
     doc.moveDown();
-    doc.text(`Purpose of Travel: ${request.purpose || '-'}`);
+    doc.text(`Purpose of Travel: ${safeText(request.purpose)}`);
     doc.moveDown();
-    doc.text(`Sponsor: ${request.sponsor || '-'}`);
+    doc.text(`Sponsor: ${safeText(request.sponsor)}`);
     doc.moveDown();
-    doc.text(`Status: ${request.status || '-'}`);
+    doc.text(`Status: ${safeText(request.status)}`);
     doc.moveDown(3);
     doc.text('Authorized Signature: __________________');
 
@@ -2110,33 +2441,31 @@ app.get('/api/generate-pdf/:id', async (req, res) => {
       doc.font(fontPath);
     }
 
-    doc.fontSize(22).text(
-      'የግብርና ሚኒስቴር',
-      { align: 'center' }
-    );
-
+    doc.fontSize(22).text('የግብርና ሚኒስቴር', { align: 'center' });
     doc.moveDown();
-
-    doc.fontSize(18).text(
-      'የውጭ ጉዞ ፈቃድ ደብዳቤ',
-      { align: 'center' }
-    );
-
+    doc.fontSize(18).text('የውጭ ጉዞ ፈቃድ ደብዳቤ', {
+      align: 'center',
+    });
     doc.moveDown(2);
 
-    doc.text(`ተጓዥ: ${request.full_name || '-'}`);
+    doc.fontSize(13);
+    doc.text(`ተጓዥ: ${safeText(request.full_name)}`);
     doc.moveDown();
-    doc.text(`የስራ ክፍል: ${request.department || '-'}`);
+    doc.text(`የስራ ክፍል: ${safeText(request.department)}`);
     doc.moveDown();
-    doc.text(`የሚሄዱበት ሀገር: ${request.country || '-'}`);
+    doc.text(`የሚሄዱበት ሀገር: ${safeText(request.country)}`);
     doc.moveDown();
-    doc.text(`የጉዞ ቀን: ${request.start_date || '-'} እስከ ${request.end_date || '-'}`);
+    doc.text(
+      `የጉዞ ቀን: ${safeText(request.start_date)} እስከ ${safeText(
+        request.end_date
+      )}`
+    );
     doc.moveDown();
-    doc.text(`የጉዞ ዓላማ: ${request.purpose || '-'}`);
+    doc.text(`የጉዞ ዓላማ: ${safeText(request.purpose)}`);
     doc.moveDown();
-    doc.text(`ስፖንሰር: ${request.sponsor || '-'}`);
+    doc.text(`ስፖንሰር: ${safeText(request.sponsor)}`);
     doc.moveDown();
-    doc.text(`ሁኔታ: ${request.status || '-'}`);
+    doc.text(`ሁኔታ: ${safeText(request.status)}`);
     doc.moveDown(3);
     doc.text('ፊርማ: __________________');
 
@@ -2153,9 +2482,9 @@ app.get('/api/generate-pdf/:id', async (req, res) => {
   }
 });
 
-/* =========================
+/* ============================================================
    AFFILIATE INSTITUTIONS
-========================= */
+============================================================ */
 
 app.get('/api/affiliate-institutions', async (req, res) => {
   try {
@@ -2183,12 +2512,7 @@ app.get('/api/affiliate-institutions', async (req, res) => {
 
 app.post('/api/affiliate-institutions', async (req, res) => {
   try {
-    const {
-      organizationName,
-      generalDirectorName,
-      email,
-      phone,
-    } = req.body;
+    const { organizationName, generalDirectorName, email, phone } = req.body;
 
     const result = await pool.query(
       `
@@ -2201,12 +2525,7 @@ app.post('/api/affiliate-institutions', async (req, res) => {
       VALUES ($1, $2, $3, $4)
       RETURNING *
       `,
-      [
-        organizationName,
-        generalDirectorName,
-        email,
-        phone,
-      ]
+      [organizationName, generalDirectorName, email, phone]
     );
 
     res.status(201).json(result.rows[0]);
@@ -2220,12 +2539,7 @@ app.post('/api/affiliate-institutions', async (req, res) => {
 
 app.put('/api/affiliate-institutions/:id', async (req, res) => {
   try {
-    const {
-      organizationName,
-      generalDirectorName,
-      email,
-      phone,
-    } = req.body;
+    const { organizationName, generalDirectorName, email, phone } = req.body;
 
     const result = await pool.query(
       `
@@ -2238,23 +2552,17 @@ app.put('/api/affiliate-institutions/:id', async (req, res) => {
       WHERE id = $5
       RETURNING *
       `,
-      [
-        organizationName,
-        generalDirectorName,
-        email,
-        phone,
-        req.params.id,
-      ]
+      [organizationName, generalDirectorName, email, phone, req.params.id]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
-        error: 'Organization not found',
+        error: 'Organization not found.',
       });
     }
 
     res.json({
-      message: 'Organization updated successfully',
+      message: 'Organization updated successfully.',
       organization: result.rows[0],
     });
   } catch (error) {
@@ -2276,7 +2584,7 @@ app.delete('/api/affiliate-institutions/:id', async (req, res) => {
     );
 
     res.json({
-      message: 'Organization deleted successfully',
+      message: 'Organization deleted successfully.',
     });
   } catch (error) {
     console.error('DELETE AFFILIATE ERROR:', error);
@@ -2286,9 +2594,9 @@ app.delete('/api/affiliate-institutions/:id', async (req, res) => {
   }
 });
 
-/* =========================
+/* ============================================================
    MINISTRY ORGANIZATIONS
-========================= */
+============================================================ */
 
 app.get('/api/ministry-organizations', async (req, res) => {
   try {
@@ -2342,20 +2650,17 @@ app.put('/api/ministry-organizations/:id', async (req, res) => {
       WHERE id = $2
       RETURNING *
       `,
-      [
-        organizationName,
-        req.params.id,
-      ]
+      [organizationName, req.params.id]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
-        error: 'Ministry organization not found',
+        error: 'Ministry organization not found.',
       });
     }
 
     res.json({
-      message: 'Ministry organization updated successfully',
+      message: 'Ministry organization updated successfully.',
       organization: result.rows[0],
     });
   } catch (error) {
@@ -2377,7 +2682,7 @@ app.delete('/api/ministry-organizations/:id', async (req, res) => {
     );
 
     res.json({
-      message: 'Ministry organization deleted successfully',
+      message: 'Ministry organization deleted successfully.',
     });
   } catch (error) {
     console.error('DELETE MINISTRY ORGANIZATION ERROR:', error);
@@ -2387,9 +2692,9 @@ app.delete('/api/ministry-organizations/:id', async (req, res) => {
   }
 });
 
-/* =========================
+/* ============================================================
    NOTIFICATIONS
-========================= */
+============================================================ */
 
 app.get('/api/notifications', async (req, res) => {
   try {
@@ -2428,27 +2733,10 @@ app.get('/api/notifications', async (req, res) => {
   }
 });
 
-/* =========================
-   GLOBAL ERROR HANDLER
-========================= */
+/* ============================================================
+   GLOBAL AUDIT TRAIL
+============================================================ */
 
-app.use((error, req, res, next) => {
-  console.error('GLOBAL SERVER ERROR:', error);
-
-  if (error.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({
-      error: 'File size must not exceed 5MB',
-    });
-  }
-
-  res.status(500).json({
-    error: error.message || 'Server Error',
-  });
-});
-
-/* =========================
-   AUDIT TRAIL
-========================= */
 app.get('/api/audit-trail', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -2481,18 +2769,142 @@ app.get('/api/audit-trail', async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
-    console.error('GET AUDIT TRAIL ERROR:', error);
+    console.error('GET GLOBAL AUDIT TRAIL ERROR:', error);
     res.status(500).json({
       error: error.message,
     });
   }
 });
-/* =========================
+
+/* ============================================================
+   GLOBAL ERROR HANDLER
+============================================================ */
+
+app.use((error, req, res, next) => {
+  console.error('GLOBAL SERVER ERROR:', error);
+
+  if (error.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({
+      error: 'File size must not exceed 5MB.',
+    });
+  }
+
+  res.status(500).json({
+    error: error.message || 'Server Error',
+  });
+});
+
+app.get('/api/users/pending', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        full_name,
+        email,
+        phone,
+        position,
+        sector,
+        department,
+        role,
+        account_status,
+        is_active
+      FROM users
+      WHERE account_status = 'pending'
+      ORDER BY id DESC
+      `
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('GET PENDING USERS ERROR:', error);
+    res.status(500).json({
+      error: 'Failed to fetch pending users.',
+    });
+  }
+});
+app.put('/api/users/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `
+      UPDATE users
+      SET
+        account_status = 'active',
+        is_active = true
+      WHERE id = $1
+      RETURNING
+        id,
+        full_name,
+        email,
+        role,
+        account_status,
+        is_active
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'User not found.',
+      });
+    }
+
+    const approvedUser = result.rows[0];
+
+    try {
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: approvedUser.email,
+        subject: 'FTMS Account Activated',
+        html: `
+          <div style="font-family: Arial; padding: 20px; color: #333;">
+            <h2 style="color: #16a34a;">FTMS Account Activated</h2>
+
+            <p>Dear <strong>${approvedUser.full_name}</strong>,</p>
+
+            <p>
+              Your Foreign Travel Management System account has been activated
+              by the system administrator.
+            </p>
+
+            <p>You can now log in and submit your travel request.</p>
+
+            <p>
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}"
+                 style="display: inline-block; background: #16a34a; color: white; padding: 12px 18px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                Open FTMS
+              </a>
+            </p>
+
+            <p style="margin-top: 30px;">
+              Ministry of Agriculture<br/>
+              Foreign Travel Management System
+            </p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      console.error('ACCOUNT ACTIVATION EMAIL ERROR:', emailError);
+    }
+
+    res.json({
+      message: 'User account approved and activated successfully.',
+      user: approvedUser,
+    });
+  } catch (error) {
+    console.error('APPROVE USER ERROR:', error);
+    res.status(500).json({
+      error: 'Failed to approve user.',
+    });
+  }
+});
+/* ============================================================
    SERVER INITIALIZATION
-========================= */
+============================================================ */
 
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
+

@@ -1,0 +1,312 @@
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  background: #f4f7fb;
+  font-family: Arial, sans-serif;
+}
+
+.login-left {
+  padding: 50px 70px;
+  background: linear-gradient(135deg, #064e3b, #0f766e);
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.ministry-brand {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 60px;
+}
+
+.ministry-logo {
+  width: 85px;
+  height: 85px;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 8px;
+}
+
+.ministry-brand h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.ministry-brand p {
+  margin: 8px 0 0;
+  font-size: 17px;
+  color: #d9f99d;
+}
+
+.system-intro {
+  max-width: 700px;
+  margin-bottom: 45px;
+}
+
+.system-intro h2 {
+  font-size: 42px;
+  line-height: 1.15;
+  margin: 0 0 18px;
+  font-weight: 800;
+}
+
+.system-intro p {
+  font-size: 17px;
+  line-height: 1.7;
+  color: #e5e7eb;
+  margin: 0;
+}
+
+.ministry-structure {
+  max-width: 720px;
+  background: rgba(255, 255, 255, 0.11);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 20px;
+  padding: 25px;
+}
+
+.ministry-structure h3 {
+  margin: 0 0 18px;
+  font-size: 22px;
+}
+
+.structure-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.structure-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 13px;
+}
+
+.structure-item span {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 50%;
+  background: #facc15;
+  color: #064e3b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.structure-item p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.login-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 35px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 36px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.13);
+}
+
+.login-card-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.login-card-logo {
+  width: 76px;
+  height: 76px;
+  object-fit: contain;
+  margin-bottom: 15px;
+}
+
+.login-card-header h2 {
+  margin: 0;
+  font-size: 28px;
+  color: #0f172a;
+}
+
+.login-card-header p {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.login-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  margin-bottom: 18px;
+}
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.form-group input {
+  width: 100%;
+  height: 48px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 0 14px;
+  font-size: 15px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.form-group input:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.login-button {
+  width: 100%;
+  height: 50px;
+  border: none;
+  border-radius: 13px;
+  background: #0f766e;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.login-button:hover {
+  background: #115e59;
+}
+
+.login-button:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 25px;
+  color: #64748b;
+}
+
+.login-footer p {
+  margin: 0;
+  font-weight: 700;
+  color: #334155;
+}
+
+.login-footer small {
+  display: block;
+  margin-top: 5px;
+}
+
+@media (max-width: 950px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .login-left {
+    padding: 35px 25px;
+  }
+
+  .system-intro h2 {
+    font-size: 30px;
+  }
+
+  .structure-list {
+    grid-template-columns: 1fr;
+  }
+
+  .login-right {
+    padding: 25px;
+  }
+}
+.register-link {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.register-link p {
+  margin: 0 0 8px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.register-link button {
+  border: none;
+  background: transparent;
+  color: #0f766e;
+  font-weight: 800;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.register-link button:hover {
+  text-decoration: underline;
+}
+.login-success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  margin-bottom: 18px;
+}
+.register-card {
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.ministry-select {
+  width: 100%;
+  height: 48px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 0 14px;
+  font-size: 15px;
+  outline: none;
+  box-sizing: border-box;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.ministry-select:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.login-info {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  margin-bottom: 18px;
+}
