@@ -65,7 +65,7 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
         </div>
 
         <div className="system-intro">
-          <h2>Official Travel Request Automation</h2>
+          <h2>Foreign Travel Request Automation</h2>
           <p>
             A digital platform for submitting, reviewing, approving, and
             tracking official foreign travel requests within the Ministry.
