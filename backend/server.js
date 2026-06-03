@@ -1,4 +1,4 @@
-
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -2775,6 +2775,34 @@ app.get('/api/audit-trail', async (req, res) => {
     });
   }
 });
+
+/* ============================================================
+   TEST EMAIL
+============================================================ */
+
+app.get('/api/test-email', async (req, res) => {
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: process.env.EMAIL_USER,
+      subject: 'FTMS Email Test',
+      text: 'FTMS email configuration is working.',
+    });
+
+    res.json({
+      message: 'Test email sent successfully.',
+    });
+  } catch (error) {
+    console.error('TEST EMAIL ERROR:', error);
+
+    res.status(500).json({
+      error: error.message,
+      code: error.code,
+      command: error.command,
+    });
+  }
+});
+
 
 /* ============================================================
    GLOBAL ERROR HANDLER
