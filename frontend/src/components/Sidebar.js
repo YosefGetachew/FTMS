@@ -17,7 +17,7 @@ function Sidebar({ setActivePage }) {
   });
 
   const role = user?.role;
-  const isAdmin = role === 'admin';
+  const isAdmin = role === 'admin' || role === 'super_admin';
   const isProtocol = role === 'protocol';
   const isTraveler = role === 'traveler';
   const isMinister = role === 'minister';

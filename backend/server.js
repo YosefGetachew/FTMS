@@ -898,7 +898,7 @@ app.get('/api/requests', async (req, res) => {
         ON LOWER(TRIM(r.email)) = LOWER(TRIM(traveler.email))
     `;
 
-    if (role === 'admin') {
+    if (role === 'admin' || role === 'super_admin') {
       result = await pool.query(`
         ${baseSelect}
         ORDER BY r.id DESC
@@ -1144,21 +1144,30 @@ app.put('/api/requests/:id/status', async (req, res) => {
     }
 
     const allowedStagesByRole = {
-      state_minister: ['state_minister'],
-      office_head: ['office_head'],
-      chief_executive_officer: ['chief_executive_officer'],
-      protocol: ['protocol', 'protocol_final'],
-      minister: ['minister'],
-      admin: [
-        'state_minister',
-        'office_head',
-        'chief_executive_officer',
-        'protocol',
-        'minister',
-        'protocol_final',
-        'traveler',
-      ],
-    };
+  state_minister: ['state_minister'],
+  office_head: ['office_head'],
+  chief_executive_officer: ['chief_executive_officer'],
+  protocol: ['protocol', 'protocol_final'],
+  minister: ['minister'],
+  admin: [
+    'state_minister',
+    'office_head',
+    'chief_executive_officer',
+    'protocol',
+    'minister',
+    'protocol_final',
+    'traveler',
+  ],
+  super_admin: [
+    'state_minister',
+    'office_head',
+    'chief_executive_officer',
+    'protocol',
+    'minister',
+    'protocol_final',
+    'traveler',
+  ],
+};
 
     const allowedStages = allowedStagesByRole[role];
 
@@ -1251,7 +1260,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
         nextStage = 'protocol_final';
         finalStatus = 'pending';
         displayStatus = 'Approved by Minister';
-      } else if (role === 'admin') {
+      } else if (role === 'admin' || role === 'super_admin') {
         nextStage = 'completed';
         finalStatus = 'approved';
         displayStatus = 'Approved';
@@ -1707,6 +1716,7 @@ app.get('/api/users', async (req, res) => {
         is_active,
         account_status
       FROM users
+      WHERE role <> 'super_admin'
       ORDER BY id DESC
       `
     );
@@ -1999,6 +2009,27 @@ app.put('/api/users/:id', async (req, res) => {
 
 app.delete('/api/users/:id', async (req, res) => {
   try {
+    const userCheck = await pool.query(
+      `
+      SELECT id, role
+      FROM users
+      WHERE id = $1
+      `,
+      [req.params.id]
+    );
+
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({
+        error: 'User not found.',
+      });
+    }
+
+    if (userCheck.rows[0].role === 'super_admin') {
+      return res.status(403).json({
+        error: 'Super admin cannot be deleted.',
+      });
+    }
+
     await pool.query(
       `
       DELETE FROM users
@@ -2025,6 +2056,27 @@ app.put('/api/users/:id/reset-password', async (req, res) => {
     if (!newPassword) {
       return res.status(400).json({
         error: 'New password is required.',
+      });
+    }
+
+    const userCheck = await pool.query(
+      `
+      SELECT id, role
+      FROM users
+      WHERE id = $1
+      `,
+      [req.params.id]
+    );
+
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({
+        error: 'User not found.',
+      });
+    }
+
+    if (userCheck.rows[0].role === 'super_admin') {
+      return res.status(403).json({
+        error: 'Super admin password cannot be reset from User Management.',
       });
     }
 
@@ -2178,7 +2230,7 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
         ON LOWER(TRIM(r.email)) = LOWER(TRIM(traveler.email))
     `;
 
-    if (role === 'admin') {
+    if (role === 'admin' || role === 'super_admin') {
       result = await pool.query(`
         SELECT
           ${sectorExpression} AS sector,
