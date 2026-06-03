@@ -43,12 +43,24 @@ function UserManagement() {
     }
   };
 
-  const officers = users.filter((user) =>
-    officerRoleValues.includes(user.role)
+  const travelers = users.filter((user) => user.role === 'traveler');
+
+  const ministers = users.filter((user) => user.role === 'minister');
+
+  const stateMinisters = users.filter(
+    (user) => user.role === 'state_minister'
   );
 
-  const travelers = users.filter(
-    (user) => user.role === 'traveler'
+  const administration = users.filter(
+    (user) =>
+      user.role === 'chief_executive_officer' ||
+      user.role === 'office_head'
+  );
+
+  const otherOfficers = users.filter(
+    (user) =>
+      user.role === 'admin' ||
+      user.role === 'protocol'
   );
 
   const formatRole = (role) => {
@@ -128,10 +140,7 @@ function UserManagement() {
       fetchUsers();
     } catch (error) {
       console.error(error);
-      alert(
-        error.response?.data?.error ||
-          'Failed to save user'
-      );
+      alert(error.response?.data?.error || 'Failed to save user');
     } finally {
       setLoading(false);
     }
@@ -225,9 +234,7 @@ function UserManagement() {
 
                   <button
                     className="approve-btn"
-                    onClick={() =>
-                      handleResetPassword(user.id)
-                    }
+                    onClick={() => handleResetPassword(user.id)}
                   >
                     Reset Password
                   </button>
@@ -244,6 +251,16 @@ function UserManagement() {
           )}
         </tbody>
       </table>
+    </div>
+  );
+
+  const renderUserSection = (title, items, emptyMessage) => (
+    <div className="settings-container" style={{ marginTop: '20px' }}>
+      <h3>
+        {title} ({items.length})
+      </h3>
+
+      {renderUserTable(items, emptyMessage)}
     </div>
   );
 
@@ -296,10 +313,7 @@ function UserManagement() {
             onChange={handleChange}
           >
             {officerRoles.map((role) => (
-              <option
-                key={role.value}
-                value={role.value}
-              >
+              <option key={role.value} value={role.value}>
                 {role.label}
               </option>
             ))}
@@ -315,30 +329,33 @@ function UserManagement() {
         </button>
       </div>
 
-      <h3
-        style={{
-          marginTop: '35px',
-          marginBottom: '15px',
-        }}
-      >
-        Officers
-      </h3>
-
-      {renderUserTable(
-        officers,
-        'No officers found'
+      
+      {renderUserSection(
+        'Minister',
+        ministers,
+        'No minister found'
       )}
 
-      <h3
-        style={{
-          marginTop: '35px',
-          marginBottom: '15px',
-        }}
-      >
-        Travelers
-      </h3>
+      {renderUserSection(
+        'State Ministers',
+        stateMinisters,
+        'No state ministers found'
+      )}
 
-      {renderUserTable(
+      {renderUserSection(
+        'Administration (CEO & Office Head)',
+        administration,
+        'No administration users found'
+      )}
+
+      {renderUserSection(
+        'System Officers (Admin & Protocol)',
+        otherOfficers,
+        'No system officers found'
+      )}
+      
+      {renderUserSection(
+        'Travelers',
         travelers,
         'No travelers found'
       )}
@@ -379,10 +396,7 @@ function UserManagement() {
                 onChange={handleChange}
               >
                 {officerRoles.map((role) => (
-                  <option
-                    key={role.value}
-                    value={role.value}
-                  >
+                  <option key={role.value} value={role.value}>
                     {role.label}
                   </option>
                 ))}

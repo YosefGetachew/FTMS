@@ -31,15 +31,12 @@ function DashboardStats({ setActivePage }) {
   }, []);
 
   const normalizeSectorData = (data) => {
-    return (data || []).map((item) => ({
-      ...item,
-      sector:
-        item.sector === 'Unassigned'
-          ? 'Affiliate Institute'
-          : item.sector || 'Affiliate Institute',
-      pending_count: Number(item.pending_count || 0),
-    }));
-  };
+  return (data || []).map((item) => ({
+    ...item,
+    sector: item.sector || 'Unassigned',
+    pending_count: Number(item.pending_count || 0),
+  }));
+};
 
   const fetchDashboardData = async () => {
     try {
@@ -105,12 +102,12 @@ function DashboardStats({ setActivePage }) {
         ) : (
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 " />
 
               <XAxis
                 dataKey="sector"
                 interval={0}
-                angle={-15}
+                angle={-5}
                 textAnchor="end"
                 height={70}
               />

@@ -14,6 +14,8 @@ import {
   Legend,
   ResponsiveContainer,
   CartesianGrid,
+  LabelList,
+  
 } from 'recharts';
 
 import API from '../services/api';
@@ -158,20 +160,39 @@ function Reports() {
             <p>No monthly data available</p>
           ) : (
             <ResponsiveContainer width="100%" height={350}>
-              <LineChart data={monthlyRequests}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#2563eb"
-                  strokeWidth={3}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+  <LineChart data={monthlyRequests}>
+    <CartesianGrid strokeDasharray="3 3" />
+
+    <XAxis dataKey="month" />
+
+    <YAxis
+      allowDecimals={false}
+      tickCount={6}
+      domain={[0, 'auto']}
+    />
+
+    <Tooltip />
+
+    <Legend />
+
+    <Line
+      type="monotone"
+      dataKey="total"
+      stroke="#2563eb"
+      strokeWidth={3}
+    >
+      <LabelList
+        dataKey="total"
+        position="top"
+        style={{
+          fontSize: 12,
+          fontWeight: 'bold',
+          fill: '#2563eb',
+        }}
+      />
+    </Line>
+  </LineChart>
+</ResponsiveContainer>
           )}
         </div>
         
@@ -185,12 +206,29 @@ function Reports() {
               <BarChart data={sectorStatus}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="sector" />
-                <YAxis />
+                <YAxis allowDecimals={false} 
+                tickCount={6}
+                domain={[0, 'auto']}/>
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="approved" fill="#16a34a" />
-                <Bar dataKey="rejected" fill="#dc2626" />
-                <Bar dataKey="pending" fill="#f59e0b" />
+                <Bar dataKey="approved" fill="#16a34a"
+                  label={{
+                    position: 'top',
+                    fontWeight: 'bold',
+                    fill: '#000'
+                    }}/>
+                <Bar dataKey="rejected" fill="#dc2626" 
+                  label={{
+                      position: 'top',
+                      fontWeight: 'bold',
+                      fill: '#000'
+                      }}/>
+                <Bar dataKey="pending" fill="#f59e0b" 
+                  label={{
+                      position: 'top',
+                      fontWeight: 'bold',
+                      fill: '#000'
+                      }}/>
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -238,10 +276,17 @@ function Reports() {
               <BarChart data={statusSummary}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="status" />
-                <YAxis />
+                <YAxis allowDecimals={false} 
+                tickCount={6}
+                domain={[0, 'auto']}/>
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="count" fill="#2563eb" />
+                <Bar dataKey="count" fill="#2563eb" 
+                label={{
+                    position: 'top',
+                    fontWeight: 'bold',
+                    fill: '#000'
+                    }}/>
               </BarChart>
             </ResponsiveContainer>
           )}

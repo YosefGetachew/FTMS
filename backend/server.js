@@ -417,6 +417,15 @@ let initialAssignedStateMinisterId =
 if (travelerCategory === 'affiliate_institution') {
   initialStage = 'protocol';
   initialAssignedStateMinisterId = null;
+} else if (
+  userRole === 'state_minister' ||
+  userRole === 'chief_executive_officer'
+) {
+  initialStage = 'protocol';
+  initialAssignedStateMinisterId = null;
+} else if (userRole === 'office_head') {
+  initialStage = 'minister';
+  initialAssignedStateMinisterId = null;
 } else if (assignedStateMinisterId) {
   const approverResult = await pool.query(
     `
@@ -679,11 +688,18 @@ app.get('/api/requests', async (req, res) => {
     CASE
       WHEN r.traveler_category = 'affiliate_institution'
       THEN 'Affiliate Institute'
-      ELSE COALESCE(r.sector, sm.sector, 'Unassigned')
+      ELSE COALESCE(
+        r.sector,
+        sm.sector,
+        traveler.sector,
+        'Unassigned'
+      )
     END AS sector
   FROM requests r
   LEFT JOIN users sm
     ON r.assigned_state_minister_id = sm.id
+  LEFT JOIN users traveler
+    ON LOWER(TRIM(r.email)) = LOWER(TRIM(traveler.email))
 `;
 
     if (role === 'admin') {
@@ -1800,86 +1816,89 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
 
     let result;
 
-    if (
-      role === 'admin' ||
+    const sectorExpression = `
+      CASE
+        WHEN r.traveler_category = 'affiliate_institution'
+        THEN 'Affiliate Institute'
+        ELSE COALESCE(
+          r.sector,
+          approver.sector,
+          traveler.sector,
+          'Unassigned'
+        )
+      END
+    `;
+
+    const baseJoins = `
+      FROM requests r
+      LEFT JOIN users approver
+        ON r.assigned_state_minister_id = approver.id
+      LEFT JOIN users traveler
+        ON LOWER(TRIM(r.email)) = LOWER(TRIM(traveler.email))
+    `;
+
+    if (role === 'admin') {
+      result = await pool.query(`
+        SELECT
+          ${sectorExpression} AS sector,
+          COUNT(*)::int AS pending_count
+        ${baseJoins}
+        WHERE r.final_status = 'pending'
+        GROUP BY ${sectorExpression}
+        ORDER BY pending_count DESC
+      `);
+
+    } else if (role === 'state_minister') {
+      result = await pool.query(
+        `
+        SELECT
+          ${sectorExpression} AS sector,
+          COUNT(*)::int AS pending_count
+        ${baseJoins}
+        WHERE
+          r.assigned_state_minister_id = $1
+          AND r.current_stage = 'state_minister'
+          AND r.final_status = 'pending'
+          AND r.traveler_category <> 'affiliate_institution'
+        GROUP BY ${sectorExpression}
+        ORDER BY pending_count DESC
+        `,
+        [id]
+      );
+
+    } else if (
       role === 'office_head' ||
+      role === 'chief_executive_officer' ||
       role === 'minister'
     ) {
+      result = await pool.query(
+        `
+        SELECT
+          ${sectorExpression} AS sector,
+          COUNT(*)::int AS pending_count
+        ${baseJoins}
+        WHERE
+          r.current_stage = $1
+          AND r.final_status = 'pending'
+        GROUP BY ${sectorExpression}
+        ORDER BY pending_count DESC
+        `,
+        [role]
+      );
+
+    } else if (role === 'protocol') {
       result = await pool.query(`
         SELECT
-          COALESCE(u.sector, 'Unassigned') AS sector,
+          ${sectorExpression} AS sector,
           COUNT(*)::int AS pending_count
-        FROM requests r
-        LEFT JOIN users u
-          ON r.assigned_state_minister_id = u.id
-        WHERE r.final_status = 'pending'
-        GROUP BY COALESCE(u.sector, 'Unassigned')
+        ${baseJoins}
+        WHERE
+          r.final_status = 'pending'
+          AND r.current_stage IN ('protocol', 'protocol_final')
+        GROUP BY ${sectorExpression}
         ORDER BY pending_count DESC
       `);
-    } else if (role === 'state_minister') {
-  result = await pool.query(
-    `
-    SELECT *
-    FROM requests
-    WHERE
-      (
-        assigned_state_minister_id = $1
-        AND current_stage = 'state_minister'
-        AND final_status = 'pending'
-      )
-      OR final_status IN ('approved', 'rejected')
-    ORDER BY
-      CASE
-        WHEN assigned_state_minister_id = $1
-         AND current_stage = 'state_minister'
-         AND final_status = 'pending'
-        THEN 0
-        ELSE 1
-      END,
-      id DESC
-    `,
-    [id]
-  );
 
-} else if (
-  role === 'office_head' ||
-  role === 'chief_executive_officer'
-) {
-  result = await pool.query(
-    `
-    SELECT *
-    FROM requests
-    WHERE
-      (
-        current_stage = $1
-        AND final_status = 'pending'
-      )
-      OR final_status IN ('approved', 'rejected')
-    ORDER BY
-      CASE
-        WHEN current_stage = $1
-         AND final_status = 'pending'
-        THEN 0
-        ELSE 1
-      END,
-      id DESC
-    `,
-    [role]
-  );
-
-} else if (role === 'protocol') {
-      result = await pool.query(`
-        SELECT
-          COALESCE(u.sector, 'Unassigned') AS sector,
-          COUNT(*)::int AS pending_count
-        FROM requests r
-        LEFT JOIN users u
-          ON r.assigned_state_minister_id = u.id
-        WHERE r.final_status = 'pending'
-        AND r.current_stage IN ('protocol', 'protocol_final')
-        GROUP BY COALESCE(u.sector, 'Unassigned')
-        ORDER BY pending_count DESC
-      `);
     } else {
       result = { rows: [] };
     }
