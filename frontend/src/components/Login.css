@@ -1,14 +1,24 @@
+/* ============================================================
+   FTMS PROFESSIONAL LOGIN / REGISTER PAGE
+============================================================ */
+
 .login-page {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
+  grid-template-columns: 1.08fr 0.92fr;
   background: #f4f7fb;
-  font-family: Arial, sans-serif;
+  font-family: "Segoe UI", Arial, sans-serif;
 }
 
+/* ============================================================
+   LEFT BRANDING SECTION
+============================================================ */
+
 .login-left {
-  padding: 50px 70px;
-  background: linear-gradient(135deg, #064e3b, #0f766e);
+  padding: 42px 56px;
+  background:
+    radial-gradient(circle at top left, rgba(250, 204, 21, 0.18), transparent 32%),
+    linear-gradient(135deg, #064e3b, #0f766e);
   color: #ffffff;
   display: flex;
   flex-direction: column;
@@ -18,82 +28,92 @@
 .ministry-brand {
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin-bottom: 60px;
+  gap: 16px;
+  margin-bottom: 46px;
 }
 
 .ministry-logo {
-  width: 85px;
-  height: 85px;
+  width: 68px;
+  height: 68px;
   object-fit: contain;
   background: #ffffff;
-  border-radius: 16px;
-  padding: 8px;
+  border-radius: 14px;
+  padding: 7px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
 }
 
 .ministry-brand h1 {
   margin: 0;
-  font-size: 32px;
+  font-size: clamp(22px, 2.2vw, 30px);
   font-weight: 800;
+  line-height: 1.15;
+  color: #d9f99d;
 }
 
 .ministry-brand p {
-  margin: 8px 0 0;
-  font-size: 17px;
+  margin: 6px 0 0;
+  font-size: 14px;
   color: #d9f99d;
 }
 
 .system-intro {
-  max-width: 700px;
-  margin-bottom: 45px;
+  max-width: 660px;
+  margin-bottom: 34px;
 }
 
 .system-intro h2 {
-  font-size: 42px;
-  line-height: 1.15;
-  margin: 0 0 18px;
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1.18;
+  margin: 0 0 16px;
   font-weight: 800;
+  color: #e5e7eb;
 }
 
 .system-intro p {
-  font-size: 17px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.65;
   color: #e5e7eb;
   margin: 0;
 }
 
+/* ============================================================
+   MINISTRY STRUCTURE BOX
+============================================================ */
+
 .ministry-structure {
-  max-width: 720px;
+  max-width: 680px;
   background: rgba(255, 255, 255, 0.11);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 20px;
-  padding: 25px;
+  border-radius: 18px;
+  padding: 20px;
+  backdrop-filter: blur(8px);
 }
 
 .ministry-structure h3 {
-  margin: 0 0 18px;
-  font-size: 22px;
+  margin: 0 0 15px;
+  font-size: 18px;
+  font-weight: 800;
 }
 
 .structure-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .structure-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
-  padding: 13px;
+  border-radius: 13px;
+  padding: 11px;
 }
 
 .structure-item span {
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
+  width: 27px;
+  height: 27px;
+  min-width: 27px;
   border-radius: 50%;
   background: #facc15;
   color: #064e3b;
@@ -101,116 +121,161 @@
   align-items: center;
   justify-content: center;
   font-weight: 800;
+  font-size: 13px;
 }
 
 .structure-item p {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.35;
+  color: #ffffff;
 }
+
+/* ============================================================
+   RIGHT LOGIN CARD SECTION
+============================================================ */
 
 .login-right {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 35px;
+  padding: 28px;
 }
 
 .login-card {
   width: 100%;
-  max-width: 420px;
+  max-width: 400px;
   background: #ffffff;
-  border-radius: 24px;
-  padding: 36px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.13);
+  border-radius: 22px;
+  padding: 30px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+  border: 1px solid #e5e7eb;
 }
 
 .login-card-header {
   text-align: center;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .login-card-logo {
-  width: 76px;
-  height: 76px;
+  width: 62px;
+  height: 62px;
   object-fit: contain;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
 }
 
 .login-card-header h2 {
   margin: 0;
-  font-size: 28px;
+  font-size: 24px;
   color: #0f172a;
+  font-weight: 800;
 }
 
 .login-card-header p {
-  margin: 8px 0 0;
+  margin: 7px 0 0;
   color: #64748b;
-  font-size: 14px;
+  font-size: 13px;
 }
 
-.login-error {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
-  padding: 12px 14px;
-  border-radius: 12px;
-  font-size: 14px;
-  margin-bottom: 18px;
-}
+/* ============================================================
+   FORM
+============================================================ */
 
 .form-group {
-  margin-bottom: 18px;
+  margin-bottom: 15px;
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
   color: #334155;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 
-.form-group input {
+.form-group input,
+.ministry-select {
   width: 100%;
-  height: 48px;
+  height: 44px;
   border: 1px solid #cbd5e1;
-  border-radius: 12px;
-  padding: 0 14px;
-  font-size: 15px;
+  border-radius: 11px;
+  padding: 0 13px;
+  font-size: 14px;
   outline: none;
   box-sizing: border-box;
+  background: #ffffff;
+  color: #0f172a;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.ministry-select:focus {
   border-color: #0f766e;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
 .login-button {
   width: 100%;
-  height: 50px;
+  height: 46px;
   border: none;
-  border-radius: 13px;
+  border-radius: 12px;
   background: #0f766e;
   color: #ffffff;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .login-button:hover {
   background: #115e59;
+  transform: translateY(-1px);
 }
 
 .login-button:disabled {
   background: #94a3b8;
   cursor: not-allowed;
+  transform: none;
 }
+
+/* ============================================================
+   ALERTS
+============================================================ */
+
+.login-error,
+.login-success,
+.login-info {
+  padding: 11px 13px;
+  border-radius: 11px;
+  font-size: 13.5px;
+  margin-bottom: 16px;
+  line-height: 1.45;
+}
+
+.login-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.login-success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.login-info {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+/* ============================================================
+   FOOTER / REGISTER LINK
+============================================================ */
 
 .login-footer {
   text-align: center;
-  margin-top: 25px;
+  margin-top: 22px;
   color: #64748b;
 }
 
@@ -218,43 +283,24 @@
   margin: 0;
   font-weight: 700;
   color: #334155;
+  font-size: 13.5px;
 }
 
 .login-footer small {
   display: block;
   margin-top: 5px;
+  font-size: 12px;
 }
 
-@media (max-width: 950px) {
-  .login-page {
-    grid-template-columns: 1fr;
-  }
-
-  .login-left {
-    padding: 35px 25px;
-  }
-
-  .system-intro h2 {
-    font-size: 30px;
-  }
-
-  .structure-list {
-    grid-template-columns: 1fr;
-  }
-
-  .login-right {
-    padding: 25px;
-  }
-}
 .register-link {
   text-align: center;
-  margin-top: 20px;
+  margin-top: 18px;
 }
 
 .register-link p {
-  margin: 0 0 8px;
+  margin: 0 0 7px;
   color: #64748b;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .register-link button {
@@ -263,50 +309,116 @@
   color: #0f766e;
   font-weight: 800;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .register-link button:hover {
   text-decoration: underline;
 }
-.login-success {
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-  padding: 12px 14px;
-  border-radius: 12px;
-  font-size: 14px;
-  margin-bottom: 18px;
-}
+
 .register-card {
   max-height: 92vh;
   overflow-y: auto;
 }
 
-.ministry-select {
-  width: 100%;
-  height: 48px;
-  border: 1px solid #cbd5e1;
-  border-radius: 12px;
-  padding: 0 14px;
-  font-size: 15px;
-  outline: none;
-  box-sizing: border-box;
-  background: #ffffff;
-  color: #0f172a;
+/* ============================================================
+   RESPONSIVE DESIGN
+============================================================ */
+
+@media (max-width: 1100px) {
+  .login-left {
+    padding: 36px 38px;
+  }
+
+  .system-intro h2 {
+    font-size: 32px;
+  }
 }
 
-.ministry-select:focus {
-  border-color: #0f766e;
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+@media (max-width: 950px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .login-left {
+    padding: 32px 24px;
+  }
+
+  .ministry-brand {
+    margin-bottom: 30px;
+  }
+
+  .system-intro {
+    margin-bottom: 24px;
+  }
+
+  .system-intro h2 {
+    font-size: 28px;
+  }
+
+  .structure-list {
+    grid-template-columns: 1fr;
+  }
+
+  .login-right {
+    padding: 24px;
+  }
 }
 
-.login-info {
-  background: #dbeafe;
-  color: #1e40af;
-  border: 1px solid #bfdbfe;
-  padding: 12px 14px;
-  border-radius: 12px;
-  font-size: 14px;
-  margin-bottom: 18px;
+@media (max-width: 600px) {
+  .login-left {
+    padding: 24px 16px;
+  }
+
+  .ministry-brand {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .ministry-logo {
+    width: 54px;
+    height: 54px;
+  }
+
+  .ministry-brand h1 {
+    font-size: 20px;
+  }
+
+  .ministry-brand p {
+    font-size: 12.5px;
+  }
+
+  .system-intro h2 {
+    font-size: 24px;
+  }
+
+  .system-intro p {
+    font-size: 14px;
+  }
+
+  .ministry-structure {
+    padding: 16px;
+  }
+
+  .login-right {
+    padding: 18px 14px;
+  }
+
+  .login-card {
+    padding: 24px 20px;
+    border-radius: 18px;
+  }
+
+  .login-card-header h2 {
+    font-size: 22px;
+  }
+
+  .form-group input,
+  .ministry-select {
+    height: 42px;
+  }
+
+  .login-button {
+    height: 44px;
+  }
 }

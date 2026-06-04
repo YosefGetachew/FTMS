@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import './Reports.css';
 
 import {
   BarChart,
@@ -148,28 +149,28 @@ function Reports() {
   ];
 
   return (
-    <div className="page-container">
-      <h2>Analytical Reports</h2>
+    <div className="reports-page">
+  <h2 className="reports-title">Analytical Reports</h2>
 
       {error && <div className="notice-error">{error}</div>}
 
-      <div className="dashboard-cards">
-        <div className="stat-card">
+      <div className="reports-summary-grid">
+        <div className="reports-stat-card">
           <h3>Total Requests</h3>
           <p>{totalRequests}</p>
         </div>
 
-        <div className="stat-card">
+        <div className="reports-stat-card">
           <h3>Approved</h3>
           <p>{getCount('approved')}</p>
         </div>
 
-        <div className="stat-card">
+        <div className="reports-stat-card">
           <h3>Rejected</h3>
           <p>{getCount('rejected')}</p>
         </div>
 
-        <div className="stat-card">
+        <div className="reports-stat-card">
           <h3>Pending</h3>
           <p>{getCount('pending')}</p>
         </div>
@@ -179,12 +180,12 @@ function Reports() {
           PART 1: GENERAL ANALYTICAL REPORTS
       ============================================================ */}
 
-      <div className="report-grid">
-        <div className="report-card">
+      <div className="reports-grid">
+        <div className="reports-card">
           <h3>Monthly Travel Requests</h3>
 
           {monthlyRequests.length === 0 ? (
-            <p>No monthly data available</p>
+            <p className="reports-empty">No monthly data available</p>
           ) : (
             <ResponsiveContainer width="100%" height={350}>
               <LineChart data={monthlyRequests}>
@@ -222,11 +223,11 @@ function Reports() {
           )}
         </div>
 
-        <div className="report-card">
+        <div className="reports-card">
           <h3>Approved vs Rejected by Sector</h3>
 
           {sectorStatus.length === 0 ? (
-            <p>No sector data available</p>
+            <p className="reports-empty">No sector data available</p>
           ) : (
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={sectorStatus}>
@@ -277,11 +278,11 @@ function Reports() {
           )}
         </div>
 
-        <div className="report-card">
+        <div className="reports-card">
           <h3>Requests by Workflow Stage</h3>
 
           {stageSummary.length === 0 ? (
-            <p>No workflow stage data available</p>
+            <p className="reports-empty">No workflow stage data available</p>
           ) : (
             <ResponsiveContainer width="100%" height={350}>
               <PieChart>
@@ -309,11 +310,11 @@ function Reports() {
           )}
         </div>
 
-        <div className="report-card">
+        <div className="reports-card">
           <h3>Status Summary</h3>
 
           {statusSummary.length === 0 ? (
-            <p>No status data available</p>
+            <p className="reports-empty">No status data available</p>
           ) : (
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={statusSummary}>
@@ -351,16 +352,16 @@ function Reports() {
 
       {canViewOfficeMinisterGraphs && (
         <>
-          <h2 style={{ marginTop: '35px' }}>
-            Part 2: Office Head and Minister Report
-          </h2>
+          <h2 className="reports-section-title">
+  Part 2: Office Head and Minister Report
+</h2>
 
-          <div className="report-grid">
-            <div className="report-card">
+          <div className="reports-grid">
+            <div className="reports-card">
               <h3>MoA vs Affiliate Institute Count</h3>
 
               {moaVsAffiliateData.length === 0 ? (
-                <p>No MoA or Affiliate Institute data available</p>
+                <p className="reports-empty">No MoA or Affiliate Institute data available</p>
               ) : (
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={moaVsAffiliateData}>
@@ -391,11 +392,11 @@ function Reports() {
               )}
             </div>
 
-            <div className="report-card">
+            <div className="reports-card">
               <h3>MoA Travelers by Sector</h3>
 
               {moaSectorData.length === 0 ? (
-                <p>No MoA sector data available</p>
+                <p className="reports-empty">No MoA sector data available</p>
               ) : (
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={moaSectorData}>
@@ -432,11 +433,11 @@ function Reports() {
               )}
             </div>
 
-            <div className="report-card">
+            <div className="reports-card">
               <h3>Affiliate Institute Travelers by Organization</h3>
 
               {affiliateOrganizationData.length === 0 ? (
-                <p>No affiliate organization data available</p>
+                <p className="reports-empty">No affiliate organization data available</p>
               ) : (
                 <ResponsiveContainer width="100%" height={350}>
                   <BarChart data={affiliateOrganizationData}>

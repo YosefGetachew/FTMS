@@ -1,70 +1,105 @@
+/* ============================================================
+   FTMS - HISTORICAL BAR GRAPHS
+============================================================ */
+
 .history-chart-section {
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
+/* ============================================================
+   TITLE
+============================================================ */
+
 .history-chart-title {
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .history-chart-title h2 {
   margin: 0;
   color: #0f172a;
-  font-size: 24px;
-  font-weight: 900;
+  font-size: clamp(21px, 2.2vw, 27px);
+  font-weight: 800;
 }
 
 .history-chart-title p {
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   color: #64748b;
   font-size: 14px;
 }
 
+/* ============================================================
+   LOADING / EMPTY
+============================================================ */
+
 .history-loading {
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 20px;
+  border-radius: 14px;
+  padding: 18px;
   color: #64748b;
   font-weight: 700;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
 }
+
+.history-chart-empty {
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 13.5px;
+  text-align: center;
+  border: 1px dashed #cbd5e1;
+}
+
+/* ============================================================
+   GRID
+============================================================ */
 
 .history-chart-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 16px;
 }
+
+/* ============================================================
+   CARD
+============================================================ */
 
 .history-chart-card {
   background: #ffffff;
-  border-radius: 18px;
-  padding: 18px;
+  border-radius: 16px;
+  padding: 16px;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
 }
 
 .history-chart-header h3 {
-  margin: 0 0 16px;
+  margin: 0 0 14px;
   color: #0f172a;
-  font-size: 16px;
-  font-weight: 900;
+  font-size: 15px;
+  font-weight: 800;
 }
+
+/* ============================================================
+   BAR CHART
+============================================================ */
 
 .history-bars {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .history-bar-row {
   display: grid;
-  grid-template-columns: 130px 1fr;
+  grid-template-columns: 120px 1fr;
   align-items: center;
   gap: 10px;
 }
 
 .history-bar-label {
   color: #334155;
-  font-size: 13px;
+  font-size: 12.8px;
   font-weight: 800;
   white-space: nowrap;
   overflow: hidden;
@@ -72,10 +107,11 @@
 }
 
 .history-bar-track {
-  height: 28px;
+  height: 24px;
   background: #f1f5f9;
   border-radius: 999px;
   overflow: hidden;
+  border: 1px solid #e2e8f0;
 }
 
 .history-bar-fill {
@@ -85,25 +121,20 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  min-width: 34px;
+  min-width: 32px;
   transition: width 0.35s ease;
 }
 
 .history-bar-fill span {
   color: #ffffff;
-  font-size: 12px;
-  font-weight: 900;
-  padding-right: 10px;
+  font-size: 11.5px;
+  font-weight: 800;
+  padding-right: 9px;
 }
 
-.history-chart-empty {
-  color: #64748b;
-  background: #f8fafc;
-  border-radius: 14px;
-  padding: 18px;
-  font-size: 14px;
-  text-align: center;
-}
+/* ============================================================
+   RESPONSIVE
+============================================================ */
 
 @media (max-width: 1200px) {
   .history-chart-grid {
@@ -111,12 +142,58 @@
   }
 
   .history-bar-row {
-    grid-template-columns: 160px 1fr;
+    grid-template-columns: 150px 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .history-chart-section {
+    margin-bottom: 20px;
+  }
+
+  .history-chart-card {
+    padding: 14px;
+  }
+
+  .history-chart-title h2 {
+    font-size: 21px;
+  }
+
+  .history-bar-row {
+    grid-template-columns: 130px 1fr;
   }
 }
 
 @media (max-width: 600px) {
   .history-bar-row {
     grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .history-bar-track {
+    height: 23px;
+  }
+
+  .history-bar-label {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 480px) {
+  .history-chart-title h2 {
+    font-size: 19px;
+  }
+
+  .history-chart-title p {
+    font-size: 13px;
+  }
+
+  .history-chart-card {
+    border-radius: 14px;
+    padding: 12px;
+  }
+
+  .history-chart-header h3 {
+    font-size: 14px;
   }
 }

@@ -1,137 +1,155 @@
+/* ============================================================
+   FTMS PROFESSIONAL SIDEBAR
+============================================================ */
+
 .sidebar {
-  width: 292px;
+  width: 260px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(250, 204, 21, 0.18), transparent 32%),
+    radial-gradient(circle at top left, rgba(250, 204, 21, 0.14), transparent 32%),
     linear-gradient(180deg, #064e3b 0%, #022c22 100%);
   color: #ffffff;
-  padding: 22px 16px;
+  padding: 18px 14px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  box-shadow: 10px 0 32px rgba(15, 23, 42, 0.22);
+  box-shadow: 8px 0 24px rgba(15, 23, 42, 0.18);
   position: sticky;
   top: 0;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .sidebar-glow {
   position: absolute;
-  width: 160px;
-  height: 160px;
-  top: -60px;
-  right: -60px;
-  background: rgba(250, 204, 21, 0.18);
+  width: 140px;
+  height: 140px;
+  top: -55px;
+  right: -55px;
+  background: rgba(250, 204, 21, 0.14);
   border-radius: 50%;
   filter: blur(4px);
   pointer-events: none;
 }
 
+/* ============================================================
+   SIDEBAR HEADER
+============================================================ */
+
 .sidebar-header {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 8px 6px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  gap: 12px;
+  padding: 6px 6px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
   z-index: 1;
 }
 
 .sidebar-logo-box {
-  width: 64px;
-  height: 64px;
+  width: 52px;
+  height: 52px;
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
   transition: 0.25s ease;
+  flex-shrink: 0;
 }
 
 .sidebar-logo-box:hover {
-  transform: rotate(-3deg) scale(1.04);
+  transform: rotate(-2deg) scale(1.03);
 }
 
 .sidebar-logo {
-  width: 54px;
-  height: 54px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
 }
 
 .sidebar-title-group h2 {
   margin: 0;
-  font-size: 25px;
-  font-weight: 900;
-  letter-spacing: 0.04em;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
 }
 
 .sidebar-title-group p {
-  margin: 5px 0 0;
-  font-size: 12px;
+  margin: 4px 0 0;
+  font-size: 11px;
   line-height: 1.35;
   color: #bbf7d0;
-  max-width: 170px;
+  max-width: 150px;
 }
+
+/* ============================================================
+   USER CARD
+============================================================ */
 
 .sidebar-user-card {
   position: relative;
-  margin: 20px 0 18px;
-  padding: 14px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  margin: 16px 0 14px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.11);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   backdrop-filter: blur(8px);
   transition: 0.25s ease;
   z-index: 1;
 }
 
 .sidebar-user-card:hover {
-  background: rgba(255, 255, 255, 0.17);
-  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
 }
 
 .sidebar-user-avatar {
-  width: 46px;
-  height: 46px;
-  min-width: 46px;
-  border-radius: 16px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 13px;
   background: #facc15;
   color: #064e3b;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  font-weight: 900;
-  box-shadow: 0 8px 18px rgba(250, 204, 21, 0.22);
+  font-size: 17px;
+  font-weight: 800;
+  box-shadow: 0 6px 16px rgba(250, 204, 21, 0.22);
 }
 
 .sidebar-user-info h4 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 850;
+  font-size: 13px;
+  font-weight: 800;
   color: #ffffff;
-  max-width: 175px;
+  max-width: 155px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .sidebar-user-info p {
-  margin: 5px 0 0;
-  font-size: 12px;
+  margin: 4px 0 0;
+  font-size: 11px;
   text-transform: capitalize;
   color: #d1fae5;
 }
+
+/* ============================================================
+   MENU
+============================================================ */
 
 .sidebar-menu {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   flex: 1;
   overflow-y: auto;
   padding-right: 3px;
@@ -160,11 +178,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 13px 8px 8px;
-  font-size: 11px;
-  font-weight: 900;
+  padding: 11px 8px 6px;
+  font-size: 10.5px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.11em;
+  letter-spacing: 0.1em;
   cursor: pointer;
 }
 
@@ -173,7 +191,7 @@
 }
 
 .section-chevron {
-  font-size: 13px;
+  font-size: 12px;
   transition: transform 0.25s ease;
 }
 
@@ -184,7 +202,7 @@
 .sidebar-section-content {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
   overflow: hidden;
   transition: max-height 0.28s ease, opacity 0.22s ease;
 }
@@ -199,20 +217,24 @@
   opacity: 0;
 }
 
+/* ============================================================
+   MENU BUTTONS
+============================================================ */
+
 .sidebar-menu-btn {
   position: relative;
   width: 100%;
-  min-height: 56px;
+  min-height: 46px;
   border: none;
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.06);
   color: #e5e7eb;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 15px 14px 15px 16px;
-  border-radius: 18px;
-  font-size: 15px;
-  font-weight: 800;
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  font-weight: 700;
   text-align: left;
   cursor: pointer;
   transition:
@@ -224,12 +246,12 @@
 }
 
 .sidebar-menu-btn::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(
     90deg,
-    rgba(250, 204, 21, 0.22),
+    rgba(250, 204, 21, 0.18),
     transparent
   );
   opacity: 0;
@@ -239,8 +261,8 @@
 .sidebar-menu-btn:hover {
   background: rgba(255, 255, 255, 0.14);
   color: #ffffff;
-  transform: translateX(6px);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+  transform: translateX(4px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.1);
 }
 
 .sidebar-menu-btn:hover::before {
@@ -250,8 +272,8 @@
 .sidebar-menu-btn.active {
   background: #facc15;
   color: #064e3b;
-  box-shadow: 0 12px 26px rgba(250, 204, 21, 0.25);
-  transform: translateX(4px);
+  box-shadow: 0 10px 22px rgba(250, 204, 21, 0.24);
+  transform: translateX(3px);
 }
 
 .sidebar-menu-btn.active::before {
@@ -261,7 +283,7 @@
 .sidebar-active-line {
   position: absolute;
   left: 0;
-  width: 5px;
+  width: 4px;
   height: 0;
   border-radius: 999px;
   background: #ffffff;
@@ -269,16 +291,16 @@
 }
 
 .sidebar-menu-btn.active .sidebar-active-line {
-  height: 70%;
+  height: 68%;
   background: #064e3b;
 }
 
 .sidebar-menu-icon {
   position: relative;
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  font-size: 20px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  font-size: 17px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -287,7 +309,7 @@
 }
 
 .sidebar-menu-btn:hover .sidebar-menu-icon {
-  transform: scale(1.15);
+  transform: scale(1.1);
 }
 
 .sidebar-menu-label {
@@ -302,18 +324,22 @@
   background: #dc2626;
   color: #ffffff;
   font-size: 10px;
-  font-weight: 900;
-  padding: 4px 8px;
+  font-weight: 800;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
   border-radius: 999px;
-  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   z-index: 1;
 }
 
 .sidebar-arrow {
   position: relative;
-  font-size: 22px;
+  font-size: 18px;
   opacity: 0;
-  transform: translateX(-8px);
+  transform: translateX(-6px);
   transition: 0.22s ease;
   z-index: 1;
 }
@@ -324,74 +350,137 @@
   transform: translateX(0);
 }
 
+/* ============================================================
+   FOOTER
+============================================================ */
+
 .sidebar-footer {
   position: relative;
-  margin-top: 18px;
-  padding: 16px 10px 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  margin-top: 14px;
+  padding: 14px 8px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
   z-index: 1;
 }
 
 .sidebar-footer p {
   margin: 0;
   color: #ffffff;
-  font-size: 13px;
-  font-weight: 850;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .sidebar-footer small {
   display: block;
-  margin-top: 5px;
+  margin-top: 4px;
   color: #bbf7d0;
-  font-size: 11px;
+  font-size: 10.5px;
 }
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
 
 @media (max-width: 950px) {
   .sidebar {
-    width: 242px;
-    padding: 18px 12px;
+    width: 230px;
+    padding: 16px 12px;
   }
 
   .sidebar-logo-box {
-    width: 54px;
-    height: 54px;
+    width: 48px;
+    height: 48px;
   }
 
   .sidebar-logo {
-    width: 45px;
-    height: 45px;
+    width: 40px;
+    height: 40px;
   }
 
   .sidebar-title-group h2 {
-    font-size: 21px;
+    font-size: 18px;
   }
 
   .sidebar-title-group p {
-    font-size: 11px;
+    font-size: 10.5px;
   }
 
   .sidebar-menu-btn {
-    min-height: 52px;
-    padding: 13px 13px;
-    font-size: 14px;
+    min-height: 44px;
+    padding: 10px 11px;
+    font-size: 13px;
   }
 
   .sidebar-user-info h4 {
-    max-width: 135px;
+    max-width: 125px;
   }
 }
-.sidebar-menu-badge {
-  position: relative;
-  background: #dc2626;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 900;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 7px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1;
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    min-height: auto;
+    position: relative;
+    padding: 14px 12px;
+    box-shadow: none;
+  }
+
+  .sidebar-header {
+    padding-bottom: 12px;
+  }
+
+  .sidebar-user-card {
+    margin: 12px 0;
+  }
+
+  .sidebar-menu {
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .sidebar-footer {
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar-header {
+    align-items: flex-start;
+  }
+
+  .sidebar-logo-box {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+
+  .sidebar-logo {
+    width: 36px;
+    height: 36px;
+  }
+
+  .sidebar-title-group h2 {
+    font-size: 16px;
+  }
+
+  .sidebar-title-group p {
+    font-size: 10px;
+    max-width: 220px;
+  }
+
+  .sidebar-user-avatar {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    font-size: 15px;
+  }
+
+  .sidebar-menu-btn {
+    min-height: 42px;
+    font-size: 12.8px;
+    border-radius: 12px;
+  }
+
+  .sidebar-menu-icon {
+    font-size: 16px;
+  }
 }

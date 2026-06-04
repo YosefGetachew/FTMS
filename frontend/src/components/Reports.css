@@ -1,0 +1,185 @@
+/* ============================================================
+   FTMS - ANALYTICAL REPORTS PAGE
+============================================================ */
+
+.reports-page {
+  width: 100%;
+  padding: 20px;
+}
+
+/* ============================================================
+   PAGE TITLE
+============================================================ */
+
+.reports-title {
+  margin: 0 0 20px;
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.reports-section-title {
+  margin: 34px 0 18px;
+  font-size: clamp(20px, 2.1vw, 26px);
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* ============================================================
+   ERROR NOTICE
+============================================================ */
+
+.reports-page .notice-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+
+/* ============================================================
+   SUMMARY CARDS
+============================================================ */
+
+.reports-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.reports-stat-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+  text-align: center;
+}
+
+.reports-stat-card h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #475569;
+}
+
+.reports-stat-card p {
+  margin: 0;
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 800;
+  color: #2563eb;
+}
+
+/* ============================================================
+   REPORT GRID
+============================================================ */
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 18px;
+}
+
+.reports-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.08);
+  min-width: 0;
+}
+
+.reports-card h3 {
+  margin: 0 0 16px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* ============================================================
+   EMPTY MESSAGE
+============================================================ */
+
+.reports-empty {
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  padding: 18px;
+  font-size: 14px;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* ============================================================
+   RECHARTS CLEANUP
+============================================================ */
+
+.reports-card .recharts-wrapper {
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.reports-card .recharts-cartesian-axis-tick-value {
+  font-size: 12px;
+  fill: #475569;
+}
+
+.reports-card .recharts-legend-item-text {
+  color: #334155 !important;
+  font-size: 13px;
+}
+
+.reports-card .recharts-tooltip-wrapper {
+  outline: none;
+}
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 1200px) {
+  .reports-grid {
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .reports-page {
+    padding: 14px;
+  }
+
+  .reports-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-card {
+    padding: 14px;
+    border-radius: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .reports-page {
+    padding: 10px;
+  }
+
+  .reports-title {
+    font-size: 20px;
+  }
+
+  .reports-section-title {
+    font-size: 19px;
+  }
+
+  .reports-card h3 {
+    font-size: 14px;
+  }
+}
