@@ -1,12 +1,41 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './Sidebar.css';
 import logo from '../assets/ministry-logo.png';
 import API from '../services/api';
 
+/* ============================================================
+   SIDEBAR COMPONENT
+   Controls FTMS navigation based on logged-in user role.
+============================================================ */
+
 function Sidebar({ setActivePage }) {
+  /* ============================================================
+     LOGGED-IN USER
+  ============================================================ */
+
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-  const [activeMenu, setActiveMenu] = useState('dashboard');
+  const role = user?.role || '';
+  const userEmail = user?.email || '';
+  const userId = user?.id || '';
+
+  /* ============================================================
+     ROLE FLAGS
+  ============================================================ */
+
+  const isAdmin = role === 'admin' || role === 'super_admin';
+  const isProtocol = role === 'protocol';
+  const isTraveler = role === 'traveler';
+  const isMinister = role === 'minister';
+
+  /* ============================================================
+     LOCAL STATES
+  ============================================================ */
+
+  const [activeMenu, setActiveMenu] = useState(
+    isTraveler ? 'submitted-requests' : 'dashboard'
+  );
+
   const [pendingUserCount, setPendingUserCount] = useState(0);
   const [submittedRequestCount, setSubmittedRequestCount] = useState(0);
 
@@ -16,22 +45,45 @@ function Sidebar({ setActivePage }) {
     account: true,
   });
 
-  const role = user?.role;
-  const isAdmin = role === 'admin' || role === 'super_admin';
-  const isProtocol = role === 'protocol';
-  const isTraveler = role === 'traveler';
-  const isMinister = role === 'minister';
+  /* ============================================================
+     REPORT ACCESS ROLES
+     Travelers do not see Reports.
+  ============================================================ */
+
+  const allowedReportRoles = useMemo(
+    () => [
+      'admin',
+      'super_admin',
+      // 'protocol',
+      // 'state_minister',
+      // 'chief_executive_officer',
+      'office_head',
+      'minister',
+    ],
+    []
+  );
+
+  /* ============================================================
+     SIDEBAR COUNTS
+     - Pending Users count is visible only to Admin/Super Admin.
+     - Submitted Requests count shows active pending/amended requests.
+     - Counts refresh every 30 seconds.
+  ============================================================ */
 
   useEffect(() => {
-    const fetchCounts = async () => {
+    const fetchSidebarCounts = async () => {
+      if (!role) return;
+
       try {
         if (isAdmin) {
           const pendingUsersResponse = await API.get('/users/pending');
           setPendingUserCount(pendingUsersResponse.data?.length || 0);
+        } else {
+          setPendingUserCount(0);
         }
 
         const requestsResponse = await API.get(
-          `/requests?role=${user.role}&email=${user.email}&id=${user.id}`
+          `/requests?role=${role}&email=${userEmail}&id=${userId}`
         );
 
         const requests = requestsResponse.data || [];
@@ -55,12 +107,16 @@ function Sidebar({ setActivePage }) {
       }
     };
 
-    fetchCounts();
+    fetchSidebarCounts();
 
-    const interval = setInterval(fetchCounts, 30000);
+    const interval = setInterval(fetchSidebarCounts, 30000);
 
     return () => clearInterval(interval);
-  }, [isAdmin, isTraveler, user.role, user.email, user.id]);
+  }, [role, userEmail, userId, isAdmin, isTraveler]);
+
+  /* ============================================================
+     NAVIGATION HANDLERS
+  ============================================================ */
 
   const goToPage = (page) => {
     setActiveMenu(page);
@@ -74,76 +130,112 @@ function Sidebar({ setActivePage }) {
     }));
   };
 
-  const menuItems = [
-    {
-      id: 'dashboard',
-      label: 'Dashboard',
-      icon: '📊',
-      show: !isTraveler,
-    },
-    {
-      id: 'travel-request',
-      label: 'Travel Request',
-      icon: '✈️',
-      show: !isMinister,
-    },
-    {
-      id: 'submitted-requests',
-      label: 'Submitted Requests',
-      icon: '📄',
-      badge: submittedRequestCount > 0 ? submittedRequestCount : null,
-      show: true,
-    },
-    {
-      id: 'notifications',
-      label: 'Notifications',
-      icon: '🔔',
-      show: !isMinister,
-    },
-    {
-      id: 'reports',
-      label: 'Reports',
-      icon: '📈',
-      show: !isTraveler,
-    },
-  ];
+  /* ============================================================
+     MAIN MENU ITEMS
+  ============================================================ */
 
-  const adminItems = [
-    {
-      id: 'pending-users',
-      label: 'Pending Users',
-      icon: '🕒',
-      badge: pendingUserCount > 0 ? pendingUserCount : null,
-      show: isAdmin,
-    },
-    {
-      id: 'user-management',
-      label: 'User Management',
-      icon: '👥',
-      show: isAdmin,
-    },
-    {
-      id: 'settings',
-      label: 'Settings',
-      icon: '⚙️',
-      show: isAdmin,
-    },
-    {
-      id: 'audit-trail',
-      label: 'Audit Trail',
-      icon: '🧾',
-      show: isAdmin || isProtocol,
-    },
-  ];
+  const menuItems = useMemo(
+    () => [
+      {
+        id: 'dashboard',
+        label: 'Dashboard',
+        icon: '📊',
+        show: !isTraveler,
+      },
+      {
+        id: 'travel-request',
+        label: 'Travel Request',
+        icon: '✈️',
+        show: !isMinister,
+      },
+      {
+        id: 'submitted-requests',
+        label: 'Submitted Requests',
+        icon: '📄',
+        badge:
+          submittedRequestCount > 0
+            ? submittedRequestCount
+            : null,
+        show: true,
+      },
+      {
+        id: 'notifications',
+        label: 'Notifications',
+        icon: '🔔',
+        show: !isMinister,
+      },
+      {
+        id: 'reports',
+        label: 'Reports',
+        icon: '📈',
+        show: allowedReportRoles.includes(role),
+      },
+    ],
+    [
+      isTraveler,
+      isMinister,
+      submittedRequestCount,
+      role,
+      allowedReportRoles,
+    ]
+  );
 
-  const accountItems = [
-    {
-      id: 'reset-password',
-      label: 'Reset Password',
-      icon: '🔐',
-      show: !isMinister,
-    },
-  ];
+  /* ============================================================
+     ADMINISTRATION MENU ITEMS
+     Only Admin/Super Admin see Pending Users, User Management,
+     and Settings. Protocol can also see Audit Trail.
+  ============================================================ */
+
+  const adminItems = useMemo(
+    () => [
+      {
+        id: 'pending-users',
+        label: 'Pending Users',
+        icon: '🕒',
+        badge: pendingUserCount > 0 ? pendingUserCount : null,
+        show: isAdmin,
+      },
+      {
+        id: 'user-management',
+        label: 'User Management',
+        icon: '👥',
+        show: isAdmin,
+      },
+      {
+        id: 'settings',
+        label: 'Settings',
+        icon: '⚙️',
+        show: isAdmin,
+      },
+      {
+        id: 'audit-trail',
+        label: 'Audit Trail',
+        icon: '🧾',
+        show: isAdmin || isProtocol,
+      },
+    ],
+    [pendingUserCount, isAdmin, isProtocol]
+  );
+
+  /* ============================================================
+     ACCOUNT MENU ITEMS
+  ============================================================ */
+
+  const accountItems = useMemo(
+    () => [
+      {
+        id: 'reset-password',
+        label: 'Reset Password',
+        icon: '🔐',
+        show: !isMinister,
+      },
+    ],
+    [isMinister]
+  );
+
+  /* ============================================================
+     RENDER SINGLE MENU BUTTON
+  ============================================================ */
 
   const renderMenuButton = (item) => {
     if (!item.show) return null;
@@ -159,13 +251,9 @@ function Sidebar({ setActivePage }) {
       >
         <span className="sidebar-active-line"></span>
 
-        <span className="sidebar-menu-icon">
-          {item.icon}
-        </span>
+        <span className="sidebar-menu-icon">{item.icon}</span>
 
-        <span className="sidebar-menu-label">
-          {item.label}
-        </span>
+        <span className="sidebar-menu-label">{item.label}</span>
 
         {item.badge && (
           <span className="sidebar-menu-badge">
@@ -178,13 +266,17 @@ function Sidebar({ setActivePage }) {
     );
   };
 
+  /* ============================================================
+     RENDER COLLAPSIBLE MENU SECTION
+  ============================================================ */
+
   const renderSection = (sectionKey, title, items) => {
     const visibleItems = items.filter((item) => item.show);
 
     if (visibleItems.length === 0) return null;
 
     return (
-      <div className="sidebar-section">
+      <div className="sidebar-section" key={sectionKey}>
         <button
           type="button"
           className="sidebar-section-toggle"
@@ -212,10 +304,15 @@ function Sidebar({ setActivePage }) {
     );
   };
 
+  /* ============================================================
+     COMPONENT UI
+  ============================================================ */
+
   return (
     <aside className="sidebar">
       <div className="sidebar-glow"></div>
 
+      {/* Sidebar Header */}
       <div className="sidebar-header">
         <div className="sidebar-logo-box">
           <img
@@ -231,9 +328,10 @@ function Sidebar({ setActivePage }) {
         </div>
       </div>
 
+      {/* Logged-in User Card */}
       <div className="sidebar-user-card">
         <div className="sidebar-user-avatar">
-          {(user?.fullName || user?.email || 'U')
+          {(user?.fullName || userEmail || 'U')
             .charAt(0)
             .toUpperCase()}
         </div>
@@ -244,12 +342,14 @@ function Sidebar({ setActivePage }) {
         </div>
       </div>
 
+      {/* Navigation Menu */}
       <nav className="sidebar-menu">
         {renderSection('main', 'Main Menu', menuItems)}
         {renderSection('admin', 'Administration', adminItems)}
         {renderSection('account', 'Account', accountItems)}
       </nav>
 
+      {/* Sidebar Footer */}
       <div className="sidebar-footer">
         <p>Ministry of Agriculture</p>
         <small>FTMS v1.0</small>

@@ -1,0 +1,122 @@
+.history-chart-section {
+  margin-bottom: 28px;
+}
+
+.history-chart-title {
+  margin-bottom: 18px;
+}
+
+.history-chart-title h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.history-chart-title p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.history-loading {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.history-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.history-chart-card {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+.history-chart-header h3 {
+  margin: 0 0 16px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.history-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.history-bar-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-bar-label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-bar-track {
+  height: 28px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.history-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0f766e, #22c55e);
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 34px;
+  transition: width 0.35s ease;
+}
+
+.history-bar-fill span {
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  padding-right: 10px;
+}
+
+.history-chart-empty {
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 14px;
+  padding: 18px;
+  font-size: 14px;
+  text-align: center;
+}
+
+@media (max-width: 1200px) {
+  .history-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .history-bar-row {
+    grid-template-columns: 160px 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .history-bar-row {
+    grid-template-columns: 1fr;
+  }
+}

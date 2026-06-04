@@ -898,12 +898,22 @@ app.get('/api/requests', async (req, res) => {
         ON LOWER(TRIM(r.email)) = LOWER(TRIM(traveler.email))
     `;
 
+    /*
+      Admin and Super Admin:
+      See all requests.
+    */
     if (role === 'admin' || role === 'super_admin') {
       result = await pool.query(`
         ${baseSelect}
         ORDER BY r.id DESC
       `);
-    } else if (role === 'traveler') {
+    }
+
+    /*
+      Traveler:
+      See only own requests.
+    */
+    else if (role === 'traveler') {
       result = await pool.query(
         `
         ${baseSelect}
@@ -912,49 +922,68 @@ app.get('/api/requests', async (req, res) => {
         `,
         [email || '']
       );
-    } else if (role === 'state_minister') {
-      result = await pool.query(
-        `
-        ${baseSelect}
-        WHERE
-          r.assigned_state_minister_id = $1
-          OR r.final_status IN ('approved', 'rejected')
-        ORDER BY
-          CASE
-            WHEN r.current_stage = 'state_minister'
-             AND r.final_status = 'pending'
-            THEN 0
-            ELSE 1
-          END,
-          r.id DESC
-        `,
-        [id]
-      );
-    } else if (
-      role === 'office_head' ||
-      role === 'chief_executive_officer'
-    ) {
-      result = await pool.query(
-        `
-        ${baseSelect}
-        WHERE
-          (
-            r.current_stage = $1
-            AND r.final_status = 'pending'
-          )
-          OR r.final_status IN ('approved', 'rejected')
-        ORDER BY
-          CASE
-            WHEN r.current_stage = $1
-             AND r.final_status = 'pending'
-            THEN 0
-            ELSE 1
-          END,
-          r.id DESC
-        `,
-        [role]
-      );
-    } else if (role === 'protocol') {
+    }
+
+    /*
+      State Minister:
+      See:
+      1. Pending requests under that State Minister's sector
+      2. Historical approved/rejected requests where that sector acted
+    */
+   else if (role === 'state_minister') {
+  result = await pool.query(
+    `
+    WITH current_user_sector AS (
+      SELECT sector
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+    )
+
+    ${baseSelect}
+    CROSS JOIN current_user_sector cus
+
+    WHERE
+      (
+        r.current_stage = 'state_minister'
+        AND r.final_status = 'pending'
+        AND COALESCE(
+          r.sector,
+          sm.sector,
+          traveler.sector
+        ) = cus.sector
+      )
+      OR
+      (
+        r.final_status IN ('approved', 'rejected')
+        AND COALESCE(
+          r.sector,
+          sm.sector,
+          traveler.sector
+        ) = cus.sector
+      )
+
+    ORDER BY
+      CASE
+        WHEN r.current_stage = 'state_minister'
+         AND r.final_status = 'pending'
+        THEN 0
+        ELSE 1
+      END,
+      r.id DESC
+    `,
+    [id]
+  );
+}
+
+    /*
+      Protocol:
+      See:
+      1. Pending requests at protocol/protocol_final
+      2. All historical approved/rejected requests
+      Protocol can also view PDF from frontend.
+    */
+    else if (role === 'protocol') {
       result = await pool.query(`
         ${baseSelect}
         WHERE
@@ -963,6 +992,7 @@ app.get('/api/requests', async (req, res) => {
             AND r.final_status = 'pending'
           )
           OR r.final_status IN ('approved', 'rejected')
+
         ORDER BY
           CASE
             WHEN r.current_stage IN ('protocol', 'protocol_final')
@@ -972,25 +1002,104 @@ app.get('/api/requests', async (req, res) => {
           END,
           r.id DESC
       `);
-    } else if (role === 'minister') {
-      result = await pool.query(`
+    }
+
+    /*
+      Chief Executive Officer:
+      See:
+      1. Pending requests assigned to CEO
+      2. Historical approved/rejected requests the CEO personally acted on
+    */
+    else if (role === 'chief_executive_officer') {
+      result = await pool.query(
+        `
         ${baseSelect}
         WHERE
           (
-            r.current_stage = 'minister'
+            r.current_stage = 'chief_executive_officer'
             AND r.final_status = 'pending'
           )
-          OR r.final_status IN ('approved', 'rejected')
+          OR
+          (
+            r.final_status IN ('approved', 'rejected')
+            AND EXISTS (
+              SELECT 1
+              FROM request_audit_trails a
+              WHERE a.request_id = r.id
+                AND LOWER(TRIM(a.actor_email)) = LOWER(TRIM($1))
+                AND a.actor_role = 'chief_executive_officer'
+            )
+          )
+
         ORDER BY
           CASE
-            WHEN r.current_stage = 'minister'
+            WHEN r.current_stage = 'chief_executive_officer'
              AND r.final_status = 'pending'
             THEN 0
             ELSE 1
           END,
           r.id DESC
-      `);
-    } else {
+        `,
+        [email || '']
+      );
+    }
+
+    /*
+  Office Head:
+  See:
+  1. Pending requests currently assigned to Office Head
+  2. All historical approved/rejected requests
+     including MoA and Affiliate Institute requests
+*/
+else if (role === 'office_head') {
+  result = await pool.query(`
+    ${baseSelect}
+    WHERE
+      (
+        r.current_stage = 'office_head'
+        AND r.final_status = 'pending'
+      )
+      OR r.final_status IN ('approved', 'rejected')
+
+    ORDER BY
+      CASE
+        WHEN r.current_stage = 'office_head'
+         AND r.final_status = 'pending'
+        THEN 0
+        ELSE 1
+      END,
+      r.id DESC
+  `);
+}
+
+    /*
+  Minister:
+  See:
+  1. Pending requests currently assigned to Minister
+  2. All historical approved/rejected requests
+     including MoA and Affiliate Institute requests
+*/
+else if (role === 'minister') {
+  result = await pool.query(`
+    ${baseSelect}
+    WHERE
+      (
+        r.current_stage = 'minister'
+        AND r.final_status = 'pending'
+      )
+      OR r.final_status IN ('approved', 'rejected')
+
+    ORDER BY
+      CASE
+        WHEN r.current_stage = 'minister'
+         AND r.final_status = 'pending'
+        THEN 0
+        ELSE 1
+      END,
+      r.id DESC
+  `);
+}
+    else {
       return res.status(403).json({
         error: 'Unauthorized role.',
       });
@@ -2408,6 +2517,71 @@ app.get('/api/reports/stage-summary', async (req, res) => {
 });
 
 /* ============================================================
+   OFFICE HEAD AND MINISTER REPORT GRAPHS
+   1. MoA vs Affiliate Institute
+   2. MoA count by sector
+   3. Affiliate Institute count by organization
+============================================================ */
+
+app.get('/api/reports/office-minister-summary', async (req, res) => {
+  try {
+    const moaVsAffiliateResult = await pool.query(`
+      SELECT
+        CASE
+          WHEN traveler_category = 'affiliate_institution'
+          THEN 'Affiliate Institute'
+          ELSE 'MoA'
+        END AS name,
+        COUNT(*)::int AS count
+      FROM requests
+      WHERE final_status IN ('approved', 'rejected', 'pending', 'amended')
+      GROUP BY
+        CASE
+          WHEN traveler_category = 'affiliate_institution'
+          THEN 'Affiliate Institute'
+          ELSE 'MoA'
+        END
+      ORDER BY name
+    `);
+
+    const moaBySectorResult = await pool.query(`
+      SELECT
+        COALESCE(r.sector, u.sector, 'Unassigned Sector') AS name,
+        COUNT(*)::int AS count
+      FROM requests r
+      LEFT JOIN users u
+        ON r.assigned_state_minister_id = u.id
+      WHERE r.traveler_category <> 'affiliate_institution'
+        AND r.final_status IN ('approved', 'rejected', 'pending', 'amended')
+      GROUP BY COALESCE(r.sector, u.sector, 'Unassigned Sector')
+      ORDER BY count DESC
+    `);
+
+    const affiliateByOrganizationResult = await pool.query(`
+      SELECT
+        COALESCE(organization_name, 'Unassigned Organization') AS name,
+        COUNT(*)::int AS count
+      FROM requests
+      WHERE traveler_category = 'affiliate_institution'
+        AND final_status IN ('approved', 'rejected', 'pending', 'amended')
+      GROUP BY COALESCE(organization_name, 'Unassigned Organization')
+      ORDER BY count DESC
+    `);
+
+    res.json({
+      moaVsAffiliate: moaVsAffiliateResult.rows,
+      moaBySector: moaBySectorResult.rows,
+      affiliateByOrganization: affiliateByOrganizationResult.rows,
+    });
+  } catch (error) {
+    console.error('OFFICE MINISTER REPORT ERROR:', error);
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+});
+
+/* ============================================================
    PDF GENERATION
 ============================================================ */
 
@@ -2827,7 +3001,6 @@ app.get('/api/audit-trail', async (req, res) => {
     });
   }
 });
-
 /* ============================================================
    TEST EMAIL
 ============================================================ */
@@ -2855,24 +3028,55 @@ app.get('/api/test-email', async (req, res) => {
   }
 });
 
-
 /* ============================================================
-   GLOBAL ERROR HANDLER
+   REGISTRATION OPTIONS
 ============================================================ */
 
-app.use((error, req, res, next) => {
-  console.error('GLOBAL SERVER ERROR:', error);
+app.get('/api/registration-options', async (req, res) => {
+  try {
+    const sectorsResult = await pool.query(
+      `
+      SELECT DISTINCT sector
+      FROM users
+      WHERE sector IS NOT NULL
+        AND TRIM(sector) <> ''
+        AND role IN (
+          'state_minister',
+          'office_head',
+          'chief_executive_officer',
+          'minister'
+        )
+      ORDER BY sector ASC
+      `
+    );
 
-  if (error.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({
-      error: 'File size must not exceed 5MB.',
+    const affiliateResult = await pool.query(
+      `
+      SELECT
+        id,
+        organization_name
+      FROM affiliate_institutions
+      ORDER BY organization_name ASC
+      `
+    );
+
+    res.json({
+      sectors: sectorsResult.rows.map((row) => row.sector),
+      affiliateInstitutions: affiliateResult.rows,
+    });
+  } catch (error) {
+    console.error('REGISTRATION OPTIONS ERROR:', error);
+
+    res.status(500).json({
+      error: 'Failed to load registration options.',
+      detail: error.message,
     });
   }
-
-  res.status(500).json({
-    error: error.message || 'Server Error',
-  });
 });
+
+/* ============================================================
+   PENDING USERS
+============================================================ */
 
 app.get('/api/users/pending', async (req, res) => {
   try {
@@ -2884,6 +3088,8 @@ app.get('/api/users/pending', async (req, res) => {
         email,
         phone,
         position,
+        organization_type,
+        organization_name,
         sector,
         department,
         role,
@@ -2898,11 +3104,17 @@ app.get('/api/users/pending', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('GET PENDING USERS ERROR:', error);
+
     res.status(500).json({
       error: 'Failed to fetch pending users.',
     });
   }
 });
+
+/* ============================================================
+   APPROVE USER ACCOUNT
+============================================================ */
+
 app.put('/api/users/:id/approve', async (req, res) => {
   try {
     const { id } = req.params;
@@ -2919,6 +3131,12 @@ app.put('/api/users/:id/approve', async (req, res) => {
         full_name,
         email,
         role,
+        phone,
+        position,
+        organization_type,
+        organization_name,
+        sector,
+        department,
         account_status,
         is_active
       `,
@@ -2975,11 +3193,155 @@ app.put('/api/users/:id/approve', async (req, res) => {
     });
   } catch (error) {
     console.error('APPROVE USER ERROR:', error);
+
     res.status(500).json({
       error: 'Failed to approve user.',
     });
   }
 });
+
+/* ============================================================
+   REJECT USER ACCOUNT
+============================================================ */
+
+app.put('/api/users/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `
+      UPDATE users
+      SET
+        account_status = 'rejected',
+        is_active = false
+      WHERE id = $1
+      RETURNING
+        id,
+        full_name,
+        email,
+        role,
+        phone,
+        position,
+        organization_type,
+        organization_name,
+        sector,
+        department,
+        account_status,
+        is_active
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'User not found.',
+      });
+    }
+
+    res.json({
+      message: 'User account request rejected.',
+      user: result.rows[0],
+    });
+  } catch (error) {
+    console.error('REJECT USER ERROR:', error);
+
+    res.status(500).json({
+      error: 'Failed to reject user.',
+    });
+  }
+});
+
+/* ============================================================
+   OFFICE HEAD / MINISTER HISTORICAL BAR CHARTS
+============================================================ */
+
+app.get('/api/dashboard/historical-organization-summary', async (req, res) => {
+  try {
+    const { role } = req.query;
+
+    if (!['office_head', 'minister', 'admin', 'super_admin'].includes(role)) {
+      return res.status(403).json({
+        error: 'Unauthorized role.',
+      });
+    }
+
+    const moaAffiliateResult = await pool.query(
+      `
+      SELECT
+        CASE
+          WHEN traveler_category = 'affiliate_institution'
+          THEN 'Affiliate Institute'
+          ELSE 'MoA'
+        END AS category,
+        COUNT(*)::int AS count
+      FROM requests
+      WHERE final_status IN ('approved', 'rejected')
+      GROUP BY
+        CASE
+          WHEN traveler_category = 'affiliate_institution'
+          THEN 'Affiliate Institute'
+          ELSE 'MoA'
+        END
+      ORDER BY category ASC
+      `
+    );
+
+    const sectorResult = await pool.query(
+      `
+      SELECT
+        COALESCE(sector, 'Unassigned') AS name,
+        COUNT(*)::int AS count
+      FROM requests
+      WHERE final_status IN ('approved', 'rejected')
+        AND COALESCE(traveler_category, '') <> 'affiliate_institution'
+      GROUP BY COALESCE(sector, 'Unassigned')
+      ORDER BY count DESC, name ASC
+      `
+    );
+
+    const affiliateResult = await pool.query(
+      `
+      SELECT
+        COALESCE(organization_name, 'Unassigned') AS name,
+        COUNT(*)::int AS count
+      FROM requests
+      WHERE final_status IN ('approved', 'rejected')
+        AND traveler_category = 'affiliate_institution'
+      GROUP BY COALESCE(organization_name, 'Unassigned')
+      ORDER BY count DESC, name ASC
+      `
+    );
+
+    res.json({
+      moaVsAffiliate: moaAffiliateResult.rows,
+      sectors: sectorResult.rows,
+      affiliateOrganizations: affiliateResult.rows,
+    });
+  } catch (error) {
+    console.error('HISTORICAL ORGANIZATION SUMMARY ERROR:', error);
+    res.status(500).json({
+      error: 'Failed to load historical organization summary.',
+    });
+  }
+});
+/* ============================================================
+   GLOBAL ERROR HANDLER
+============================================================ */
+
+app.use((error, req, res, next) => {
+  console.error('GLOBAL SERVER ERROR:', error);
+
+  if (error.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({
+      error: 'File size must not exceed 5MB.',
+    });
+  }
+
+  res.status(500).json({
+    error: error.message || 'Server Error',
+  });
+});
+
 /* ============================================================
    SERVER INITIALIZATION
 ============================================================ */
@@ -2987,4 +3349,3 @@ app.put('/api/users/:id/approve', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
-
