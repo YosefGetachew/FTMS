@@ -1,0 +1,498 @@
+/* ============================================================
+   FTMS - USER MANAGEMENT
+============================================================ */
+
+.user-management-page {
+  color: #172033;
+}
+
+.user-management-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.user-management-kicker {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 7px;
+  padding: 4px 9px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.user-management-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.45rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.user-management-header p {
+  max-width: 720px;
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ============================================================
+   SUMMARY
+============================================================ */
+
+.user-management-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.user-management-summary-card {
+  min-height: 96px;
+  padding: 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.user-management-summary-card span {
+  display: block;
+  color: #64748b;
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.user-management-summary-card strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 1.65rem;
+  font-weight: 780;
+  line-height: 1;
+}
+
+.user-management-summary-card small {
+  display: block;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.user-management-notice {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.user-management-notice.success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.user-management-notice.error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+/* ============================================================
+   FORM
+============================================================ */
+
+.user-management-form-card,
+.user-management-section {
+  margin-bottom: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.user-management-card-header,
+.user-management-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.user-management-card-header h3,
+.user-management-section-header h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 740;
+}
+
+.user-management-card-header p,
+.user-management-section-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.user-management-grid {
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  padding: 14px;
+}
+
+.user-management-page .settings-group label {
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.user-management-page .settings-group input,
+.user-management-page .settings-group select {
+  min-height: 38px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.user-management-page .workflow-approver-actions {
+  padding: 0 14px 14px;
+}
+
+.user-management-primary-btn {
+  min-width: 132px;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+/* ============================================================
+   FILTERS
+============================================================ */
+
+.user-management-directory-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.user-management-directory-toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: min(420px, 100%);
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.user-management-directory-toolbar input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  padding: 0 11px;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.user-management-directory-toolbar input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.user-management-filter-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px);
+  gap: 10px;
+  width: min(320px, 100%);
+}
+
+.user-management-filter-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.user-management-filter-row input,
+.user-management-filter-row select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  padding: 0 10px;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.user-management-filter-row input:focus,
+.user-management-filter-row select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+/* ============================================================
+   TABLE
+============================================================ */
+
+.user-management-table-wrap {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.user-management-table {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.user-management-table th {
+  border: 0;
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  padding: 11px 12px;
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 750;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.user-management-table td {
+  border: 0;
+  border-bottom: 1px solid #eef2f7;
+  color: #334155;
+  padding: 12px;
+  vertical-align: top;
+  font-size: 12.5px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.user-management-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.user-management-person {
+  min-width: 0;
+}
+
+.user-management-person strong {
+  display: block;
+  max-width: 300px;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 12.5px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+}
+
+.user-management-person span {
+  display: block;
+  max-width: 300px;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #1d4ed8;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+}
+
+.user-management-muted {
+  color: #64748b;
+}
+
+.user-role-pill {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.user-management-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.user-action-btn {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.user-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.user-action-btn.edit {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.user-action-btn.password {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.user-action-btn.delete {
+  border-color: #fecaca;
+  background: #ffffff;
+  color: #b91c1c;
+}
+
+.user-action-btn.delete:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+/* ============================================================
+   MODAL
+============================================================ */
+
+.user-management-modal {
+  width: min(760px, 96vw);
+  max-height: 90vh;
+  padding: 0;
+  border-radius: 8px;
+  overflow-y: auto;
+}
+
+.user-management-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.user-management-modal-header span {
+  display: inline-flex;
+  margin-bottom: 6px;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 740;
+  text-transform: uppercase;
+}
+
+.user-management-modal-header h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.1rem;
+  font-weight: 760;
+}
+
+.user-management-modal-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.user-management-modal .user-management-grid {
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 16px;
+}
+
+.user-management-modal .modal-actions {
+  margin: 0;
+  padding: 14px 16px 16px;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 1100px) {
+  .user-management-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .user-management-grid {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+
+  .user-management-section-header {
+    flex-direction: column;
+  }
+
+  .user-management-filter-row {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .user-management-summary-grid,
+  .user-management-grid,
+  .user-management-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .user-management-directory-toolbar {
+    justify-content: stretch;
+  }
+
+  .user-management-card-header,
+  .user-management-section-header {
+    padding: 12px;
+  }
+
+  .user-management-table th,
+  .user-management-table td {
+    padding: 9px 8px;
+    font-size: 11.5px;
+  }
+
+  .user-management-actions {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-management-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .user-management-header p {
+    font-size: 12.5px;
+  }
+}

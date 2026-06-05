@@ -3,34 +3,47 @@ import './Sidebar.css';
 import logo from '../assets/ministry-logo.png';
 import API from '../services/api';
 
-/* ============================================================
-   SIDEBAR COMPONENT
-   Controls FTMS navigation based on logged-in user role.
-============================================================ */
+const formatRole = (value) => {
+  if (!value) return 'User';
+
+  return value
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const compactCount = (value) => {
+  if (!value) return '0';
+  if (value > 99) return '99+';
+  return String(value);
+};
+
+const roleGuidance = {
+  admin: 'System administration and workflow control',
+  super_admin: 'Full system administration and oversight',
+  traveler: 'Submit requests and follow your travel status',
+  expert: 'Submit requests through your lead executive office',
+  lead_executive_officer: 'Review requests from assigned experts',
+  lead_executive: 'Review requests from assigned experts',
+  state_minister: 'Decide requests from assigned sector offices',
+  chief_executive_officer: 'Decide CEO structure requests',
+  ceo: 'Decide CEO structure requests',
+  office_head: 'Coordinate clearance and final office review',
+  protocol: 'Process protocol clearance tasks',
+  minister: 'Final approval authority',
+};
 
 function Sidebar({ setActivePage }) {
-  /* ============================================================
-     LOGGED-IN USER
-  ============================================================ */
-
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   const role = user?.role || '';
   const userEmail = user?.email || '';
   const userId = user?.id || '';
 
-  /* ============================================================
-     ROLE FLAGS
-  ============================================================ */
-
   const isAdmin = role === 'admin' || role === 'super_admin';
   const isProtocol = role === 'protocol';
   const isTraveler = role === 'traveler';
   const isMinister = role === 'minister';
-
-  /* ============================================================
-     LOCAL STATES
-  ============================================================ */
+  const formattedRole = formatRole(role);
 
   const [activeMenu, setActiveMenu] = useState(
     isTraveler ? 'submitted-requests' : 'dashboard'
@@ -45,30 +58,33 @@ function Sidebar({ setActivePage }) {
     account: true,
   });
 
-  /* ============================================================
-     REPORT ACCESS ROLES
-     Travelers do not see Reports.
-  ============================================================ */
-
   const allowedReportRoles = useMemo(
     () => [
       'admin',
       'super_admin',
-      // 'protocol',
-      // 'state_minister',
-      // 'chief_executive_officer',
       'office_head',
       'minister',
     ],
     []
   );
 
-  /* ============================================================
-     SIDEBAR COUNTS
-     - Pending Users count is visible only to Admin/Super Admin.
-     - Submitted Requests count shows active pending/amended requests.
-     - Counts refresh every 30 seconds.
-  ============================================================ */
+  const userContext = useMemo(
+    () => [
+      {
+        label: 'Role',
+        value: formattedRole,
+      },
+      {
+        label: 'Structure',
+        value: user?.sector || 'Not assigned',
+      },
+      {
+        label: 'Lead Executive Office',
+        value: user?.department || 'Not assigned',
+      },
+    ],
+    [formattedRole, user?.sector, user?.department]
+  );
 
   useEffect(() => {
     const fetchSidebarCounts = async () => {
@@ -114,10 +130,6 @@ function Sidebar({ setActivePage }) {
     return () => clearInterval(interval);
   }, [role, userEmail, userId, isAdmin, isTraveler]);
 
-  /* ============================================================
-     NAVIGATION HANDLERS
-  ============================================================ */
-
   const goToPage = (page) => {
     setActiveMenu(page);
     setActivePage(page);
@@ -130,44 +142,54 @@ function Sidebar({ setActivePage }) {
     }));
   };
 
-  /* ============================================================
-     MAIN MENU ITEMS
-  ============================================================ */
-
   const menuItems = useMemo(
     () => [
       {
         id: 'dashboard',
         label: 'Dashboard',
-        icon: '📊',
+        description: 'Analytics and approval overview',
+        icon: 'DS',
         show: !isTraveler,
       },
       {
         id: 'travel-request',
-        label: 'Travel Request',
-        icon: '✈️',
+        label: 'New Travel Request',
+        description: 'Prepare and submit travel',
+        icon: 'NT',
         show: !isMinister,
       },
       {
         id: 'submitted-requests',
         label: 'Submitted Requests',
-        icon: '📄',
-        badge:
-          submittedRequestCount > 0
-            ? submittedRequestCount
-            : null,
+        description: isTraveler
+          ? 'Track your submitted and amended requests'
+          : 'Review assigned and historical travel requests',
+        icon: 'RQ',
+        badge: submittedRequestCount > 0 ? submittedRequestCount : null,
+        badgeLabel: 'active request',
+        countLabel: isTraveler ? 'Needs attention' : 'Assigned queue',
+        show: true,
+      },
+      {
+        id: 'travel-status',
+        label: 'Travel Status',
+        description: 'Diagram view of request progress',
+        icon: '',
+        iconClass: 'workflow-icon',
         show: true,
       },
       {
         id: 'notifications',
         label: 'Notifications',
-        icon: '🔔',
+        description: 'System messages and updates',
+        icon: 'MS',
         show: !isMinister,
       },
       {
         id: 'reports',
         label: 'Reports',
-        icon: '📈',
+        description: 'Performance and travel analytics',
+        icon: 'RP',
         show: allowedReportRoles.includes(role),
       },
     ],
@@ -180,62 +202,80 @@ function Sidebar({ setActivePage }) {
     ]
   );
 
-  /* ============================================================
-     ADMINISTRATION MENU ITEMS
-     Only Admin/Super Admin see Pending Users, User Management,
-     and Settings. Protocol can also see Audit Trail.
-  ============================================================ */
-
   const adminItems = useMemo(
     () => [
       {
         id: 'pending-users',
         label: 'Pending Users',
-        icon: '🕒',
+        description: 'Approve account requests',
+        icon: 'PU',
         badge: pendingUserCount > 0 ? pendingUserCount : null,
+        badgeLabel: 'waiting user',
+        countLabel: 'Awaiting approval',
         show: isAdmin,
       },
       {
         id: 'user-management',
         label: 'User Management',
-        icon: '👥',
+        description: 'Officers and user accounts',
+        icon: 'UM',
         show: isAdmin,
       },
       {
         id: 'settings',
-        label: 'Settings',
-        icon: '⚙️',
+        label: 'Organization Settings',
+        description: 'Structures, offices, approvers',
+        icon: 'OS',
         show: isAdmin,
       },
       {
         id: 'audit-trail',
         label: 'Audit Trail',
-        icon: '🧾',
+        description: 'Accountability records',
+        icon: 'AT',
         show: isAdmin || isProtocol,
       },
     ],
     [pendingUserCount, isAdmin, isProtocol]
   );
 
-  /* ============================================================
-     ACCOUNT MENU ITEMS
-  ============================================================ */
-
   const accountItems = useMemo(
     () => [
       {
         id: 'reset-password',
         label: 'Reset Password',
-        icon: '🔐',
+        description: 'Secure account password',
+        icon: 'PW',
         show: !isMinister,
       },
     ],
     [isMinister]
   );
 
-  /* ============================================================
-     RENDER SINGLE MENU BUTTON
-  ============================================================ */
+  const allVisibleItems = useMemo(
+    () => [...menuItems, ...adminItems, ...accountItems].filter((item) => item.show),
+    [menuItems, adminItems, accountItems]
+  );
+
+  const activeItem = allVisibleItems.find((item) => item.id === activeMenu);
+
+  const workSummary = useMemo(
+    () => [
+      {
+        label: isTraveler ? 'Open Requests' : 'Active Queue',
+        value: compactCount(submittedRequestCount),
+        helper: isTraveler ? 'Submitted or amended' : 'Pending or assigned',
+        show: true,
+      },
+      {
+        label: 'Pending Users',
+        value: compactCount(pendingUserCount),
+        helper: 'Registration approvals',
+        show: isAdmin,
+      },
+    ].filter((item) => item.show),
+    [submittedRequestCount, pendingUserCount, isAdmin, isTraveler]
+  );
 
   const renderMenuButton = (item) => {
     if (!item.show) return null;
@@ -244,33 +284,40 @@ function Sidebar({ setActivePage }) {
       <button
         key={item.id}
         type="button"
-        className={`sidebar-menu-btn ${
-          activeMenu === item.id ? 'active' : ''
-        }`}
+        className={`sidebar-menu-btn ${activeMenu === item.id ? 'active' : ''}`}
         onClick={() => goToPage(item.id)}
+        aria-label={`${item.label}. ${item.description || ''}`}
       >
         <span className="sidebar-active-line"></span>
 
-        <span className="sidebar-menu-icon">{item.icon}</span>
+        <span className={`sidebar-menu-icon ${item.iconClass || ''}`}>
+          {item.icon}
+        </span>
 
-        <span className="sidebar-menu-label">{item.label}</span>
+        <span className="sidebar-menu-text">
+          <span className="sidebar-menu-label">{item.label}</span>
+          {item.description && (
+            <span className="sidebar-menu-description">
+              {item.description}
+            </span>
+          )}
+        </span>
 
         {item.badge && (
-          <span className="sidebar-menu-badge">
+          <span
+            className="sidebar-menu-badge"
+            title={`${item.badge} ${item.badgeLabel || 'pending'}`}
+          >
             {item.badge}
           </span>
         )}
 
-        <span className="sidebar-arrow">›</span>
+        <span className="sidebar-arrow" aria-hidden="true">&gt;</span>
       </button>
     );
   };
 
-  /* ============================================================
-     RENDER COLLAPSIBLE MENU SECTION
-  ============================================================ */
-
-  const renderSection = (sectionKey, title, items) => {
+  const renderSection = (sectionKey, title, subtitle, items) => {
     const visibleItems = items.filter((item) => item.show);
 
     if (visibleItems.length === 0) return null;
@@ -282,14 +329,19 @@ function Sidebar({ setActivePage }) {
           className="sidebar-section-toggle"
           onClick={() => toggleSection(sectionKey)}
         >
+          <span className="sidebar-section-title">
           <span>{title}</span>
+          <small>
+              {subtitle} / {visibleItems.length} item
+              {visibleItems.length === 1 ? '' : 's'}
+          </small>
+          </span>
 
           <span
-            className={`section-chevron ${
-              openSections[sectionKey] ? 'open' : ''
-            }`}
+            className={`section-chevron ${openSections[sectionKey] ? 'open' : ''}`}
+            aria-hidden="true"
           >
-            ▾
+            v
           </span>
         </button>
 
@@ -304,15 +356,8 @@ function Sidebar({ setActivePage }) {
     );
   };
 
-  /* ============================================================
-     COMPONENT UI
-  ============================================================ */
-
   return (
     <aside className="sidebar">
-      <div className="sidebar-glow"></div>
-
-      {/* Sidebar Header */}
       <div className="sidebar-header">
         <div className="sidebar-logo-box">
           <img
@@ -323,12 +368,11 @@ function Sidebar({ setActivePage }) {
         </div>
 
         <div className="sidebar-title-group">
-          <h2>MOA</h2>
+          <h2>FTMS</h2>
           <p>Foreign Travel Management System</p>
         </div>
       </div>
 
-      {/* Logged-in User Card */}
       <div className="sidebar-user-card">
         <div className="sidebar-user-avatar">
           {(user?.fullName || userEmail || 'U')
@@ -338,21 +382,55 @@ function Sidebar({ setActivePage }) {
 
         <div className="sidebar-user-info">
           <h4>{user?.fullName || 'FTMS User'}</h4>
-          <p>{role ? role.replaceAll('_', ' ') : 'User'}</p>
+          <p>{formattedRole}</p>
+          {userEmail && <small title={userEmail}>{userEmail}</small>}
         </div>
       </div>
 
-      {/* Navigation Menu */}
-      <nav className="sidebar-menu">
-        {renderSection('main', 'Main Menu', menuItems)}
-        {renderSection('admin', 'Administration', adminItems)}
-        {renderSection('account', 'Account', accountItems)}
+      <div className="sidebar-profile-panel">
+        <div className="sidebar-profile-heading">Access Context</div>
+        {userContext.map((item) => (
+          <div className="sidebar-profile-row" key={item.label}>
+            <span>{item.label}</span>
+            <strong title={item.value}>{item.value}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="sidebar-role-note">
+        <strong>Your responsibility</strong>
+        <span>
+          {roleGuidance[role] || 'Use the menu to access your available tasks'}
+        </span>
+      </div>
+
+      {workSummary.length > 0 && (
+        <div className="sidebar-summary-grid">
+          {workSummary.map((item) => (
+            <div className="sidebar-summary-card" key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.helper}</small>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="sidebar-current-page">
+        <span>Current Workspace</span>
+        <strong>{activeItem?.label || 'Dashboard'}</strong>
+        <small>{activeItem?.description || 'System overview'}</small>
+      </div>
+
+      <nav className="sidebar-menu" aria-label="Main navigation">
+        {renderSection('main', 'Workspace', 'Daily travel operations', menuItems)}
+        {renderSection('admin', 'Administration', 'User and structure control', adminItems)}
+        {renderSection('account', 'Account', 'Personal access settings', accountItems)}
       </nav>
 
-      {/* Sidebar Footer */}
       <div className="sidebar-footer">
         <p>Ministry of Agriculture</p>
-        <small>FTMS v1.0</small>
+        <small>Secure travel approval workspace</small>
       </div>
     </aside>
   );

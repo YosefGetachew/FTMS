@@ -6,20 +6,54 @@
   box-sizing: border-box;
 }
 
+:root {
+  --font-sans:
+    "Noto Sans Ethiopic",
+    "Noto Sans",
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    "Liberation Sans",
+    sans-serif;
+  --font-mono:
+    Consolas,
+    Monaco,
+    "Courier New",
+    monospace;
+  --font-size-base: 14px;
+  --line-height-base: 1.55;
+}
+
 html {
   font-size: 16px;
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
-  font-family: "Segoe UI", Arial, sans-serif;
+  font-family: var(--font-sans);
   background: #f4f6f9;
   color: #1f2937;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 button,
@@ -27,6 +61,8 @@ input,
 select,
 textarea {
   font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.45;
 }
 
 button {
@@ -34,11 +70,15 @@ button {
 }
 
 code {
-  font-family: Consolas, Monaco, "Courier New", monospace;
+  font-family: var(--font-mono);
 }
 
 /* Prevent images from overflowing on small screens */
 img {
+  max-width: 100%;
+}
+
+table {
   max-width: 100%;
 }
 
@@ -70,14 +110,8 @@ a {
    MOBILE BASE
 ============================================================ */
 
-@media (max-width: 768px) {
-  body {
-    font-size: 13px;
-  }
-}
-
 @media (max-width: 480px) {
-  body {
-    font-size: 12.5px;
+  :root {
+    --font-size-base: 14px;
   }
 }

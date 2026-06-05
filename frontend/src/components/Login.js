@@ -10,6 +10,7 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e) => {
     setFormData({
@@ -23,7 +24,7 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.email || !formData.password) {
+    if (!formData.email.trim() || !formData.password) {
       setError('Please enter both email and password.');
       return;
     }
@@ -31,12 +32,15 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
     try {
       setLoading(true);
 
-      const response = await API.post('/login', formData);
+      const response = await API.post('/login', {
+        email: formData.email.trim(),
+        password: formData.password,
+      });
 
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
 
-      window.location.href = '/dashboard';
+      setIsLoggedIn(response.data.token);
     } catch (err) {
       console.error(err);
       setError(
@@ -65,10 +69,11 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
         </div>
 
         <div className="system-intro">
+          <span className="auth-kicker">Secure workflow access</span>
           <h2>Foreign Travel Request Automation</h2>
           <p>
-            A digital platform for submitting, reviewing, approving, and
-            tracking official foreign travel requests within the Ministry.
+            Submit, review, approve, and track official foreign travel requests
+            through the Ministry approval hierarchy.
           </p>
         </div>
 
@@ -78,32 +83,37 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
           <div className="structure-list">
             <div className="structure-item">
               <span>1</span>
-              <p>Traveler submits travel request</p>
+              <p>Traveler prepares and submits the request</p>
             </div>
 
             <div className="structure-item">
               <span>2</span>
-              <p>State Minister reviews and approves</p>
+              <p>Lead Executive Office reviews the request</p>
             </div>
 
             <div className="structure-item">
               <span>3</span>
-              <p>Protocol Office clears documents</p>
+              <p>State Minister, CEO, or Office Head gives structure approval</p>
             </div>
 
             <div className="structure-item">
               <span>4</span>
-              <p>Office Head reviews and approves</p>
+              <p>Protocol Office clears documents</p>
             </div>
 
             <div className="structure-item">
               <span>5</span>
-              <p>Minister decides when forwarded</p>
+              <p>Head of the Minister's Office reviews</p>
             </div>
 
             <div className="structure-item">
               <span>6</span>
-              <p>Protocol follows foreign affairs response</p>
+              <p>Minister gives approval</p>
+            </div>
+
+            <div className="structure-item">
+              <span>7</span>
+              <p>Protocol updates Foreign Affairs status</p>
             </div>
           </div>
         </div>
@@ -119,7 +129,7 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
             />
 
             <h2>Welcome Back</h2>
-            <p>Please login to continue to FTMS</p>
+            <p>Please sign in to continue to FTMS</p>
           </div>
 
           {error && <div className="login-error">{error}</div>}
@@ -138,28 +148,39 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
 
           <div className="form-group">
             <label>Password</label>
-            <input
-              type="password"
-              name="password"
-              placeholder="Enter your password"
-              value={formData.password}
-              onChange={handleChange}
-              autoComplete="current-password"
-            />
+            <div className="password-field">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                placeholder="Enter your password"
+                value={formData.password}
+                onChange={handleChange}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </div>
 
           <button type="submit" className="login-button" disabled={loading}>
             {loading ? 'Logging in...' : 'Login'}
           </button>
-<div className="register-link">
-  <p>Don’t have an account?</p>
-  <button
-    type="button"
-    onClick={() => setActiveAuthPage('register')}
-  >
-    Create Traveler Account
-  </button>
-</div>
+
+          <div className="register-link">
+            <p>Do not have an account?</p>
+            <button
+              type="button"
+              onClick={() => setActiveAuthPage('register')}
+            >
+              Create Traveler Account
+            </button>
+          </div>
+
           <div className="login-footer">
             <p>Ministry of Agriculture</p>
             <small>Foreign Travel Management System</small>

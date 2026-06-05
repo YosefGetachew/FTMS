@@ -2,30 +2,82 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import API from "../services/api";
 import "./request-form.css";
 
-const Field = ({
-  name,
-  label,
-  required,
-  hint,
-  children,
-  touched,
-  errors,
-}) => {
+const workflowPath = {
+  sector_structure: [
+    "Expert",
+    "Lead Executive Officer",
+    "State Minister",
+    "Protocol for Clearance",
+    "Office Head",
+    "Minister",
+  ],
+  ceo_structure: [
+    "Expert",
+    "Lead Executive Officer",
+    "CEO",
+    "Protocol for Clearance",
+    "Office Head",
+    "Minister",
+  ],
+  office_head_structure: [
+    "Expert",
+    "Lead Executive Officer",
+    "Office Head",
+    "Protocol for Clearance",
+    "Office Head",
+    "Minister",
+  ],
+};
+
+const moaStructureTypes = [
+  {
+    value: "sector_structure",
+    label: "Sector",
+    ownerLabel: "State Minister",
+  },
+  {
+    value: "ceo_structure",
+    label: "CEO",
+    ownerLabel: "CEO",
+  },
+  {
+    value: "office_head_structure",
+    label: "Head of the Minister's Office",
+    ownerLabel: "Head of the Minister's Office",
+  },
+];
+
+const getTripDuration = (startDate, endDate) => {
+  if (!startDate || !endDate || endDate < startDate) return null;
+
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const days = Math.round((end - start) / 86400000) + 1;
+
+  return days > 0 ? days : null;
+};
+
+const normalizePhonePreview = (value) => {
+  const raw = String(value || "").trim().replace(/\s+/g, "");
+  if (!raw) return "";
+
+  if (/^\+251[97]\d{8}$/.test(raw)) return raw;
+  if (/^0[97]\d{8}$/.test(raw)) return `+251${raw.slice(1)}`;
+  if (/^[97]\d{8}$/.test(raw)) return `+251${raw}`;
+
+  return raw;
+};
+
+const Field = ({ name, label, required, hint, children, touched, errors }) => {
   const showError = Boolean(touched?.[name] && errors?.[name]);
 
   return (
     <div className="space-y-2">
-      <label
-        className={`ministry-label ${required ? "required" : ""} ${
-          showError ? "error" : ""
-        }`}
-      >
+      <label className={`ministry-label ${required ? "required" : ""} ${showError ? "error" : ""}`}>
         {label}
         {required && <span className="text-rose-500">*</span>}
       </label>
-
       {children}
-
       {showError ? (
         <div className="text-xs text-rose-600">{errors[name]}</div>
       ) : (
@@ -38,37 +90,28 @@ const Field = ({
 const StepIndicator = ({ step, setStep, step1Valid, step2Valid }) => (
   <div className="mb-8">
     <div className="stepper-row">
-      <button
-        type="button"
-        onClick={() => setStep(1)}
-        className={`step-btn ${step === 1 ? "active" : ""}`}
-      >
-        1. Traveler
-      </button>
-
-      <button
-        type="button"
-        onClick={() => step1Valid && setStep(2)}
-        disabled={!step1Valid}
-        className={`step-btn ${step === 2 ? "active" : ""} ${
-          !step1Valid ? "disabled" : ""
-        }`}
-      >
-        2. Trip
-      </button>
-
-      <button
-        type="button"
-        onClick={() => step1Valid && step2Valid && setStep(3)}
-        disabled={!step1Valid || !step2Valid}
-        className={`step-btn ${step === 3 ? "active" : ""} ${
-          !step1Valid || !step2Valid ? "disabled" : ""
-        }`}
-      >
-        3. Attachments
-      </button>
+      {[
+        { number: "1", label: "Traveler", stepNumber: 1, enabled: true },
+        { number: "2", label: "Trip", stepNumber: 2, enabled: step1Valid },
+        {
+          number: "3",
+          label: "Attachments",
+          stepNumber: 3,
+          enabled: step1Valid && step2Valid,
+        },
+      ].map(({ number, label, stepNumber, enabled }) => (
+        <button
+          key={stepNumber}
+          type="button"
+          onClick={() => enabled && setStep(stepNumber)}
+          disabled={!enabled}
+          className={`step-btn ${step === stepNumber ? "active" : ""} ${!enabled ? "disabled" : ""}`}
+        >
+          <span className="step-btn-number">{number}.</span>
+          <span className="step-btn-label">{label}</span>
+        </button>
+      ))}
     </div>
-
     <div className="mt-4 h-2 w-full rounded-full bg-slate-100">
       <div
         className="h-2 rounded-full transition-all duration-300"
@@ -97,23 +140,13 @@ const FileBox = ({ label, name, file, setFormData, handleFileChange }) => (
           className="hidden"
         />
       </label>
-
       <div className="filebox-content">
         <div className="ministry-label no-box">{label}</div>
-
-        <div className="filebox-filename">
-          {file?.name ? file.name : "Optional — PDF/JPG/PNG"}
-        </div>
-
+        <div className="filebox-filename">{file?.name || "Optional - PDF/JPG/PNG"}</div>
         {file?.name && (
           <button
             type="button"
-            onClick={() =>
-              setFormData((prev) => ({
-                ...prev,
-                [name]: null,
-              }))
-            }
+            onClick={() => setFormData((p) => ({ ...p, [name]: null }))}
             className="filebox-remove"
           >
             Remove
@@ -124,43 +157,66 @@ const FileBox = ({ label, name, file, setFormData, handleFileChange }) => (
   </div>
 );
 
+const RadioCards = ({ name, value, onChange, options, cols = 2 }) => (
+  <div className={`radio-cards cols-${cols}`}>
+    {options.map((opt) => (
+      <label key={opt.value} className={`radio-card ${value === opt.value ? "selected" : ""}`}>
+        <input
+          type="radio"
+          name={name}
+          value={opt.value}
+          checked={value === opt.value}
+          onChange={() => onChange(name, opt.value)}
+          className="hidden"
+        />
+        <span className="radio-card-title">{opt.label}</span>
+        {opt.description && <span className="radio-card-desc">{opt.description}</span>}
+      </label>
+    ))}
+  </div>
+);
+
+const Divider = ({ label }) => (
+  <div className="form-divider">
+    <div className="form-divider-line" />
+    <span className="form-divider-label">{label}</span>
+    <div className="form-divider-line" />
+  </div>
+);
+
 export default function RequestForm() {
-  const categoryOptions = useMemo(
-    () => [
-      {
-        value: "higher_official",
-        label: "Higher Officials",
-      },
-      {
-        value: "expert",
-        label: "Experts",
-      },
-      {
-        value: "affiliate_institution",
-        label: "Affiliate Institute",
-      },
-    ],
-    []
-  );
+  const travelerTypeOptions = [
+    { value: "higher_official", label: "Higher Official", description: "Senior leadership and above" },
+    { value: "expert", label: "Expert", description: "Technical / programme staff" },
+  ];
+
+  const workflowOptions = [
+    ...moaStructureTypes.map((item) => ({
+      ...item,
+      description: `${item.ownerLabel} area with Lead Executive Offices`,
+      route: workflowPath[item.value].join(" -> "),
+    })),
+  ];
 
   const initialFormData = useMemo(
     () => ({
-      travelerCategory: "",
+      organizationType: "",
+      travelerType: "",
+      workflowType: "",
+      sector: "",
+      leadExecutiveOffice: "",
       organizationName: "",
-      assignedStateMinisterId: "",
       fullName: "",
       position: "",
       department: "",
       email: "",
       phone: "",
-
       country: "",
       startDate: "",
       endDate: "",
       purpose: "",
       sponsor: "",
       passportNumber: "",
-
       passportFile: null,
       invitationLetter: null,
       torFile: null,
@@ -170,69 +226,133 @@ export default function RequestForm() {
 
   const [formData, setFormData] = useState(initialFormData);
   const [countries, setCountries] = useState([]);
-  const [stateMinisters, setStateMinisters] = useState([]);
   const [organizations, setOrganizations] = useState([]);
-
+  const [moaSectors, setMoaSectors] = useState([]);
+  const [leadExecutiveOffices, setLeadExecutiveOffices] = useState([]);
   const [step, setStep] = useState(1);
   const [touched, setTouched] = useState({});
-  const [notice, setNotice] = useState({
-    type: "",
-    message: "",
-  });
-
+  const [notice, setNotice] = useState({ type: "", message: "" });
   const [loading, setLoading] = useState({
     countries: false,
-    stateMinisters: false,
     organizations: false,
+    moaSectors: false,
+    leadExecutiveOffices: false,
     submitting: false,
   });
 
-  const isAffiliate =
-    formData.travelerCategory === "affiliate_institution";
+  const isMoA = formData.organizationType === "moa";
+  const isAffiliate = formData.organizationType === "affiliate";
 
-  const markTouched = (name) => {
-    setTouched((prev) => ({
-      ...prev,
-      [name]: true,
-    }));
-  };
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user")) || {};
+    } catch {
+      return {};
+    }
+  }, []);
 
-  const touchMany = (names) => {
-    setTouched((prev) => {
-      const next = { ...prev };
-      names.forEach((name) => {
-        next[name] = true;
+  const tripDuration = useMemo(
+    () => getTripDuration(formData.startDate, formData.endDate),
+    [formData.startDate, formData.endDate]
+  );
+
+  const selectedWorkflow = workflowOptions.find(
+    (item) => item.value === formData.workflowType
+  );
+  const selectedStructureTypeLabel = selectedWorkflow?.label || "MoA Structure";
+  const selectedOwnerLabel = selectedWorkflow?.ownerLabel || "Approver";
+
+  const normalizedPhone = normalizePhonePreview(formData.phone);
+
+  const normalizeComparable = useCallback(
+    (value) => String(value || "").trim().toLowerCase(),
+    []
+  );
+
+  const assignedSector = String(currentUser?.sector || "").trim();
+  const assignedLeadExecutiveOffice = String(currentUser?.department || "").trim();
+
+  const sectorOptions = useMemo(
+    () =>
+      moaSectors
+        .filter((sector) => sector.workflow_type === formData.workflowType)
+        .filter((sector) => {
+          if (!assignedSector) return true;
+          return normalizeComparable(sector.name) === normalizeComparable(assignedSector);
+        }),
+    [assignedSector, formData.workflowType, moaSectors, normalizeComparable]
+  );
+
+  const leadExecutiveOfficeOptions = useMemo(
+    () =>
+      leadExecutiveOffices
+        .filter((office) => office.sector_name === formData.sector)
+        .filter((office) => {
+          if (!assignedLeadExecutiveOffice) return true;
+          return normalizeComparable(office.name) === normalizeComparable(assignedLeadExecutiveOffice);
+        }),
+    [assignedLeadExecutiveOffice, formData.sector, leadExecutiveOffices, normalizeComparable]
+  );
+
+  const hasAssignedSectorOption = Boolean(assignedSector && sectorOptions.length === 1);
+  const hasAssignedLeadExecutiveOfficeOption = Boolean(
+    assignedLeadExecutiveOffice && leadExecutiveOfficeOptions.length === 1
+  );
+
+  const markTouched = (name) => setTouched((p) => ({ ...p, [name]: true }));
+
+  const touchMany = (names) =>
+    setTouched((p) => {
+      const next = { ...p };
+      names.forEach((k) => {
+        next[k] = true;
       });
       return next;
     });
-  };
 
-  const handleChange = (e) => {
-    const { name, value } = e.target || {};
+  const handleChange = (nameOrEvent, directValue) => {
+    let name;
+    let value;
+
+    if (typeof nameOrEvent === "string") {
+      name = nameOrEvent;
+      value = directValue;
+    } else {
+      name = nameOrEvent?.target?.name;
+      value = nameOrEvent?.target?.value;
+    }
+
     if (!name) return;
 
     setFormData((prev) => {
-      const next = {
-        ...prev,
-        [name]: value,
-      };
+      const next = { ...prev, [name]: value };
 
-      if (
-        name === "startDate" &&
-        next.endDate &&
-        next.endDate < value
-      ) {
+      if (name === "startDate" && next.endDate && next.endDate < value) {
         next.endDate = "";
       }
 
-      if (name === "travelerCategory") {
-  if (value === "affiliate_institution") {
-    next.organizationName = "";
-    next.assignedStateMinisterId = "";
-  } else {
-    next.organizationName = "MoA";
-  }
-}
+      if (name === "organizationType") {
+        next.travelerType = "";
+        next.workflowType = "";
+        next.sector = "";
+        next.leadExecutiveOffice = "";
+        next.organizationName = "";
+      }
+
+      if (name === "travelerType") {
+        next.workflowType = "";
+        next.sector = "";
+        next.leadExecutiveOffice = "";
+      }
+
+      if (name === "workflowType") {
+        next.sector = "";
+        next.leadExecutiveOffice = "";
+      }
+
+      if (name === "sector") {
+        next.leadExecutiveOffice = "";
+      }
 
       return next;
     });
@@ -240,268 +360,253 @@ export default function RequestForm() {
 
   const handleFileChange = (e) => {
     const { name, files } = e.target;
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: files?.[0] || null,
-    }));
+    setFormData((p) => ({ ...p, [name]: files?.[0] || null }));
   };
 
   const errors = useMemo(() => {
-    const validationErrors = {};
+    const e = {};
 
-    if (!formData.travelerCategory) {
-      validationErrors.travelerCategory =
-        "Traveler Category is required.";
-    }
-if (
-  isAffiliate &&
-  !formData.organizationName
-) {
-  validationErrors.organizationName =
-    "Please select an affiliate institution.";
-}
-    if (
-      formData.travelerCategory !== "affiliate_institution" &&
-      !formData.assignedStateMinisterId
-    ) {
-      validationErrors.assignedStateMinisterId =
-        "Please select a sector.";
+    if (!formData.organizationType) e.organizationType = "Select an organization type.";
+
+    if (isMoA) {
+      if (!formData.travelerType) e.travelerType = "Select traveler type.";
+      if (!formData.workflowType) e.workflowType = "Select the MoA structure type.";
+      if (!formData.sector.trim()) e.sector = "MoA Structure is required.";
+      if (!formData.leadExecutiveOffice.trim()) {
+        e.leadExecutiveOffice = "Lead Executive Office is required.";
+      }
     }
 
-    if (!formData.fullName.trim()) {
-      validationErrors.fullName = "Full name is required.";
+    if (isAffiliate && !formData.organizationName) {
+      e.organizationName = "Select an affiliate institution.";
     }
 
-    if (!formData.position.trim()) {
-      validationErrors.position = "Position is required.";
-    }
-
-    if (!formData.department.trim()) {
-      validationErrors.department = "Department is required.";
-    }
+    if (!formData.fullName.trim()) e.fullName = "Full name is required.";
+    if (!formData.position.trim()) e.position = "Position is required.";
+    if (!formData.department.trim()) e.department = "Department is required.";
 
     const email = (formData.email || "").trim();
+    if (!email) e.email = "Email is required.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "Enter a valid email.";
 
-    if (!email) {
-      validationErrors.email = "Email is required.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      validationErrors.email = "Enter a valid email address.";
+    const phone = (formData.phone || "").trim();
+    if (phone && !/^(?:\+251[97]\d{8}|0[97]\d{8}|[97]\d{8})$/.test(phone.replace(/\s+/g, ""))) {
+      e.phone = "Use 09..., 9..., 07..., 7..., +251 9..., or +251 7...";
     }
 
-    if (!formData.country.trim()) {
-      validationErrors.country = "Destination country is required.";
+    if (!formData.country.trim()) e.country = "Destination country is required.";
+    if (!formData.startDate) e.startDate = "Start date is required.";
+    if (!formData.endDate) e.endDate = "End date is required.";
+    if (formData.startDate && formData.endDate && formData.endDate < formData.startDate) {
+      e.endDate = "End date must be on or after start date.";
     }
+    if (!formData.purpose.trim()) e.purpose = "Purpose is required.";
 
-    if (!formData.startDate) {
-      validationErrors.startDate = "Start date is required.";
-    }
+    return e;
+  }, [formData, isMoA, isAffiliate]);
 
-    if (!formData.endDate) {
-      validationErrors.endDate = "End date is required.";
-    }
-
+  const step1Valid = ![
+    "organizationType",
+    "travelerType",
+    "workflowType",
+    "sector",
+    "leadExecutiveOffice",
+    "organizationName",
+    "fullName",
+    "position",
+    "department",
+    "email",
+    "phone",
+  ].some((k) => {
+    if (isAffiliate && ["travelerType", "workflowType", "sector", "leadExecutiveOffice"].includes(k)) return false;
+    if (isMoA && k === "organizationName") return false;
     if (
-      formData.startDate &&
-      formData.endDate &&
-      formData.endDate < formData.startDate
+      !formData.organizationType &&
+      ["travelerType", "workflowType", "sector", "leadExecutiveOffice", "organizationName"].includes(k)
     ) {
-      validationErrors.endDate =
-        "End date must be on or after start date.";
+      return false;
     }
+    return Boolean(errors[k]);
+  });
 
-    if (!formData.purpose.trim()) {
-      validationErrors.purpose = "Purpose is required.";
-    }
-
-    return validationErrors;
-  }, [formData]);
-
-  const step1Valid =
-    !errors.travelerCategory &&
-    !errors.assignedStateMinisterId &&
-    !errors.fullName &&
-    !errors.position &&
-    !errors.department &&
-    !errors.email;
-
-  const step2Valid =
-    !errors.country &&
-    !errors.startDate &&
-    !errors.endDate &&
-    !errors.purpose;
-
+  const step2Valid = !["country", "startDate", "endDate", "purpose"].some((k) => errors[k]);
   const canSubmit = step1Valid && step2Valid;
 
-  const fetchStateMinisters = useCallback(async () => {
-    setLoading((prev) => ({
-      ...prev,
-      stateMinisters: true,
-    }));
-
+  const fetchOrganizations = useCallback(async () => {
+    setLoading((p) => ({ ...p, organizations: true }));
     try {
-      const response = await API.get("/state-ministers");
-      setStateMinisters(response.data || []);
-    } catch (error) {
-      console.error(error);
-      setNotice({
-        type: "error",
-        message: "Unable to load sectors.",
-      });
+      const res = await API.get("/affiliate-institutions");
+      setOrganizations(res.data || []);
+    } catch {
+      setNotice({ type: "error", message: "Unable to load affiliate institutions." });
     } finally {
-      setLoading((prev) => ({
-        ...prev,
-        stateMinisters: false,
-      }));
+      setLoading((p) => ({ ...p, organizations: false }));
     }
   }, []);
-const fetchOrganizations = useCallback(async () => {
-  setLoading((prev) => ({
-    ...prev,
-    organizations: true,
-  }));
 
-  try {
-    const response = await API.get(
-      "/affiliate-institutions"
-    );
-
-    setOrganizations(response.data || []);
-  } catch (error) {
-    console.error(error);
-
-    setNotice({
-      type: "error",
-      message:
-        "Unable to load affiliate institutions.",
-    });
-  } finally {
-    setLoading((prev) => ({
-      ...prev,
-      organizations: false,
-    }));
-  }
-}, []);
-  const fetchCountries = useCallback(async () => {
-    setLoading((prev) => ({
-      ...prev,
-      countries: true,
-    }));
-
+  const fetchMoaSectors = useCallback(async () => {
+    setLoading((p) => ({ ...p, moaSectors: true }));
     try {
-      const response = await fetch(
-        "https://restcountries.com/v3.1/all?fields=name"
-      );
-
-      const data = await response.json();
-
-      const countryNames = (data || [])
-        .map((country) => country?.name?.common)
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b));
-
-      setCountries(countryNames);
-    } catch (error) {
-      console.error(error);
-      setNotice({
-        type: "error",
-        message: "Unable to load countries.",
-      });
+      const res = await API.get("/moa-sectors");
+      setMoaSectors(res.data || []);
+    } catch {
+      setNotice({ type: "error", message: "Unable to load MoA sectors." });
     } finally {
-      setLoading((prev) => ({
-        ...prev,
-        countries: false,
-      }));
+      setLoading((p) => ({ ...p, moaSectors: false }));
+    }
+  }, []);
+
+  const fetchLeadExecutiveOffices = useCallback(async () => {
+    setLoading((p) => ({ ...p, leadExecutiveOffices: true }));
+    try {
+      const res = await API.get("/moa-executive-offices");
+      setLeadExecutiveOffices(res.data || []);
+    } catch {
+      setNotice({ type: "error", message: "Unable to load Lead Executive Offices." });
+    } finally {
+      setLoading((p) => ({ ...p, leadExecutiveOffices: false }));
+    }
+  }, []);
+
+  const fetchCountries = useCallback(async () => {
+    setLoading((p) => ({ ...p, countries: true }));
+    try {
+      const res = await fetch("https://restcountries.com/v3.1/all?fields=name");
+      const data = await res.json();
+      setCountries(
+        (data || [])
+          .map((c) => c?.name?.common)
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b))
+      );
+    } catch {
+      setNotice({ type: "error", message: "Unable to load countries." });
+    } finally {
+      setLoading((p) => ({ ...p, countries: false }));
     }
   }, []);
 
   useEffect(() => {
-  fetchOrganizations();
-  fetchStateMinisters();
-  fetchCountries();
-}, [
-  fetchOrganizations,
-  fetchStateMinisters,
-  fetchCountries,
-]);
+    fetchOrganizations();
+    fetchCountries();
+    fetchMoaSectors();
+    fetchLeadExecutiveOffices();
+  }, [fetchOrganizations, fetchCountries, fetchMoaSectors, fetchLeadExecutiveOffices]);
+
+  useEffect(() => {
+    if (!isMoA || !formData.workflowType || !sectorOptions.length) return;
+
+    const assignedOption = assignedSector
+      ? sectorOptions.find(
+          (sector) =>
+            normalizeComparable(sector.name) === normalizeComparable(assignedSector)
+        )
+      : null;
+
+    const nextSector = assignedOption?.name || (sectorOptions.length === 1 ? sectorOptions[0].name : "");
+
+    if (nextSector && formData.sector !== nextSector) {
+      setFormData((prev) => ({
+        ...prev,
+        sector: nextSector,
+        leadExecutiveOffice:
+          prev.sector === nextSector ? prev.leadExecutiveOffice : "",
+      }));
+    }
+  }, [
+    assignedSector,
+    formData.sector,
+    formData.workflowType,
+    isMoA,
+    normalizeComparable,
+    sectorOptions,
+  ]);
+
+  useEffect(() => {
+    if (!isMoA || !formData.sector || !leadExecutiveOfficeOptions.length) return;
+
+    const assignedOption = assignedLeadExecutiveOffice
+      ? leadExecutiveOfficeOptions.find(
+          (office) =>
+            normalizeComparable(office.name) ===
+            normalizeComparable(assignedLeadExecutiveOffice)
+        )
+      : null;
+
+    const nextOffice =
+      assignedOption?.name ||
+      (leadExecutiveOfficeOptions.length === 1 ? leadExecutiveOfficeOptions[0].name : "");
+
+    if (nextOffice && formData.leadExecutiveOffice !== nextOffice) {
+      setFormData((prev) => ({
+        ...prev,
+        leadExecutiveOffice: nextOffice,
+      }));
+    }
+  }, [
+    assignedLeadExecutiveOffice,
+    formData.leadExecutiveOffice,
+    formData.sector,
+    isMoA,
+    leadExecutiveOfficeOptions,
+    normalizeComparable,
+  ]);
 
   const goNext = () => {
-    setNotice({
-      type: "",
-      message: "",
-    });
+    setNotice({ type: "", message: "" });
 
     if (step === 1) {
       touchMany([
-        "travelerCategory",
-        ...(isAffiliate ? [] : ["assignedStateMinisterId"]),
+        "organizationType",
         "fullName",
         "position",
         "department",
         "email",
+        ...(isMoA ? ["travelerType", "workflowType", "sector", "leadExecutiveOffice"] : []),
+        ...(isAffiliate ? ["organizationName"] : []),
       ]);
 
       if (!step1Valid) {
-        setNotice({
-          type: "error",
-          message:
-            "Please complete the required fields in this step.",
-        });
+        setNotice({ type: "error", message: "Please complete all required fields." });
         return;
       }
     }
 
     if (step === 2) {
-      touchMany([
-        "country",
-        "startDate",
-        "endDate",
-        "purpose",
-      ]);
+      touchMany(["country", "startDate", "endDate", "purpose"]);
 
       if (!step2Valid) {
-        setNotice({
-          type: "error",
-          message:
-            "Please fix the highlighted fields before continuing.",
-        });
+        setNotice({ type: "error", message: "Please fix the highlighted fields." });
         return;
       }
     }
 
-    setStep((prev) => Math.min(3, prev + 1));
+    setStep((p) => Math.min(3, p + 1));
   };
 
-  const goBack = () => {
-    setStep((prev) => Math.max(1, prev - 1));
-  };
+  const goBack = () => setStep((p) => Math.max(1, p - 1));
 
   const resetForm = ({ keepNotice = false } = {}) => {
-    if (!keepNotice) {
-      setNotice({
-        type: "",
-        message: "",
-      });
-    }
-
+    if (!keepNotice) setNotice({ type: "", message: "" });
     setFormData(initialFormData);
     setTouched({});
     setStep(1);
   };
 
   const submitRequest = async () => {
-    setNotice({
-      type: "",
-      message: "",
-    });
-
+    setNotice({ type: "", message: "" });
     touchMany([
-      "travelerCategory",
-      ...(isAffiliate ? [] : ["assignedStateMinisterId"]),
+      "organizationType",
+      "travelerType",
+      "workflowType",
+      "organizationName",
       "fullName",
       "position",
       "department",
+      "sector",
+      "leadExecutiveOffice",
       "email",
+      "phone",
       "country",
       "startDate",
       "endDate",
@@ -509,396 +614,471 @@ const fetchOrganizations = useCallback(async () => {
     ]);
 
     if (!canSubmit) {
-      setNotice({
-        type: "error",
-        message:
-          "Please complete required fields before submitting.",
-      });
+      setNotice({ type: "error", message: "Please complete all required fields." });
       return;
     }
 
-    setLoading((prev) => ({
-      ...prev,
-      submitting: true,
-    }));
-
+    setLoading((p) => ({ ...p, submitting: true }));
     try {
       const data = new FormData();
 
-      Object.keys(formData).forEach((key) => {
-        const value = formData[key];
+      data.append("travelerCategory", isAffiliate ? "affiliate_institution" : formData.travelerType);
+      data.append("workflowType", isMoA ? formData.workflowType : "office_head_structure");
+      data.append("organizationName", isAffiliate ? formData.organizationName : "MoA");
+      data.append("department", isMoA ? formData.leadExecutiveOffice : formData.department);
 
-        if (
-          value !== null &&
-          value !== undefined &&
-          value !== ""
-        ) {
-          data.append(key, value);
+      [
+        "fullName",
+        "position",
+        "sector",
+        "email",
+        "phone",
+        "country",
+        "startDate",
+        "endDate",
+        "purpose",
+        "sponsor",
+        "passportNumber",
+      ].forEach((k) => {
+        if (formData[k]) {
+          data.append(k, k === "phone" ? normalizedPhone : formData[k]);
         }
       });
 
-      if (isAffiliate) {
-  data.delete("assignedStateMinisterId");
-}
+      ["passportFile", "invitationLetter", "torFile"].forEach((k) => {
+        if (formData[k]) data.append(k, formData[k]);
+      });
 
-      await API.post("/requests", data);
+      const created = (await API.post("/requests", data)).data;
+
+      if (created?.id) {
+        await API.put(`/requests/${created.id}/status`, {
+          action: "submit",
+          role: currentUser.role || "traveler",
+          actorEmail: currentUser.email || formData.email,
+          actorId: currentUser.id || null,
+          comment: "Request prepared and submitted by Expert.",
+        });
+      }
 
       setNotice({
         type: "success",
-        message: "Travel Request submitted successfully.",
+        message: "Travel request submitted and routed to Lead Executive Officer Review.",
       });
-
-      resetForm({
-        keepNotice: true,
-      });
+      resetForm({ keepNotice: true });
     } catch (error) {
-      console.error("Submit error:", error);
-
-      const serverMessage =
-        error?.response?.data?.message ||
+      const msg =
         error?.response?.data?.error ||
+        error?.response?.data?.message ||
         error?.message ||
-        "Error submitting request. Please try again.";
-
-      setNotice({
-        type: "error",
-        message:
-          typeof serverMessage === "string"
-            ? serverMessage
-            : "Error submitting request.",
-      });
+        "Error submitting request.";
+      setNotice({ type: "error", message: typeof msg === "string" ? msg : "Error submitting request." });
     } finally {
-      setLoading((prev) => ({
-        ...prev,
-        submitting: false,
-      }));
+      setLoading((p) => ({ ...p, submitting: false }));
     }
   };
 
   return (
     <div className="ministry-page min-h-screen px-4 py-10">
-      <div className="mx-auto w-full max-w-[1100px]">
-        <div className="mb-7">
+      <div className="mx-auto w-full max-w-[1120px]">
+        <div className="request-hero">
           <div className="header-strip w-24 mb-3" />
-
-          <h1 className="text-2xl font-extrabold text-slate-900">
-            New Travel Request
-          </h1>
-
-          <p className="mt-2 text-sm text-slate-600">
-            Simple steps. Only essential details first — optional
-            information later.
-          </p>
+          <div className="request-hero-content">
+            <div>
+              <h1 className="text-2xl font-extrabold text-slate-900">New Travel Request</h1>
+              <p className="mt-2 text-sm text-slate-600">
+                Prepare the traveler profile, trip details, and supporting documents before submitting for approval.
+              </p>
+            </div>
+          </div>
         </div>
 
         {notice.message && (
-          <div
-            className={`mb-6 ${
-              notice.type === "success"
-                ? "notice-success"
-                : "notice-error"
-            }`}
-          >
+          <div className={`mb-6 ${notice.type === "success" ? "notice-success" : "notice-error"}`}>
             {notice.message}
           </div>
         )}
 
-        <form
-          className="ministry-card p-6 md:p-8"
-          onSubmit={(e) => e.preventDefault()}
-        >
-          <StepIndicator
-            step={step}
-            setStep={setStep}
-            step1Valid={step1Valid}
-            step2Valid={step2Valid}
-          />
+        <form className="ministry-card p-6 md:p-8" onSubmit={(e) => e.preventDefault()}>
+          <div className="request-context-grid">
+            <div>
+          <span>Assigned MoA Structure</span>
+              <strong title={currentUser.sector || "Not assigned"}>
+                {currentUser.sector || "Not assigned"}
+              </strong>
+            </div>
+            <div>
+              <span>Lead Executive Office</span>
+              <strong title={currentUser.department || "Not assigned"}>
+                {currentUser.department || "Not assigned"}
+              </strong>
+            </div>
+            <div>
+              <span>Current Step</span>
+              <strong>
+                {step === 1 ? "Traveler Information" : step === 2 ? "Trip Details" : "Attachments and Review"}
+              </strong>
+            </div>
+          </div>
+
+          <StepIndicator step={step} setStep={setStep} step1Valid={step1Valid} step2Valid={step2Valid} />
 
           {step === 1 && (
-            <div className="space-y-8">
+            <div className="space-y-7">
               <div>
-                <div className="section-title text-base">
-                  Traveler
+                <div className="section-title text-base mb-1">Organization Type</div>
+                <div className="section-subtitle mb-4">
+                  Is the traveler a Ministry of Agriculture staff member or from an affiliate institution?
                 </div>
-
-                <div className="section-subtitle">
-                  Fill in traveler details. Traveler Category is
-                  mandatory.
-                </div>
+                <Field name="organizationType" label="Organization Type" required touched={touched} errors={errors}>
+                  <RadioCards
+                    name="organizationType"
+                    value={formData.organizationType}
+                    onChange={handleChange}
+                    cols={2}
+                    options={[
+                      { value: "moa", label: "Ministry of Agriculture (MoA)" },
+                      { value: "affiliate", label: "Affiliate Institute" },
+                    ]}
+                  />
+                </Field>
               </div>
 
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <Field
-                    name="travelerCategory"
-                    label="Traveler Category"
-                    required
-                    touched={touched}
-                    errors={errors}
-                  >
+              {isMoA && (
+                <>
+                  <div>
+                    <Divider label="Traveler Type" />
+                    <Field name="travelerType" label="Traveler Type" required touched={touched} errors={errors}>
+                      <RadioCards
+                        name="travelerType"
+                        value={formData.travelerType}
+                        onChange={handleChange}
+                        cols={2}
+                        options={travelerTypeOptions}
+                      />
+                    </Field>
+                  </div>
+
+                  {formData.travelerType && (
+                    <div>
+                      <Divider label="MoA Structure" />
+                      <Field
+                        name="workflowType"
+                        label="MoA Structure Type"
+                        required
+                        touched={touched}
+                        errors={errors}
+                        hint="Select the same structure type registered in Settings."
+                      >
+                        <RadioCards
+                          name="workflowType"
+                          value={formData.workflowType}
+                          onChange={handleChange}
+                          cols={3}
+                          options={workflowOptions}
+                        />
+                      </Field>
+                    </div>
+                  )}
+
+                  {formData.workflowType && (
+                    <>
+                      <div className="workflow-preview">
+                        <div className="workflow-preview-path">
+                          {(workflowPath[formData.workflowType] || []).map((stage, index) => (
+                            <span key={`${stage}-${index}`}>{stage}</span>
+                          ))}
+                        </div>
+                        <small>{selectedOwnerLabel} decides this structure before the next workflow stage.</small>
+                      </div>
+
+                    <div>
+                      <Divider label="Structure and Lead Executive Office" />
+                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                        <Field
+                          name="sector"
+                          label={`${selectedStructureTypeLabel} Structure`}
+                          required
+                          touched={touched}
+                          errors={errors}
+                          hint={`Only ${selectedStructureTypeLabel} structures registered in Settings are shown.`}
+                        >
+                          <select
+                            name="sector"
+                            value={formData.sector}
+                            onChange={handleChange}
+                            onBlur={() => markTouched("sector")}
+                            className="ministry-input"
+                            disabled={loading.moaSectors || hasAssignedSectorOption}
+                          >
+                            <option value="">
+                              {loading.moaSectors
+                                ? "Loading MoA structures..."
+                                : assignedSector && !sectorOptions.length
+                                ? "No matching assigned structure found"
+                                : `Select ${selectedStructureTypeLabel} Structure`}
+                            </option>
+                            {sectorOptions.map((sector) => (
+                              <option key={sector.id || sector.name} value={sector.name}>
+                                {sector.name}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+
+                        <Field
+                          name="leadExecutiveOffice"
+                          label="Lead Executive Office"
+                          required
+                          touched={touched}
+                          errors={errors}
+                          hint={`Select the Lead Executive Office under the selected ${selectedStructureTypeLabel} structure.`}
+                        >
+                          <select
+                            name="leadExecutiveOffice"
+                            value={formData.leadExecutiveOffice}
+                            onChange={handleChange}
+                            onBlur={() => markTouched("leadExecutiveOffice")}
+                            className="ministry-input"
+                            disabled={
+                              !formData.sector ||
+                              loading.leadExecutiveOffices ||
+                              hasAssignedLeadExecutiveOfficeOption
+                            }
+                          >
+                            <option value="">
+                              {!formData.sector
+                                ? `Select ${selectedStructureTypeLabel} Structure first`
+                                : loading.leadExecutiveOffices
+                                ? "Loading Lead Executive Offices..."
+                                : assignedLeadExecutiveOffice && !leadExecutiveOfficeOptions.length
+                                ? "No matching assigned office found"
+                                : "Select Lead Executive Office"}
+                            </option>
+                            {leadExecutiveOfficeOptions.map((office) => (
+                              <option key={office.id || office.name} value={office.name}>
+                                {office.name}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                      </div>
+                    </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {isAffiliate && (
+                <div>
+                  <Divider label="Affiliate Institution" />
+                  <Field name="organizationName" label="Affiliate Institution" required touched={touched} errors={errors}>
                     <select
-                      name="travelerCategory"
-                      value={formData.travelerCategory}
+                      name="organizationName"
+                      value={formData.organizationName}
                       onChange={handleChange}
-                      onBlur={() => markTouched("travelerCategory")}
-                      required
+                      onBlur={() => markTouched("organizationName")}
                       className="ministry-input"
                     >
-                      <option value="">Select Category</option>
-
-                      {categoryOptions.map((category) => (
-                        <option
-                          key={category.value}
-                          value={category.value}
-                        >
-                          {category.label}
+                      <option value="">{loading.organizations ? "Loading..." : "Select Affiliate Institution"}</option>
+                      {organizations.map((org) => (
+                        <option key={org.id} value={org.organization_name}>
+                          {org.organization_name}
                         </option>
                       ))}
                     </select>
                   </Field>
                 </div>
-{isAffiliate && (
-  <div className="md:col-span-2">
-    <Field
-      name="organizationName"
-      label="Affiliate Institution"
-      required
-      touched={touched}
-      errors={errors}
-    >
-      <select
-        name="organizationName"
-        value={formData.organizationName}
-        onChange={handleChange}
-        onBlur={() =>
-          markTouched("organizationName")
-        }
-        className="ministry-input"
-      >
-        <option value="">
-          {loading.organizations
-            ? "Loading institutions..."
-            : "Select Affiliate Institution"}
-        </option>
+              )}
 
-        {organizations.map((org) => (
-          <option
-            key={org.id}
-            value={org.organization_name}
-          >
-            {org.organization_name}
-          </option>
-        ))}
-      </select>
-    </Field>
-  </div>
-)}
-                {!isAffiliate && (
-                  <Field
-                    name="assignedStateMinisterId"
-                    label="Sector"
-                    required
-                    touched={touched}
-                    errors={errors}
-                  >
-                    <select
-                      name="assignedStateMinisterId"
-                      value={formData.assignedStateMinisterId}
-                      onChange={handleChange}
-                      onBlur={() =>
-                        markTouched("assignedStateMinisterId")
-                      }
-                      required
-                      disabled={loading.stateMinisters}
-                      className="ministry-input"
-                    >
-                      <option value="">
-                        {loading.stateMinisters
-                          ? "Loading sectors..."
-                          : "Select Sector"}
-                      </option>
+              {formData.organizationType && (
+                <div>
+                  <Divider label="Traveler Details" />
+                  <div className="traveler-split-grid">
+                    <div className="traveler-detail-panel">
+                      <div className="traveler-detail-heading">
+                        <span>Personal and Job Details</span>
+                        <small>Name, title, and requesting office/unit</small>
+                      </div>
 
-                      {stateMinisters.map((minister) => (
-                        <option
-                          key={minister.id}
-                          value={minister.id}
-                        >
-                          {minister.sector}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                )}
+                      <Field name="fullName" label="Full Name" required touched={touched} errors={errors}>
+                        <input
+                          name="fullName"
+                          value={formData.fullName}
+                          onChange={handleChange}
+                          onBlur={() => markTouched("fullName")}
+                          className="ministry-input"
+                        />
+                      </Field>
 
-                <Field
-                  name="fullName"
-                  label="Full Name"
-                  required
-                  touched={touched}
-                  errors={errors}
-                >
-                  <input
-                    name="fullName"
-                    value={formData.fullName}
-                    onChange={handleChange}
-                    onBlur={() => markTouched("fullName")}
-                    className="ministry-input"
-                    required
-                  />
-                </Field>
+                      <Field name="position" label="Position / Title" required touched={touched} errors={errors}>
+                        <input
+                          name="position"
+                          value={formData.position}
+                          onChange={handleChange}
+                          onBlur={() => markTouched("position")}
+                          className="ministry-input"
+                        />
+                      </Field>
 
-                <Field
-                  name="position"
-                  label="Position"
-                  required
-                  touched={touched}
-                  errors={errors}
-                >
-                  <input
-                    name="position"
-                    value={formData.position}
-                    onChange={handleChange}
-                    onBlur={() => markTouched("position")}
-                    className="ministry-input"
-                    required
-                  />
-                </Field>
+                      <Field
+                        name="department"
+                        label={isMoA ? "Requester Department / Unit" : "Department"}
+                        required
+                        touched={touched}
+                        errors={errors}
+                      >
+                        <input
+                          name="department"
+                          value={formData.department}
+                          onChange={handleChange}
+                          onBlur={() => markTouched("department")}
+                          className="ministry-input"
+                        />
+                      </Field>
+                    </div>
 
-                <Field
-                  name="department"
-                  label="Department"
-                  required
-                  touched={touched}
-                  errors={errors}
-                >
-                  <input
-                    name="department"
-                    value={formData.department}
-                    onChange={handleChange}
-                    onBlur={() => markTouched("department")}
-                    className="ministry-input"
-                    required
-                  />
-                </Field>
+                    <div className="traveler-detail-panel">
+                      <div className="traveler-detail-heading">
+                        <span>Contact Details</span>
+                        <small>Email is required; phone is optional</small>
+                      </div>
 
-                <Field
-                  name="email"
-                  label="Email"
-                  required
-                  touched={touched}
-                  errors={errors}
-                >
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    onBlur={() => markTouched("email")}
-                    className="ministry-input"
-                    required
-                  />
-                </Field>
+                      <Field name="email" label="Email Address" required touched={touched} errors={errors}>
+                        <input
+                          type="email"
+                          name="email"
+                          value={formData.email}
+                          onChange={handleChange}
+                          onBlur={() => markTouched("email")}
+                          className="ministry-input"
+                        />
+                      </Field>
 
-                <Field
-                  name="phone"
-                  label="Phone Number"
-                  hint="Optional"
-                  touched={touched}
-                  errors={errors}
-                >
-                  <input
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    className="ministry-input"
-                  />
-                </Field>
-              </div>
+                      <Field
+                        name="phone"
+                        label="Phone Number"
+                        hint={
+                          normalizedPhone
+                            ? `Will be saved as ${normalizedPhone}`
+                            : "Optional. Accepted: 09..., 9..., 07..., 7..., +251 9..., +251 7..."
+                        }
+                        touched={touched}
+                        errors={errors}
+                      >
+                        <input
+                          name="phone"
+                          value={formData.phone}
+                          onChange={handleChange}
+                          onBlur={() => markTouched("phone")}
+                          className="ministry-input"
+                          placeholder="09..."
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {step === 2 && (
             <div className="space-y-8">
               <div>
-                <div className="section-title text-base">Trip</div>
-
-                <div className="section-subtitle">
-                  Provide destination, dates, and purpose.
-                </div>
+                <div className="section-title text-base">Trip Details</div>
+                <div className="section-subtitle">Provide destination, dates, and purpose of travel.</div>
               </div>
 
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <Field
-                  name="country"
-                  label="Destination Country"
-                  required
-                  touched={touched}
-                  errors={errors}
-                >
-                  <input
-                    name="country"
-                    value={formData.country}
-                    onChange={handleChange}
-                    onBlur={() => markTouched("country")}
-                    list="countries"
-                    className="ministry-input"
-                    disabled={loading.countries}
-                    required
-                  />
+              {tripDuration && (
+                <div className="trip-duration-card">
+                  <span>Calculated Travel Period</span>
+                  <strong>
+                    {tripDuration} day{tripDuration === 1 ? "" : "s"}
+                  </strong>
+                  <small>From {formData.startDate} to {formData.endDate}</small>
+                </div>
+              )}
 
-                  <datalist id="countries">
-                    {countries.map((country) => (
-                      <option key={country} value={country} />
-                    ))}
-                  </datalist>
-                </Field>
+              <div className="trip-details-panels">
+                <div className="trip-detail-panel">
+                  <div className="traveler-detail-heading">
+                    <span>Destination and Travel Dates</span>
+                    <small>Country, start date, and end date</small>
+                  </div>
 
-                <Field
-                  name="startDate"
-                  label="Start Date"
-                  required
-                  touched={touched}
-                  errors={errors}
-                >
-                  <input
-                    type="date"
-                    name="startDate"
-                    value={formData.startDate}
-                    onChange={handleChange}
-                    onBlur={() => markTouched("startDate")}
-                    className="ministry-input"
-                    required
-                  />
-                </Field>
+                  <Field name="country" label="Destination Country" required touched={touched} errors={errors}>
+                    <input
+                      name="country"
+                      value={formData.country}
+                      onChange={handleChange}
+                      onBlur={() => markTouched("country")}
+                      list="countries-list"
+                      className="ministry-input"
+                      disabled={loading.countries}
+                      placeholder={loading.countries ? "Loading countries..." : "Type or select a country"}
+                    />
+                    <datalist id="countries-list">
+                      {countries.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
+                  </Field>
 
-                <Field
-                  name="endDate"
-                  label="End Date"
-                  required
-                  hint="Must be on/after Start Date."
-                  touched={touched}
-                  errors={errors}
-                >
-                  <input
-                    type="date"
-                    name="endDate"
-                    value={formData.endDate}
-                    onChange={handleChange}
-                    onBlur={() => markTouched("endDate")}
-                    min={formData.startDate || undefined}
-                    className="ministry-input"
-                    required
-                  />
-                </Field>
+                  <div className="date-range-grid">
+                    <Field name="startDate" label="Start Date" required touched={touched} errors={errors}>
+                      <input
+                        type="date"
+                        name="startDate"
+                        value={formData.startDate}
+                        onChange={handleChange}
+                        onBlur={() => markTouched("startDate")}
+                        className="ministry-input"
+                      />
+                    </Field>
 
-                <div className="md:col-span-2">
-                  <Field
-                    name="purpose"
-                    label="Purpose of Travel"
-                    required
-                    touched={touched}
-                    errors={errors}
-                  >
+                    <Field
+                      name="endDate"
+                      label="End Date"
+                      required
+                      hint="Must be on or after the start date."
+                      touched={touched}
+                      errors={errors}
+                    >
+                      <input
+                        type="date"
+                        name="endDate"
+                        value={formData.endDate}
+                        onChange={handleChange}
+                        onBlur={() => markTouched("endDate")}
+                        min={formData.startDate || undefined}
+                        className="ministry-input"
+                      />
+                    </Field>
+                  </div>
+                </div>
+
+                <div className="trip-detail-panel">
+                  <div className="traveler-detail-heading">
+                    <span>Travel Support and Purpose</span>
+                    <small>Sponsor, passport, and purpose of travel</small>
+                  </div>
+
+                  <div className="trip-support-grid">
+                    <Field name="sponsor" label="Sponsor / Funding Source" hint="Optional" touched={touched} errors={errors}>
+                      <input name="sponsor" value={formData.sponsor} onChange={handleChange} className="ministry-input" />
+                    </Field>
+
+                    <Field name="passportNumber" label="Passport Number" hint="Optional" touched={touched} errors={errors}>
+                      <input
+                        name="passportNumber"
+                        value={formData.passportNumber}
+                        onChange={handleChange}
+                        className="ministry-input"
+                      />
+                    </Field>
+                  </div>
+
+                  <Field name="purpose" label="Purpose of Travel" required touched={touched} errors={errors}>
                     <textarea
                       name="purpose"
                       value={formData.purpose}
@@ -906,40 +1086,9 @@ const fetchOrganizations = useCallback(async () => {
                       onBlur={() => markTouched("purpose")}
                       rows={5}
                       className="ministry-input"
-                      required
                     />
                   </Field>
                 </div>
-
-                <Field
-                  name="sponsor"
-                  label="Sponsor / Funding Source"
-                  hint="Optional"
-                  touched={touched}
-                  errors={errors}
-                >
-                  <input
-                    name="sponsor"
-                    value={formData.sponsor}
-                    onChange={handleChange}
-                    className="ministry-input"
-                  />
-                </Field>
-
-                <Field
-                  name="passportNumber"
-                  label="Passport Number"
-                  hint="Optional"
-                  touched={touched}
-                  errors={errors}
-                >
-                  <input
-                    name="passportNumber"
-                    value={formData.passportNumber}
-                    onChange={handleChange}
-                    className="ministry-input"
-                  />
-                </Field>
               </div>
             </div>
           )}
@@ -947,13 +1096,8 @@ const fetchOrganizations = useCallback(async () => {
           {step === 3 && (
             <div className="space-y-8">
               <div>
-                <div className="section-title text-base">
-                  Attachments
-                </div>
-
-                <div className="section-subtitle">
-                  Optional — attach documents to speed up processing.
-                </div>
+                <div className="section-title text-base">Attachments</div>
+                <div className="section-subtitle">Optional - attach documents to speed up processing.</div>
               </div>
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -964,7 +1108,6 @@ const fetchOrganizations = useCallback(async () => {
                   setFormData={setFormData}
                   handleFileChange={handleFileChange}
                 />
-
                 <FileBox
                   label="Invitation Letter"
                   name="invitationLetter"
@@ -972,7 +1115,6 @@ const fetchOrganizations = useCallback(async () => {
                   setFormData={setFormData}
                   handleFileChange={handleFileChange}
                 />
-
                 <FileBox
                   label="Terms of Reference (TOR)"
                   name="torFile"
@@ -983,55 +1125,79 @@ const fetchOrganizations = useCallback(async () => {
               </div>
 
               <div className="review-box">
-                <span className="font-semibold">Review:</span>{" "}
-                Attachments are optional. Click “Submit Request”
-                when ready.
+                <div className="review-box-title">Request Summary</div>
+                <div className="review-grid">
+                  <div>
+                    <span>Organization</span>
+                    <strong>{isMoA ? "Ministry of Agriculture" : formData.organizationName || "-"}</strong>
+                  </div>
+                  <div>
+                    <span>Traveler</span>
+                    <strong>{formData.fullName || "-"} - {formData.position || "-"}</strong>
+                  </div>
+                  {isMoA && (
+                    <div>
+                      <span>Traveler Type</span>
+                      <strong>{travelerTypeOptions.find((t) => t.value === formData.travelerType)?.label || "-"}</strong>
+                    </div>
+                  )}
+                  {isMoA && (
+                    <div>
+                  <span>MoA Structure Type</span>
+                      <strong>{selectedWorkflow?.label || "-"}</strong>
+                    </div>
+                  )}
+                  {isMoA && (
+                    <div>
+                      <span>{selectedStructureTypeLabel} Structure</span>
+                      <strong>{formData.sector || "-"}</strong>
+                    </div>
+                  )}
+                  {isMoA && (
+                    <div>
+                      <span>Lead Executive Office</span>
+                      <strong>{formData.leadExecutiveOffice || "-"}</strong>
+                    </div>
+                  )}
+                  <div>
+                    <span>Destination</span>
+                    <strong>{formData.country || "-"}</strong>
+                  </div>
+                  <div>
+                    <span>Travel Dates</span>
+                    <strong>
+                      {formData.startDate || "-"} to {formData.endDate || "-"}
+                    </strong>
+                  </div>
+                </div>
+                {isMoA && selectedWorkflow && (
+                  <div className="review-route">
+                    <span>Approval route</span>
+                    <strong>{selectedWorkflow.route}</strong>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <button
-              type="button"
-              onClick={() => resetForm()}
-              className="secondary-btn"
-            >
+            <button type="button" onClick={() => resetForm()} className="secondary-btn">
               Reset
             </button>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               {step > 1 && (
-                <button
-                  type="button"
-                  onClick={goBack}
-                  className="secondary-btn"
-                >
+                <button type="button" onClick={goBack} className="secondary-btn">
                   Back
                 </button>
               )}
-
               {step < 3 ? (
-                <button
-                  type="button"
-                  onClick={goNext}
-                  className="primary-btn"
-                  disabled={
-                    (step === 1 && !step1Valid) ||
-                    (step === 2 && !step2Valid)
-                  }
-                >
+                <button type="button" onClick={goNext} className="primary-btn">
                   Continue
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={submitRequest}
-                  className="primary-btn"
-                  disabled={loading.submitting || !canSubmit}
-                >
-                  {loading.submitting
-                    ? "Submitting..."
-                    : "Submit Request"}
+                <button type="button" onClick={submitRequest} className="primary-btn" disabled={loading.submitting}>
+                  {loading.submitting ? "Submitting..." : "Submit Request"}
                 </button>
               )}
             </div>

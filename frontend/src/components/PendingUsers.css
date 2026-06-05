@@ -3,67 +3,232 @@
 ============================================================ */
 
 .pending-users-page {
-  padding: 20px;
+  padding: 18px;
+  color: #172033;
 }
-
-/* ============================================================
-   HEADER
-============================================================ */
 
 .pending-users-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+}
+
+.pending-page-kicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-bottom: 7px;
+  padding: 4px 9px;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .pending-users-header h2 {
   margin: 0;
-  font-size: clamp(22px, 2.4vw, 28px);
-  font-weight: 800;
   color: #0f172a;
+  font-size: 1.45rem;
+  font-weight: 750;
+  letter-spacing: 0;
 }
 
 .pending-users-header p {
+  max-width: 660px;
   margin: 5px 0 0;
   color: #64748b;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .pending-refresh-btn {
-  border: none;
+  min-width: 104px;
+  border: 1px solid #0f766e;
   background: #0f766e;
   color: #ffffff;
-  padding: 10px 15px;
-  border-radius: 10px;
-  font-weight: 800;
-  font-size: 14px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 650;
   cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
 
 .pending-refresh-btn:hover {
   background: #115e59;
+  border-color: #115e59;
   transform: translateY(-1px);
 }
 
 .pending-refresh-btn:disabled {
   background: #94a3b8;
+  border-color: #94a3b8;
   cursor: not-allowed;
   transform: none;
 }
 
 /* ============================================================
-   CARD
+   SUMMARY
+============================================================ */
+
+.pending-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pending-summary-card {
+  min-height: 96px;
+  padding: 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.pending-summary-card span {
+  display: block;
+  color: #64748b;
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.pending-summary-card strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 1.65rem;
+  font-weight: 780;
+  line-height: 1;
+}
+
+.pending-summary-card small {
+  display: block;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+/* ============================================================
+   NOTICE AND ACCESS
+============================================================ */
+
+.pending-notice {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.pending-notice.success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.pending-notice.error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.pending-access-card {
+  max-width: 620px;
+  padding: 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.pending-access-card span {
+  color: #b45309;
+  font-size: 11.5px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.pending-access-card h2 {
+  margin: 8px 0;
+  color: #0f172a;
+  font-size: 1.15rem;
+}
+
+.pending-access-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   CARD AND CONTROLS
 ============================================================ */
 
 .pending-users-card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 16px;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.pending-controls {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(210px, 280px);
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.pending-search-field,
+.pending-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pending-search-field span,
+.pending-filter-field span {
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.pending-search-field input,
+.pending-filter-field select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.pending-search-field input {
+  padding: 0 12px;
+}
+
+.pending-filter-field select {
+  padding: 0 10px;
+}
+
+.pending-search-field input:focus,
+.pending-filter-field select:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
 /* ============================================================
@@ -72,61 +237,99 @@
 
 .pending-users-table-wrapper {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 .pending-users-table {
   width: 100%;
+  min-width: 0;
   border-collapse: collapse;
-  min-width: 900px;
+  table-layout: auto;
 }
 
 .pending-users-table th {
-  background: #f8fafc;
-  color: #334155;
-  padding: 12px 14px;
+  background: #ffffff;
+  color: #475569;
+  padding: 11px 12px;
   text-align: left;
-  font-size: 12.5px;
-  font-weight: 800;
+  font-size: 11.5px;
+  font-weight: 750;
   border-bottom: 1px solid #e2e8f0;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .pending-users-table td {
-  padding: 12px 14px;
+  padding: 12px;
   color: #334155;
-  font-size: 13.5px;
-  border-bottom: 1px solid #e2e8f0;
-  white-space: nowrap;
+  font-size: 12.5px;
+  border-bottom: 1px solid #eef2f7;
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.pending-users-table tr:hover {
+.pending-users-table tbody tr:hover {
   background: #f8fafc;
 }
 
-.user-name-cell {
+.pending-applicant-cell,
+.pending-contact-cell,
+.pending-org-cell,
+.pending-structure-cell {
+  min-width: 0;
+}
+
+.pending-contact-cell {
+  min-width: 0;
+}
+
+.pending-structure-cell {
+  min-width: 0;
+}
+
+.pending-applicant-cell strong,
+.pending-contact-cell strong,
+.pending-org-cell strong,
+.pending-structure-cell strong {
+  display: block;
+  max-width: 290px;
+  overflow: hidden;
   color: #0f172a;
-  font-weight: 800;
+  font-size: 12.5px;
+  font-weight: 680;
+  text-overflow: ellipsis;
 }
 
-.user-email-cell {
-  color: #2563eb;
-  font-weight: 700;
+.pending-contact-cell strong {
+  color: #1d4ed8;
 }
 
-/* ============================================================
-   STATUS
-============================================================ */
+.pending-applicant-cell span,
+.pending-contact-cell span,
+.pending-org-cell span,
+.pending-structure-cell span {
+  display: block;
+  max-width: 290px;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
 
 .pending-status-badge {
-  display: inline-block;
-  background: #fef3c7;
-  color: #92400e;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
   border: 1px solid #fde68a;
-  padding: 5px 10px;
   border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 800;
+  background: #fffbeb;
+  color: #92400e;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 650;
 }
 
 /* ============================================================
@@ -135,43 +338,50 @@
 
 .pending-actions {
   display: flex;
-  gap: 8px;
+  gap: 7px;
   flex-wrap: wrap;
 }
 
 .pending-approve-btn,
 .pending-reject-btn {
-  border: none;
-  padding: 8px 12px;
-  border-radius: 9px;
+  border: 1px solid transparent;
+  padding: 6px 10px;
+  border-radius: 7px;
   color: #ffffff;
-  font-size: 12.5px;
-  font-weight: 800;
+  font-size: 11.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
 
 .pending-approve-btn {
-  background: #16a34a;
+  background: #15803d;
+  border-color: #15803d;
 }
 
 .pending-approve-btn:hover {
-  background: #15803d;
+  background: #166534;
+  border-color: #166534;
   transform: translateY(-1px);
 }
 
 .pending-reject-btn {
-  background: #dc2626;
+  background: #ffffff;
+  border-color: #fecaca;
+  color: #b91c1c;
 }
 
 .pending-reject-btn:hover {
-  background: #b91c1c;
+  background: #fef2f2;
+  border-color: #fca5a5;
   transform: translateY(-1px);
 }
 
 .pending-approve-btn:disabled,
 .pending-reject-btn:disabled {
-  background: #94a3b8;
+  background: #e2e8f0;
+  border-color: #e2e8f0;
+  color: #64748b;
   cursor: not-allowed;
   transform: none;
 }
@@ -181,21 +391,33 @@
 ============================================================ */
 
 .pending-empty {
-  text-align: center;
-  padding: 32px 20px;
+  padding: 34px 20px;
   color: #64748b;
+  text-align: center;
+  white-space: normal;
 }
 
 .pending-empty strong {
   display: block;
-  color: #0f172a;
-  font-size: 17px;
   margin-bottom: 6px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 720;
 }
 
 /* ============================================================
    RESPONSIVE
 ============================================================ */
+
+@media (max-width: 980px) {
+  .pending-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pending-controls {
+    grid-template-columns: 1fr;
+  }
+}
 
 @media (max-width: 768px) {
   .pending-users-page {
@@ -204,20 +426,20 @@
 
   .pending-users-header {
     flex-direction: column;
-    align-items: flex-start;
   }
 
   .pending-refresh-btn {
     width: 100%;
   }
 
-  .pending-users-card {
-    padding: 12px;
-    border-radius: 14px;
+  .pending-summary-grid {
+    grid-template-columns: 1fr;
   }
 
-  .pending-users-table {
-    min-width: 820px;
+  .pending-users-table th,
+  .pending-users-table td {
+    padding: 9px 8px;
+    font-size: 11.5px;
   }
 }
 
@@ -227,25 +449,10 @@
   }
 
   .pending-users-header h2 {
-    font-size: 20px;
+    font-size: 1.25rem;
   }
 
   .pending-users-header p {
-    font-size: 13px;
-  }
-
-  .pending-users-table th,
-  .pending-users-table td {
-    padding: 10px 12px;
     font-size: 12.5px;
-  }
-
-  .pending-actions {
-    flex-direction: column;
-  }
-
-  .pending-approve-btn,
-  .pending-reject-btn {
-    width: 100%;
   }
 }

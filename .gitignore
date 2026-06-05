@@ -3,5 +3,10 @@ node_modules/
 uploads/
 pdfs/
 backup/
+build/
+dist/
+.expo/
+*.log
+*.zip
 *.backup
 .DS_Store

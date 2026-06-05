@@ -1,35 +1,90 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import API from '../services/api';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import API from "../services/api";
+import "./RequestTable.css";
 
 function RequestTable() {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   const [requests, setRequests] = useState([]);
-  const [search, setSearch] = useState('');
+  const [activeSearch, setActiveSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [search, setSearch] = useState("");
   const [showHistorical, setShowHistorical] = useState(false);
   const [viewingRequest, setViewingRequest] = useState(null);
   const [editingRequest, setEditingRequest] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState(null);
 
   const API_ORIGIN =
     import.meta.env.VITE_API_ORIGIN ||
     (import.meta.env.VITE_API_BASE_URL
-      ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, '')
-      : 'http://localhost:5000');
+      ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, "")
+      : "http://localhost:5000");
 
   const getPdfUrl = (id) => `${API_ORIGIN}/api/generate-pdf/${id}`;
   const getUploadUrl = (fileName) => `${API_ORIGIN}/uploads/${fileName}`;
 
+  const getRoleAliases = (role) => {
+    const aliases = {
+      ceo: ["ceo", "chief_executive_officer"],
+      chief_executive_officer: ["chief_executive_officer", "ceo"],
+      lead_executive: ["lead_executive", "lead_executive_officer"],
+      lead_executive_officer: ["lead_executive_officer", "lead_executive"],
+      state_minister: ["state_minister"],
+      office_head: ["office_head"],
+    };
+
+    return [...new Set(aliases[role] || [role])].filter(Boolean);
+  };
+
   const fetchRequests = useCallback(async () => {
     try {
-      const response = await API.get(
-        `/requests?role=${user.role}&email=${user.email}&id=${user.id}`
+      setLoading(true);
+      setNotice(null);
+
+      const roleAliases = getRoleAliases(user.role);
+      const responses = await Promise.allSettled(
+        roleAliases.map((role) => {
+          const params = new URLSearchParams({
+            role,
+            email: user.email || "",
+            id: user.id ? String(user.id) : "",
+          });
+
+          return API.get(`/requests?${params.toString()}`);
+        })
       );
 
-      setRequests(response.data || []);
+      const successfulResponses = responses
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => result.value);
+
+      if (!successfulResponses.length) {
+        throw responses.find((result) => result.status === "rejected")?.reason;
+      }
+
+      const mergedRequests = new Map();
+      successfulResponses
+        .flatMap((response) => response.data || [])
+        .forEach((request) => {
+          mergedRequests.set(request.id, request);
+        });
+
+      setRequests([...mergedRequests.values()]);
     } catch (error) {
       console.error(error);
-      alert('Failed to load requests');
+      const message =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to load requests";
+      setNotice({
+        type: "error",
+        message: `Failed to load requests. Check that the API server is running and reachable. ${message}`,
+      });
+    } finally {
+      setLoading(false);
     }
   }, [user.role, user.email, user.id]);
 
@@ -38,22 +93,22 @@ function RequestTable() {
   }, [fetchRequests]);
 
   const formatDate = (date) => {
-    if (!date) return '-';
+    if (!date) return "-";
 
-    return new Date(date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: '2-digit',
+    return new Date(date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "2-digit",
     });
   };
 
   const getInputDate = (date) => {
-    if (!date) return '';
+    if (!date) return "";
     return String(date).slice(0, 10);
   };
 
   const getTripDays = (startDate, endDate) => {
-    if (!startDate || !endDate) return '-';
+    if (!startDate || !endDate) return "-";
 
     const days =
       Math.ceil(
@@ -61,70 +116,166 @@ function RequestTable() {
           (1000 * 60 * 60 * 24)
       ) + 1;
 
-    return days > 0 ? days : '-';
+    return days > 0 ? days : "-";
+  };
+
+  const normalizeText = (value) => String(value || "").toLowerCase();
+
+  const formatWorkflowType = (workflowType) => {
+    const workflows = {
+      ceo_structure: "CEO",
+      office_head_structure: "Head of the Minister's Office",
+      sector_structure: "Sector",
+    };
+
+    return workflows[workflowType] || workflowType || "-";
   };
 
   const formatStage = (stage) => {
     const stages = {
-      state_minister: 'State Minister',
-      protocol: 'Protocol',
-      office_head: 'Office Head',
-      minister: 'Minister',
-      protocol_final: 'Pending Foreign Affairs Response',
-      completed: 'Completed',
-      traveler: 'Traveler Amendment',
-      chief_executive_officer: 'Chief Executive Officer',
+      expert_preparation: "Expert Preparation",
+      director_review: "Lead Executive Officer Review",
+      ceo_review: "CEO Review",
+      office_head_review: "Office Head Review",
+      lead_executive_review: "Lead Executive Officer Review",
+      state_minister_review: "State Minister Review",
+      protocol_clearance: "Protocol Clearance",
+      office_head_final: "Office Head Final Decision",
+      minister_review: "Minister Approval",
+      foreign_affairs_followup: "Foreign Affairs Follow-up",
+      completed: "Completed",
+
+      state_minister: "State Minister",
+      protocol: "Protocol",
+      office_head: "Office Head",
+      minister: "Minister",
+      protocol_final: "Pending Foreign Affairs Response",
+      traveler: "Traveler Amendment",
+      chief_executive_officer: "Chief Executive Officer",
     };
 
-    return stages[stage] || stage || '-';
+    return stages[stage] || stage || "-";
   };
 
-  const normalizeText = (value) => String(value || '').toLowerCase();
+  const getStageTone = (stage) => {
+    if (["completed"].includes(stage)) return "#166534";
+    if (["expert_preparation"].includes(stage)) return "#b45309";
+    if (["minister_review", "office_head_final"].includes(stage)) return "#7c3aed";
+    if (["protocol_clearance", "foreign_affairs_followup"].includes(stage)) return "#0369a1";
+    return "#1d4ed8";
+  };
 
-  const isProtocol = user?.role === 'protocol';
-  const isTraveler = user?.role === 'traveler';
-  const isOfficeHead = user?.role === 'office_head';
+  const getComment = (request) =>
+    request.amendment_comment ||
+    request.decision_comment ||
+    request.foreign_affairs_comment ||
+    "-";
 
-  const canApprove = [
-    'state_minister',
-    'protocol',
-    'office_head',
-    'chief_executive_officer',
-    'minister',
-    'admin',
+  const getPrimaryActionLabel = (request) => {
+    if (request.current_stage === "protocol_clearance") return "Clear";
+    if (request.current_stage === "office_head_final") return "Forward to Minister";
+    if (request.current_stage === "minister_review") return "Approve and send to Protocol";
+    return "Approve";
+  };
+
+  const isAdmin = ["admin", "super_admin"].includes(user?.role);
+  const isTraveler = ["traveler", "expert"].includes(user?.role);
+  const isCEO = ["chief_executive_officer", "ceo"].includes(user?.role);
+  const isOfficeHead = user?.role === "office_head";
+  const isLeadExecutive = ["lead_executive_officer", "lead_executive"].includes(user?.role);
+  const isStateMinister = user?.role === "state_minister";
+  const isProtocol = user?.role === "protocol";
+  const isMinister = user?.role === "minister";
+
+  const canDelete = isAdmin;
+  const canViewPdf = [
+    "protocol",
+    "admin",
+    "super_admin",
+    "office_head",
+    "minister",
+    "state_minister",
+    "chief_executive_officer",
+    "ceo",
+    "lead_executive_officer",
+    "lead_executive",
   ].includes(user?.role);
 
-  const canReject = [
-    'state_minister',
-    'office_head',
-    'chief_executive_officer',
-    'minister',
-    'admin',
-  ].includes(user?.role);
+  const stageMatches = useCallback((request, stages) => {
+    const currentStage = normalizeText(request.current_stage);
+    const status = normalizeText(request.status);
 
-  const canAmend = user?.role === 'protocol';
-  const canDelete = user?.role === 'admin';
-  const canViewPdf = ['protocol', 'admin'].includes(user?.role);
+    return stages.some((stage) => currentStage === stage || status === stage);
+  }, []);
+
+  const canDecideRequest = useCallback(
+    (request) => {
+      if (isAdmin) return true;
+
+      const workflowType = request.workflow_type;
+
+      if (isLeadExecutive && stageMatches(request, ["lead_executive_review", "lead_executive"])) return true;
+      if (
+        isStateMinister &&
+        workflowType === "sector_structure" &&
+        stageMatches(request, ["state_minister", "state_minister_review"])
+      ) {
+        return true;
+      }
+      if (
+        isCEO &&
+        workflowType === "ceo_structure" &&
+        stageMatches(request, ["ceo_review", "chief_executive_officer", "ceo"])
+      ) {
+        return true;
+      }
+      if (isOfficeHead && stageMatches(request, ["office_head_review", "office_head", "office_head_final"])) return true;
+      if (isProtocol && stageMatches(request, ["protocol_clearance", "protocol", "foreign_affairs_followup"])) {
+        return true;
+      }
+      if (isMinister && stageMatches(request, ["minister_review", "minister"])) return true;
+
+      return false;
+    },
+    [
+      isAdmin,
+      isCEO,
+      isLeadExecutive,
+      isMinister,
+      isOfficeHead,
+      isProtocol,
+      isStateMinister,
+      stageMatches,
+    ]
+  );
 
   const submittedRequests = useMemo(() => {
     return requests.filter((request) => {
+      const finalStatus = normalizeText(request.final_status);
+      const currentStage = normalizeText(request.current_stage);
       const isPending =
-        request.final_status === 'pending' &&
-        request.current_stage !== 'completed';
+        !["approved", "rejected"].includes(finalStatus) &&
+        currentStage !== "completed";
 
       const isAmendedForTraveler =
-        isTraveler && request.final_status === 'amended';
+        isTraveler &&
+        currentStage === "expert_preparation" &&
+        finalStatus === "amended";
 
-      return isPending || isAmendedForTraveler;
+      if (isAmendedForTraveler) return true;
+      if (!isPending) return false;
+      if (isTraveler) return true;
+
+      return canDecideRequest(request);
     });
-  }, [requests, isTraveler]);
+  }, [requests, isTraveler, canDecideRequest]);
 
   const historicalRequests = useMemo(() => {
     return requests.filter((request) => {
       const isHistorical =
-        request.final_status === 'approved' ||
-        request.final_status === 'rejected' ||
-        request.current_stage === 'completed';
+        request.final_status === "approved" ||
+        request.final_status === "rejected" ||
+        request.current_stage === "completed";
 
       if (!isHistorical) return false;
 
@@ -134,6 +285,7 @@ function RequestTable() {
 
       return (
         normalizeText(request.full_name).includes(keyword) ||
+        normalizeText(request.workflow_type).includes(keyword) ||
         normalizeText(request.sector).includes(keyword) ||
         normalizeText(request.department).includes(keyword) ||
         normalizeText(request.organization_name).includes(keyword) ||
@@ -146,52 +298,169 @@ function RequestTable() {
     });
   }, [requests, search]);
 
-  const updateStatus = async (id, status) => {
+  const filteredSubmittedRequests = useMemo(() => {
+    const keyword = normalizeText(activeSearch);
+
+    return submittedRequests.filter((request) => {
+      const finalStatus = normalizeText(request.final_status);
+      const currentStage = normalizeText(request.current_stage);
+
+      if (activeFilter === "action" && !canDecideRequest(request)) return false;
+      if (activeFilter === "amended" && finalStatus !== "amended") return false;
+      if (activeFilter === "protocol" && !currentStage.includes("protocol")) return false;
+
+      if (!keyword) return true;
+
+      return (
+        normalizeText(request.full_name).includes(keyword) ||
+        normalizeText(request.position).includes(keyword) ||
+        normalizeText(request.sector).includes(keyword) ||
+        normalizeText(request.department).includes(keyword) ||
+        normalizeText(request.organization_name).includes(keyword) ||
+        normalizeText(request.country).includes(keyword) ||
+        normalizeText(request.purpose).includes(keyword) ||
+        normalizeText(request.status).includes(keyword) ||
+        normalizeText(request.final_status).includes(keyword) ||
+        normalizeText(request.current_stage).includes(keyword)
+      );
+    });
+  }, [activeFilter, activeSearch, submittedRequests, canDecideRequest]);
+
+  const queueSummary = useMemo(() => {
+    const needsAction = submittedRequests.filter((request) => canDecideRequest(request)).length;
+    const amended = submittedRequests.filter(
+      (request) => normalizeText(request.final_status) === "amended"
+    ).length;
+    const protocol = submittedRequests.filter((request) =>
+      normalizeText(request.current_stage).includes("protocol")
+    ).length;
+
+    return [
+      {
+        label: "Active Queue",
+        value: submittedRequests.length,
+        helper: "Visible requests",
+      },
+      {
+        label: "Needs Action",
+        value: needsAction,
+        helper: "Assigned to your role",
+      },
+      {
+        label: "Returned",
+        value: amended,
+        helper: "Needs correction",
+      },
+      {
+        label: "Protocol",
+        value: protocol,
+        helper: "Clearance stage",
+      },
+    ];
+  }, [submittedRequests, canDecideRequest]);
+
+  const updateStatus = async (id, action, comment = "") => {
     if (updatingId) return;
 
     try {
       setUpdatingId(id);
 
       await API.put(`/requests/${id}/status`, {
-        status,
+        action,
         role: user.role,
         actorEmail: user.email,
+        actorId: user.id || null,
+        comment,
       });
 
       await fetchRequests();
+      setNotice({
+        type: "success",
+        message: "Request updated successfully.",
+      });
     } catch (error) {
       console.error(error);
-      alert(
-        error.response?.data?.error ||
-          'Failed to update request status'
-      );
+      setNotice({
+        type: "error",
+        message:
+          error.response?.data?.error || "Failed to update request status",
+      });
     } finally {
       setUpdatingId(null);
     }
   };
 
+  const rejectRequest = async (request) => {
+    let comment = "";
+
+    const returnsToExpert = [
+      "ceo_review",
+      "office_head_review",
+      "lead_executive_review",
+      "state_minister_review",
+    ].includes(request.current_stage);
+
+    if (returnsToExpert) {
+      comment = prompt("Enter correction / rejection comment");
+
+      if (!comment || !comment.trim()) return;
+    } else {
+      const confirmReject = window.confirm(
+        "Are you sure you want to reject this request?"
+      );
+
+      if (!confirmReject) return;
+    }
+
+    await updateStatus(request.id, "reject", comment.trim());
+  };
+
   const amendRequest = async (id) => {
-    const comment = prompt('Enter amendment comment');
+    const comment = prompt("Enter amendment comment");
 
     if (!comment || !comment.trim()) return;
+
+    await updateStatus(id, "amend", comment.trim());
+  };
+
+  const updateForeignAffairsStatus = async (id, action) => {
+    const comment = prompt(
+      action === "foreign_affairs_approved"
+        ? "Enter Foreign Affairs approval note, if any"
+        : "Enter Foreign Affairs rejection reason"
+    );
+
+    if (action === "foreign_affairs_rejected" && (!comment || !comment.trim())) {
+      return;
+    }
+
+    if (updatingId) return;
 
     try {
       setUpdatingId(id);
 
       await API.put(`/requests/${id}/status`, {
-        status: 'Amended',
+        action,
         role: user.role,
         actorEmail: user.email,
-        comment: comment.trim(),
+        actorId: user.id || null,
+        comment: comment || "",
+        foreignAffairsComment: comment || "",
       });
 
       await fetchRequests();
+      setNotice({
+        type: "success",
+        message: "Foreign Affairs decision updated.",
+      });
     } catch (error) {
       console.error(error);
-      alert(
-        error.response?.data?.error ||
-          'Failed to request amendment'
-      );
+      setNotice({
+        type: "error",
+        message:
+          error.response?.data?.error ||
+          "Failed to update Foreign Affairs decision",
+      });
     } finally {
       setUpdatingId(null);
     }
@@ -203,43 +472,48 @@ function RequestTable() {
     try {
       const data = new FormData();
 
-      data.append('travelerCategory', editingRequest.traveler_category || '');
-      data.append('organizationName', editingRequest.organization_name || '');
-      data.append('fullName', editingRequest.full_name || '');
-      data.append('position', editingRequest.position || '');
-      data.append('department', editingRequest.department || '');
-      data.append('email', editingRequest.email || '');
-      data.append('phone', editingRequest.phone || '');
-      data.append('country', editingRequest.country || '');
-      data.append('startDate', getInputDate(editingRequest.start_date));
-      data.append('endDate', getInputDate(editingRequest.end_date));
-      data.append('purpose', editingRequest.purpose || '');
-      data.append('sponsor', editingRequest.sponsor || '');
-      data.append('passportNumber', editingRequest.passport_number || '');
+      data.append("travelerCategory", editingRequest.traveler_category || "");
+      data.append("workflowType", editingRequest.workflow_type || "");
+      data.append("organizationName", editingRequest.organization_name || "");
+      data.append("fullName", editingRequest.full_name || "");
+      data.append("position", editingRequest.position || "");
+      data.append("department", editingRequest.department || "");
+      data.append("sector", editingRequest.sector || "");
+      data.append("email", editingRequest.email || "");
+      data.append("phone", editingRequest.phone || "");
+      data.append("country", editingRequest.country || "");
+      data.append("startDate", getInputDate(editingRequest.start_date));
+      data.append("endDate", getInputDate(editingRequest.end_date));
+      data.append("purpose", editingRequest.purpose || "");
+      data.append("sponsor", editingRequest.sponsor || "");
+      data.append("passportNumber", editingRequest.passport_number || "");
 
       if (editingRequest.passportFile) {
-        data.append('passportFile', editingRequest.passportFile);
+        data.append("passportFile", editingRequest.passportFile);
       }
 
       if (editingRequest.invitationLetter) {
-        data.append('invitationLetter', editingRequest.invitationLetter);
+        data.append("invitationLetter", editingRequest.invitationLetter);
       }
 
       if (editingRequest.torFile) {
-        data.append('torFile', editingRequest.torFile);
+        data.append("torFile", editingRequest.torFile);
       }
 
       await API.put(`/requests/${editingRequest.id}`, data);
 
-      alert('Request updated successfully');
+      setNotice({
+        type: "success",
+        message: "Request updated successfully.",
+      });
       setEditingRequest(null);
       await fetchRequests();
     } catch (error) {
       console.error(error);
-      alert(
-        error.response?.data?.error ||
-          'Failed to update request'
-      );
+      setNotice({
+        type: "error",
+        message: error.response?.data?.error || "Failed to update request",
+      });
     }
   };
 
@@ -254,14 +528,17 @@ function RequestTable() {
         actorEmail: user.email,
       });
 
-      alert('Request resubmitted successfully');
       await fetchRequests();
+      setNotice({
+        type: "success",
+        message: "Request resubmitted successfully.",
+      });
     } catch (error) {
       console.error(error);
-      alert(
-        error.response?.data?.error ||
-          'Failed to resubmit request'
-      );
+      setNotice({
+        type: "error",
+        message: error.response?.data?.error || "Failed to resubmit request",
+      });
     } finally {
       setUpdatingId(null);
     }
@@ -269,7 +546,7 @@ function RequestTable() {
 
   const deleteRequest = async (id) => {
     const confirmDelete = window.confirm(
-      'Are you sure you want to delete this request?'
+      "Are you sure you want to delete this request?"
     );
 
     if (!confirmDelete) return;
@@ -280,70 +557,49 @@ function RequestTable() {
       await API.delete(`/requests/${id}`);
 
       await fetchRequests();
+      setNotice({
+        type: "success",
+        message: "Request deleted successfully.",
+      });
     } catch (error) {
       console.error(error);
-      alert(
-        error.response?.data?.error ||
-          'Failed to delete request'
-      );
+      setNotice({
+        type: "error",
+        message: error.response?.data?.error || "Failed to delete request",
+      });
     } finally {
       setUpdatingId(null);
     }
   };
 
   const openPdf = (id) => {
-    window.open(getPdfUrl(id), '_blank');
+    window.open(getPdfUrl(id), "_blank");
   };
 
   const renderSectorDepartment = (request) => (
-    <td>
+    <td className="request-structure-cell">
       <strong>
-        {request.traveler_category === 'affiliate_institution'
-          ? 'Affiliate Institute'
-          : request.sector || '-'}
+        {request.traveler_category === "affiliate_institution"
+          ? "Affiliate Institute"
+          : request.sector || "-"}
       </strong>
       <br />
       <small>
-        {request.traveler_category === 'affiliate_institution'
-          ? request.organization_name || '-'
-          : request.department || '-'}
+        {request.traveler_category === "affiliate_institution"
+          ? request.organization_name || "-"
+          : request.department || "-"}
       </small>
     </td>
   );
 
   const renderTripDate = (request) => (
-    <td
-      style={{
-        maxWidth: '120px',
-        whiteSpace: 'normal',
-        lineHeight: '1.25',
-      }}
-    >
+    <td className="request-date-cell">
       <div>{formatDate(request.start_date)}</div>
-
-      <div
-        style={{
-          fontSize: '12px',
-          color: '#64748b',
-          marginTop: '4px',
-          marginBottom: '4px',
-        }}
-      >
-        to
-      </div>
-
+      <span>to</span>
       <div>{formatDate(request.end_date)}</div>
-
-      <div
-        style={{
-          marginTop: '6px',
-          color: '#2563eb',
-          fontWeight: '600',
-          fontSize: '12px',
-        }}
-      >
+      <strong>
         {getTripDays(request.start_date, request.end_date)} Days
-      </div>
+      </strong>
     </td>
   );
 
@@ -351,277 +607,418 @@ function RequestTable() {
     <span
       className={`status-badge ${normalizeText(request.status).replace(
         / /g,
-        '-'
+        "-"
       )}`}
     >
-      {request.status || '-'}
+      {request.status || "-"}
     </span>
   );
 
+  const renderStage = (request) => (
+    <span
+      className="request-stage-text"
+      style={{
+        "--stage-color": getStageTone(request.current_stage),
+      }}
+    >
+      {formatStage(request.current_stage)}
+    </span>
+  );
+
+  const renderWrappedText = (value, maxWidth = "220px") => (
+    <td
+      className="request-wrap-cell"
+      style={{
+        maxWidth,
+      }}
+    >
+      {value || "-"}
+    </td>
+  );
+
+  const renderTravelerCell = (request) => (
+    <td className="request-traveler-cell">
+      <strong>{request.full_name || "-"}</strong>
+      <small>{request.position || "-"}</small>
+    </td>
+  );
+
+  const renderCommentCell = (request) => (
+    <td
+      className={`request-comment-cell ${
+        request.final_status === "amended" ? "amended" : ""
+      }`}
+    >
+      {getComment(request)}
+    </td>
+  );
+
   const renderFinalStatus = (request) => {
-    if (request.final_status === 'approved') {
+    if (request.final_status === "approved") {
       return <span className="status-badge approved">Approved</span>;
     }
 
-    if (request.final_status === 'rejected') {
+    if (request.final_status === "rejected") {
       return <span className="status-badge rejected">Rejected</span>;
     }
 
-    if (request.final_status === 'amended') {
+    if (request.final_status === "amended") {
       return <span className="status-badge amended">Amended</span>;
     }
 
     return <span className="status-badge pending">Pending</span>;
   };
 
-  const renderRequestActions = (request) => (
-    <>
-      {isProtocol && request.current_stage === 'protocol' && (
+  const canActAtStage = (request) => {
+    return canDecideRequest(request);
+  };
+
+  const renderRequestActions = (request) => {
+    const stage = request.current_stage;
+    const isCompleted =
+      request.current_stage === "completed" ||
+      request.final_status === "approved" ||
+      request.final_status === "rejected";
+    const isBusy = updatingId === request.id;
+    const processingLabel = isBusy ? "..." : null;
+
+    return (
+      <div className="request-action-group">
         <button
-          className="pdf-btn"
-          disabled={updatingId === request.id}
+          className="pdf-btn action-icon-btn"
+          title="View request details"
+          disabled={isBusy}
           onClick={() => setViewingRequest(request)}
         >
-          View
+          {processingLabel || "View"}
         </button>
-      )}
 
-      {canApprove &&
-        request.current_stage !== 'completed' &&
-        request.current_stage !== 'protocol_final' &&
-        request.final_status !== 'amended' && (
-          <button
-            className="approve-btn"
-            disabled={updatingId === request.id}
-            onClick={() => updateStatus(request.id, 'Approved')}
-          >
-            {updatingId === request.id
-              ? 'Processing...'
-              : user.role === 'protocol'
-              ? 'Clear'
-              : 'Approve'}
-          </button>
-        )}
+        {!isCompleted &&
+          canActAtStage(request) &&
+          stage !== "protocol_clearance" &&
+          stage !== "foreign_affairs_followup" &&
+          stage !== "office_head_final" &&
+          stage !== "minister_review" && (
+            <>
+              <button
+                className="approve-btn action-icon-btn"
+                title={getPrimaryActionLabel(request)}
+                disabled={isBusy}
+                onClick={() => updateStatus(request.id, "approve")}
+              >
+                {processingLabel || "Accept"}
+              </button>
 
-      {isOfficeHead &&
-        request.current_stage === 'office_head' &&
-        request.final_status !== 'approved' &&
-        request.final_status !== 'rejected' && (
-          <button
-            className="edit-btn"
-            disabled={updatingId === request.id}
-            onClick={() =>
-              updateStatus(request.id, 'ForwardedToMinister')
-            }
-          >
-            {updatingId === request.id
-              ? 'Processing...'
-              : 'Forward to Minister'}
-          </button>
-        )}
+              <button
+                className="reject-btn action-icon-btn"
+                title="Reject or return for correction"
+                disabled={isBusy}
+                onClick={() => rejectRequest(request)}
+              >
+                {processingLabel || "Reject"}
+              </button>
+            </>
+          )}
 
-      {canReject &&
-        request.current_stage !== 'completed' &&
-        request.current_stage !== 'protocol_final' &&
-        request.final_status !== 'amended' && (
-          <button
-            className="reject-btn"
-            disabled={updatingId === request.id}
-            onClick={() => updateStatus(request.id, 'Rejected')}
-          >
-            {updatingId === request.id ? 'Processing...' : 'Reject'}
-          </button>
-        )}
-
-      {canAmend && request.current_stage === 'protocol' && (
-        <button
-          className="edit-btn"
-          disabled={updatingId === request.id}
-          onClick={() => amendRequest(request.id)}
-        >
-          Amend
-        </button>
-      )}
-
-      {isTraveler && request.final_status === 'amended' && (
-        <>
-          <button
-            className="edit-btn"
-            disabled={updatingId === request.id}
-            onClick={() => setEditingRequest(request)}
-          >
-            Edit
-          </button>
-
-          <button
-            className="approve-btn"
-            disabled={updatingId === request.id}
-            onClick={() => resubmitRequest(request.id)}
-          >
-            {updatingId === request.id ? 'Processing...' : 'Resubmit'}
-          </button>
-        </>
-      )}
-
-      {user?.role === 'protocol' &&
-        request.current_stage === 'protocol_final' &&
-        request.final_status === 'pending' && (
+        {!isCompleted && canActAtStage(request) && stage === "protocol_clearance" && (
           <>
             <button
-              className="approve-btn"
-              disabled={updatingId === request.id}
-              onClick={() =>
-                updateStatus(request.id, 'ForeignAffairsApproved')
-              }
+              className="approve-btn action-icon-btn"
+              title="Clear protocol review"
+              disabled={isBusy}
+              onClick={() => updateStatus(request.id, "clear")}
             >
-              {updatingId === request.id
-                ? 'Processing...'
-                : 'Foreign Affairs Approved'}
+              {processingLabel || "Clear"}
             </button>
 
             <button
-              className="reject-btn"
-              disabled={updatingId === request.id}
-              onClick={() =>
-                updateStatus(request.id, 'ForeignAffairsRejected')
-              }
+              className="edit-btn action-icon-btn"
+              title="Request amendment"
+              disabled={isBusy}
+              onClick={() => amendRequest(request.id)}
             >
-              {updatingId === request.id
-                ? 'Processing...'
-                : 'Foreign Affairs Rejected'}
+              Amend
             </button>
           </>
         )}
 
-      {canViewPdf && (
-        <button
-          className="pdf-btn"
-          disabled={updatingId === request.id}
-          onClick={() => openPdf(request.id)}
-        >
-          PDF
-        </button>
-      )}
+        {!isCompleted && canActAtStage(request) && stage === "office_head_final" && (
+          <>
+            <button
+              className="approve-btn action-icon-btn"
+              title={getPrimaryActionLabel(request)}
+              disabled={isBusy}
+              onClick={() => updateStatus(request.id, "approve")}
+            >
+              {processingLabel || "Forward"}
+            </button>
 
-      {canDelete && (
-        <button
-          className="delete-btn"
-          disabled={updatingId === request.id}
-          onClick={() => deleteRequest(request.id)}
-        >
-          Delete
-        </button>
-      )}
-    </>
-  );
+            <button
+              className="reject-btn action-icon-btn"
+              title="Reject request"
+              disabled={isBusy}
+              onClick={() => rejectRequest(request)}
+            >
+              {processingLabel || "Reject"}
+            </button>
+          </>
+        )}
+
+        {!isCompleted && canActAtStage(request) && stage === "minister_review" && (
+          <>
+            <button
+              className="approve-btn action-icon-btn"
+              title={getPrimaryActionLabel(request)}
+              disabled={isBusy}
+              onClick={() => updateStatus(request.id, "approve")}
+            >
+              {processingLabel || "Approve"}
+            </button>
+
+            <button
+              className="reject-btn action-icon-btn"
+              title="Reject request"
+              disabled={isBusy}
+              onClick={() => rejectRequest(request)}
+            >
+              {processingLabel || "Reject"}
+            </button>
+          </>
+        )}
+
+        {!isCompleted &&
+          canActAtStage(request) &&
+          stage === "foreign_affairs_followup" && (
+            <>
+              <button
+                className="approve-btn action-icon-btn action-wide-btn"
+                title="Foreign Affairs approved"
+                disabled={isBusy}
+                onClick={() =>
+                  updateForeignAffairsStatus(
+                    request.id,
+                    "foreign_affairs_approved"
+                  )
+                }
+              >
+                {processingLabel || "FA OK"}
+              </button>
+
+              <button
+                className="reject-btn action-icon-btn action-wide-btn"
+                title="Foreign Affairs rejected"
+                disabled={isBusy}
+                onClick={() =>
+                  updateForeignAffairsStatus(
+                    request.id,
+                    "foreign_affairs_rejected"
+                  )
+                }
+              >
+                {processingLabel || "FA Reject"}
+              </button>
+            </>
+          )}
+
+        {isTraveler &&
+          request.current_stage === "expert_preparation" &&
+          request.final_status === "amended" && (
+            <>
+              <button
+                className="edit-btn action-icon-btn"
+                title="Edit returned request"
+                disabled={isBusy}
+                onClick={() => setEditingRequest(request)}
+              >
+                Edit
+              </button>
+
+              <button
+                className="approve-btn action-icon-btn"
+                title="Resubmit corrected request"
+                disabled={isBusy}
+                onClick={() => resubmitRequest(request.id)}
+              >
+                {processingLabel || "Send"}
+              </button>
+            </>
+          )}
+
+        {canViewPdf && (
+          <button
+            className="pdf-btn action-icon-btn"
+            title="Open PDF"
+            disabled={isBusy}
+            onClick={() => openPdf(request.id)}
+          >
+            PDF
+          </button>
+        )}
+
+        {canDelete && (
+          <button
+            className="delete-btn action-icon-btn"
+            title="Delete request"
+            disabled={isBusy}
+            onClick={() => deleteRequest(request.id)}
+          >
+            Del
+          </button>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div className="table-container">
-      <div className="table-header">
-        <h2>Submitted Requests</h2>
+    <div className="table-container request-table-page">
+      <div className="table-header request-table-header">
+        <div>
+          <span className="request-table-kicker">Travel Workflow</span>
+          <h2>Submitted Requests</h2>
+          <p>
+            Review assigned travel requests, returned corrections, and completed history.
+          </p>
+        </div>
 
-        <button
-          type="button"
-          className="edit-btn"
-          onClick={() => setShowHistorical((prev) => !prev)}
-        >
-          {showHistorical ? 'Hide Historical Travel' : 'Show Historical Travel'}
-          {historicalRequests.length > 0 ? ` (${historicalRequests.length})` : ''}
-        </button>
+        <div className="request-header-actions">
+          <button
+            type="button"
+            className="request-refresh-btn"
+            onClick={fetchRequests}
+            disabled={loading}
+          >
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+
+          <button
+            type="button"
+            className="request-history-toggle"
+            onClick={() => setShowHistorical((prev) => !prev)}
+          >
+            {showHistorical ? "Hide Historical" : "Show Historical"}
+            {historicalRequests.length > 0
+              ? ` (${historicalRequests.length})`
+              : ""}
+          </button>
+        </div>
       </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Sector/ Department</th>
-            <th>Destination Country</th>
-            <th>Travel Purpose</th>
-            <th>Travel Date</th>
-            <th>Status</th>
-            <th>Current Stage</th>
-            <th>Amendment Comment</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
+      <div className="request-summary-grid">
+        {queueSummary.map((item, index) => (
+          <div
+            className={`request-summary-card tone-${index + 1}`}
+            key={item.label}
+          >
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <small>{item.helper}</small>
+          </div>
+        ))}
+      </div>
 
-        <tbody>
-          {submittedRequests.length === 0 ? (
-            <tr>
-              <td colSpan="9">No submitted requests found</td>
-            </tr>
-          ) : (
-            submittedRequests.map((request) => (
-              <tr key={request.id}>
-                <td>{request.full_name || '-'}</td>
+      {notice && (
+        <div className={`request-notice ${notice.type}`}>
+          {notice.message}
+        </div>
+      )}
 
-                {renderSectorDepartment(request)}
+      <div className="request-table-controls">
+        <input
+          type="text"
+          placeholder="Search active requests..."
+          className="search-input"
+          value={activeSearch}
+          onChange={(e) => setActiveSearch(e.target.value)}
+        />
 
-                <td
-                  style={{
-                    maxWidth: '90px',
-                    whiteSpace: 'normal',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.2',
-                  }}
-                >
-                  {request.country || '-'}
-                </td>
+        <select
+          className="search-input request-filter-select"
+          value={activeFilter}
+          onChange={(e) => setActiveFilter(e.target.value)}
+        >
+          <option value="all">All active requests</option>
+          <option value="action">Needs my action</option>
+          <option value="amended">Returned / amended</option>
+          <option value="protocol">Protocol clearance</option>
+        </select>
+      </div>
 
-                <td
-                  style={{
-                    maxWidth: '220px',
-                    whiteSpace: 'normal',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.3',
-                  }}
-                >
-                  {request.purpose || '-'}
-                </td>
+      <div className="request-section-card">
+        <div className="request-section-header">
+          <div>
+            <h3>Active Request Queue</h3>
+            <p>{filteredSubmittedRequests.length} request{filteredSubmittedRequests.length === 1 ? "" : "s"} in this view</p>
+          </div>
+        </div>
 
-                {renderTripDate(request)}
-
-                <td>{renderStatus(request)}</td>
-
-                <td>{formatStage(request.current_stage)}</td>
-
-                <td
-                  style={{
-                    maxWidth: '220px',
-                    whiteSpace: 'normal',
-                    wordBreak: 'break-word',
-                    color:
-                      request.final_status === 'amended'
-                        ? '#b45309'
-                        : '#64748b',
-                    fontWeight:
-                      request.final_status === 'amended'
-                        ? '600'
-                        : '400',
-                  }}
-                >
-                  {request.final_status === 'amended'
-                    ? request.amendment_comment || 'Amendment requested'
-                    : '-'}
-                </td>
-
-                <td>{renderRequestActions(request)}</td>
+        <div className="request-table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Sector / Lead Executive Office</th>
+                <th>Destination</th>
+                <th>Purpose</th>
+                <th>Travel Date</th>
+                <th>Status</th>
+                <th>Current Stage</th>
+                <th>Comment</th>
+                <th>Actions</th>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            </thead>
+
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td className="request-empty-cell" colSpan="9">
+                    <strong>Loading submitted requests...</strong>
+                    <span>Please wait while the request queue refreshes.</span>
+                  </td>
+                </tr>
+              ) : filteredSubmittedRequests.length === 0 ? (
+                <tr>
+                  <td className="request-empty-cell" colSpan="9">
+                    <strong>No submitted requests found</strong>
+                    <span>Try changing the search text or active request filter.</span>
+                  </td>
+                </tr>
+              ) : (
+                filteredSubmittedRequests.map((request) => (
+                  <tr key={request.id}>
+                    {renderTravelerCell(request)}
+
+                    {renderSectorDepartment(request)}
+
+                    {renderWrappedText(request.country, "110px")}
+
+                    {renderWrappedText(request.purpose, "240px")}
+
+                    {renderTripDate(request)}
+
+                    <td className="request-status-cell">{renderStatus(request)}</td>
+
+                    <td>{renderStage(request)}</td>
+
+                    {renderCommentCell(request)}
+
+                    <td>{renderRequestActions(request)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {showHistorical && (
         <>
           <div
-            className="table-header"
-            style={{
-              marginTop: '40px',
-              marginBottom: '15px',
-            }}
+            className="table-header request-history-header"
           >
-            <h2>Historical Travel</h2>
+            <div>
+              <h2>Historical Travel</h2>
+              <p>Approved, rejected, and completed requests visible to your role.</p>
+            </div>
 
             <input
               type="text"
@@ -632,71 +1029,64 @@ function RequestTable() {
             />
           </div>
 
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>
-                  Sector/
-                  <br />
-                  Department
-                </th>
-                <th>Destination Country</th>
-                <th>Travel Purpose</th>
-                <th>Travel Date</th>
-                <th>Final Status</th>
-                <th>Current Stage</th>
-                {canViewPdf && <th>PDF</th>}
-              </tr>
-            </thead>
-
-            <tbody>
-              {historicalRequests.length === 0 ? (
-                <tr>
-                  <td colSpan={canViewPdf ? '8' : '7'}>
-                    No historical requests found
-                  </td>
-                </tr>
-              ) : (
-                historicalRequests.map((request) => (
-                  <tr key={request.id}>
-                    <td>{request.full_name || '-'}</td>
-
-                    {renderSectorDepartment(request)}
-
-                    <td>{request.country || '-'}</td>
-
-                    <td
-                      style={{
-                        maxWidth: '260px',
-                        whiteSpace: 'normal',
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      {request.purpose || '-'}
-                    </td>
-
-                    {renderTripDate(request)}
-
-                    <td>{renderFinalStatus(request)}</td>
-
-                    <td>{formatStage(request.current_stage)}</td>
-
-                    {canViewPdf && (
-                      <td>
-                        <button
-                          className="pdf-btn"
-                          onClick={() => openPdf(request.id)}
-                        >
-                          PDF
-                        </button>
-                      </td>
-                    )}
+          <div className="request-section-card">
+            <div className="request-table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Sector / Lead Executive Office</th>
+                    <th>Destination</th>
+                    <th>Purpose</th>
+                    <th>Travel Date</th>
+                    <th>Final Status</th>
+                    <th>Current Stage</th>
+                    {canViewPdf && <th>PDF</th>}
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                </thead>
+
+                <tbody>
+                  {historicalRequests.length === 0 ? (
+                    <tr>
+                      <td className="request-empty-cell" colSpan={canViewPdf ? "8" : "7"}>
+                        <strong>No historical requests found</strong>
+                        <span>Try changing the historical travel search text.</span>
+                      </td>
+                    </tr>
+                  ) : (
+                    historicalRequests.map((request) => (
+                      <tr key={request.id}>
+                        {renderTravelerCell(request)}
+
+                        {renderSectorDepartment(request)}
+
+                        {renderWrappedText(request.country, "110px")}
+
+                        {renderWrappedText(request.purpose, "260px")}
+
+                        {renderTripDate(request)}
+
+                        <td className="request-status-cell">{renderFinalStatus(request)}</td>
+
+                        <td>{renderStage(request)}</td>
+
+                        {canViewPdf && (
+                          <td>
+                            <button
+                              className="pdf-btn"
+                              onClick={() => openPdf(request.id)}
+                            >
+                              PDF
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </>
       )}
 
@@ -707,43 +1097,57 @@ function RequestTable() {
 
             <div className="request-detail-grid">
               <div>
+                <strong>Workflow</strong>
+                <p>{formatWorkflowType(viewingRequest.workflow_type)}</p>
+              </div>
+
+              <div>
                 <strong>Traveler Category</strong>
-                <p>{viewingRequest.traveler_category || '-'}</p>
+                <p>{viewingRequest.traveler_category || "-"}</p>
               </div>
 
               <div>
                 <strong>Organization</strong>
-                <p>{viewingRequest.organization_name || '-'}</p>
+                <p>{viewingRequest.organization_name || "-"}</p>
               </div>
 
               <div>
                 <strong>Traveler Name</strong>
-                <p>{viewingRequest.full_name || '-'}</p>
+                <p>{viewingRequest.full_name || "-"}</p>
               </div>
 
               <div>
                 <strong>Position</strong>
-                <p>{viewingRequest.position || '-'}</p>
+                <p>{viewingRequest.position || "-"}</p>
               </div>
 
               <div>
-                <strong>Department</strong>
-                <p>{viewingRequest.department || '-'}</p>
+                <strong>Sector</strong>
+                <p>{viewingRequest.sector || "-"}</p>
+              </div>
+
+              <div>
+                <strong>
+                  {viewingRequest.traveler_category === "affiliate_institution"
+                    ? "Department"
+                    : "Lead Executive Office"}
+                </strong>
+                <p>{viewingRequest.department || "-"}</p>
               </div>
 
               <div>
                 <strong>Email</strong>
-                <p>{viewingRequest.email || '-'}</p>
+                <p>{viewingRequest.email || "-"}</p>
               </div>
 
               <div>
                 <strong>Phone</strong>
-                <p>{viewingRequest.phone || '-'}</p>
+                <p>{viewingRequest.phone || "-"}</p>
               </div>
 
               <div>
                 <strong>Destination Country</strong>
-                <p>{viewingRequest.country || '-'}</p>
+                <p>{viewingRequest.country || "-"}</p>
               </div>
 
               <div>
@@ -762,24 +1166,24 @@ function RequestTable() {
                   {getTripDays(
                     viewingRequest.start_date,
                     viewingRequest.end_date
-                  )}{' '}
+                  )}{" "}
                   Days
                 </p>
               </div>
 
               <div>
                 <strong>Sponsor</strong>
-                <p>{viewingRequest.sponsor || '-'}</p>
+                <p>{viewingRequest.sponsor || "-"}</p>
               </div>
 
               <div>
                 <strong>Passport Number</strong>
-                <p>{viewingRequest.passport_number || '-'}</p>
+                <p>{viewingRequest.passport_number || "-"}</p>
               </div>
 
               <div>
                 <strong>Status</strong>
-                <p>{viewingRequest.status || '-'}</p>
+                <p>{viewingRequest.status || "-"}</p>
               </div>
 
               <div>
@@ -787,13 +1191,31 @@ function RequestTable() {
                 <p>{formatStage(viewingRequest.current_stage)}</p>
               </div>
 
+              <div>
+                <strong>Foreign Affairs Status</strong>
+                <p>{viewingRequest.foreign_affairs_status || "-"}</p>
+              </div>
+
               <div className="detail-full">
                 <strong>Purpose of Travel</strong>
-                <p>{viewingRequest.purpose || '-'}</p>
+                <p>{viewingRequest.purpose || "-"}</p>
               </div>
+
+              {(viewingRequest.amendment_comment ||
+                viewingRequest.decision_comment ||
+                viewingRequest.foreign_affairs_comment) && (
+                <div className="detail-full">
+                  <strong>Comment</strong>
+                  <p>
+                    {viewingRequest.amendment_comment ||
+                      viewingRequest.decision_comment ||
+                      viewingRequest.foreign_affairs_comment}
+                  </p>
+                </div>
+              )}
             </div>
 
-            <h3 style={{ marginTop: '25px' }}>Attached Documents</h3>
+            <h3 style={{ marginTop: "25px" }}>Attached Documents</h3>
 
             <div className="attachment-review">
               {viewingRequest.passport_file ? (
@@ -809,9 +1231,7 @@ function RequestTable() {
                   </div>
                 </a>
               ) : (
-                <div className="attachment-empty">
-                  No Passport Uploaded
-                </div>
+                <div className="attachment-empty">No Passport Uploaded</div>
               )}
 
               {viewingRequest.invitation_letter ? (
@@ -840,40 +1260,14 @@ function RequestTable() {
                   className="attachment-card"
                 >
                   <div className="attachment-title">TOR Document</div>
-                  <div className="attachment-name">
-                    {viewingRequest.tor_file}
-                  </div>
+                  <div className="attachment-name">{viewingRequest.tor_file}</div>
                 </a>
               ) : (
-                <div className="attachment-empty">
-                  No TOR Uploaded
-                </div>
+                <div className="attachment-empty">No TOR Uploaded</div>
               )}
             </div>
 
             <div className="modal-actions">
-              <button
-                className="approve-btn"
-                disabled={updatingId === viewingRequest.id}
-                onClick={async () => {
-                  await updateStatus(viewingRequest.id, 'Approved');
-                  setViewingRequest(null);
-                }}
-              >
-                {updatingId === viewingRequest.id ? 'Processing...' : 'Clear'}
-              </button>
-
-              <button
-                className="edit-btn"
-                disabled={updatingId === viewingRequest.id}
-                onClick={async () => {
-                  await amendRequest(viewingRequest.id);
-                  setViewingRequest(null);
-                }}
-              >
-                Amend
-              </button>
-
               <button
                 className="delete-btn"
                 onClick={() => setViewingRequest(null)}
@@ -888,21 +1282,42 @@ function RequestTable() {
       {editingRequest && (
         <div className="modal-overlay">
           <div className="modal-content large-modal">
-            <h2>Edit Amended Request</h2>
+            <h2>Edit Returned Request</h2>
 
             <div className="notice-error">
-              <strong>Protocol Comment:</strong>
+              <strong>Correction / Amendment Comment:</strong>
               <br />
               {editingRequest.amendment_comment ||
-                'Please update the request as required.'}
+                editingRequest.decision_comment ||
+                "Please update the request as required."}
             </div>
 
             <div className="request-detail-grid">
               <div>
+                <strong>Workflow Type</strong>
+                <select
+                  className="ministry-input"
+                  value={editingRequest.workflow_type || ""}
+                  onChange={(e) =>
+                    setEditingRequest({
+                      ...editingRequest,
+                      workflow_type: e.target.value,
+                    })
+                  }
+                >
+                  <option value="ceo_structure">CEO Structure</option>
+                  <option value="office_head_structure">
+                    Office Head Structure
+                  </option>
+                  <option value="sector_structure">Sector Structure</option>
+                </select>
+              </div>
+
+              <div>
                 <strong>Traveler Category</strong>
                 <input
                   className="ministry-input"
-                  value={editingRequest.traveler_category || ''}
+                  value={editingRequest.traveler_category || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -916,7 +1331,7 @@ function RequestTable() {
                 <strong>Organization Name</strong>
                 <input
                   className="ministry-input"
-                  value={editingRequest.organization_name || ''}
+                  value={editingRequest.organization_name || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -930,7 +1345,7 @@ function RequestTable() {
                 <strong>Full Name</strong>
                 <input
                   className="ministry-input"
-                  value={editingRequest.full_name || ''}
+                  value={editingRequest.full_name || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -944,7 +1359,7 @@ function RequestTable() {
                 <strong>Position</strong>
                 <input
                   className="ministry-input"
-                  value={editingRequest.position || ''}
+                  value={editingRequest.position || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -955,10 +1370,24 @@ function RequestTable() {
               </div>
 
               <div>
+                <strong>Sector</strong>
+                <input
+                  className="ministry-input"
+                  value={editingRequest.sector || ""}
+                  onChange={(e) =>
+                    setEditingRequest({
+                      ...editingRequest,
+                      sector: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div>
                 <strong>Department</strong>
                 <input
                   className="ministry-input"
-                  value={editingRequest.department || ''}
+                  value={editingRequest.department || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -972,7 +1401,7 @@ function RequestTable() {
                 <strong>Email</strong>
                 <input
                   className="ministry-input"
-                  value={editingRequest.email || ''}
+                  value={editingRequest.email || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -986,7 +1415,7 @@ function RequestTable() {
                 <strong>Phone</strong>
                 <input
                   className="ministry-input"
-                  value={editingRequest.phone || ''}
+                  value={editingRequest.phone || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -1000,7 +1429,7 @@ function RequestTable() {
                 <strong>Destination Country</strong>
                 <input
                   className="ministry-input"
-                  value={editingRequest.country || ''}
+                  value={editingRequest.country || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -1044,7 +1473,7 @@ function RequestTable() {
                 <strong>Sponsor</strong>
                 <input
                   className="ministry-input"
-                  value={editingRequest.sponsor || ''}
+                  value={editingRequest.sponsor || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -1058,7 +1487,7 @@ function RequestTable() {
                 <strong>Passport Number</strong>
                 <input
                   className="ministry-input"
-                  value={editingRequest.passport_number || ''}
+                  value={editingRequest.passport_number || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -1073,7 +1502,7 @@ function RequestTable() {
                 <textarea
                   className="ministry-input"
                   rows={4}
-                  value={editingRequest.purpose || ''}
+                  value={editingRequest.purpose || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
@@ -1084,13 +1513,13 @@ function RequestTable() {
               </div>
             </div>
 
-            <h3 style={{ marginTop: '25px' }}>Update Attachments</h3>
+            <h3 style={{ marginTop: "25px" }}>Update Attachments</h3>
 
             <div className="attachment-review">
               <div className="attachment-empty">
                 <strong>Passport Copy</strong>
                 <br />
-                Current: {editingRequest.passport_file || 'Not uploaded'}
+                Current: {editingRequest.passport_file || "Not uploaded"}
                 <input
                   type="file"
                   accept="application/pdf,image/png,image/jpeg"
@@ -1106,8 +1535,7 @@ function RequestTable() {
               <div className="attachment-empty">
                 <strong>Invitation Letter</strong>
                 <br />
-                Current:{' '}
-                {editingRequest.invitation_letter || 'Not uploaded'}
+                Current: {editingRequest.invitation_letter || "Not uploaded"}
                 <input
                   type="file"
                   accept="application/pdf,image/png,image/jpeg"
@@ -1123,7 +1551,7 @@ function RequestTable() {
               <div className="attachment-empty">
                 <strong>TOR Document</strong>
                 <br />
-                Current: {editingRequest.tor_file || 'Not uploaded'}
+                Current: {editingRequest.tor_file || "Not uploaded"}
                 <input
                   type="file"
                   accept="application/pdf,image/png,image/jpeg"
@@ -1144,6 +1572,18 @@ function RequestTable() {
                 onClick={updateRequest}
               >
                 Save Changes
+              </button>
+
+              <button
+                className="approve-btn"
+                disabled={updatingId === editingRequest.id}
+                onClick={async () => {
+                  await updateRequest();
+                  await resubmitRequest(editingRequest.id);
+                  setEditingRequest(null);
+                }}
+              >
+                Save and Resubmit
               </button>
 
               <button

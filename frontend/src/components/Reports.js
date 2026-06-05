@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import './Reports.css';
 
 import {
@@ -20,6 +20,83 @@ import {
 
 import API from '../services/api';
 
+const REPORT_ROLES = ['admin', 'super_admin', 'minister', 'office_head'];
+
+const COLORS = {
+  approved: '#16a34a',
+  rejected: '#dc2626',
+  pending: '#f59e0b',
+  amended: '#7c3aed',
+  total: '#2563eb',
+  stage: ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#7c3aed', '#0891b2'],
+};
+
+const formatRole = (role) =>
+  String(role || 'User')
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const formatStage = (stage) => {
+  const labels = {
+    expert_preparation: 'Expert Preparation',
+    lead_executive_review: 'Lead Executive Review',
+    director_review: 'Lead Executive Review',
+    state_minister_review: 'State Minister Review',
+    ceo_review: 'CEO Review',
+    office_head_review: 'Office Head Review',
+    protocol_clearance: 'Protocol Clearance',
+    office_head_final: 'Office Head Final',
+    minister_review: 'Minister Review',
+    foreign_affairs_followup: 'Foreign Affairs Follow-up',
+    completed: 'Completed',
+  };
+
+  return labels[stage] || formatRole(stage);
+};
+
+const addMonths = (date, months) => {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+};
+
+const formatMonth = (date) =>
+  date.toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+  });
+
+const buildMonthlyForecast = (monthlyRequests) => {
+  const actual = (monthlyRequests || []).map((item) => ({
+    month: item.month,
+    actual: Number(item.total || 0),
+    forecast: null,
+    type: 'Actual',
+  }));
+
+  if (actual.length === 0) return [];
+
+  const recent = actual.slice(-3);
+  const average =
+    recent.reduce((sum, item) => sum + item.actual, 0) / recent.length;
+  const last = actual[actual.length - 1]?.actual || 0;
+  const previous =
+    actual.length > 1 ? actual[actual.length - 2]?.actual || 0 : last;
+  const trend = Math.max(-2, Math.min(3, last - previous));
+  const lastMonthDate = monthlyRequests[monthlyRequests.length - 1]?.month_date
+    ? new Date(monthlyRequests[monthlyRequests.length - 1].month_date)
+    : new Date();
+
+  const forecast = [1, 2, 3].map((step) => ({
+    month: formatMonth(addMonths(lastMonthDate, step)),
+    actual: null,
+    forecast: Math.max(0, Math.round(average + trend * step)),
+    type: 'Forecast',
+  }));
+
+  return [...actual, ...forecast];
+};
+
 function Reports() {
   const [statusSummary, setStatusSummary] = useState([]);
   const [sectorStatus, setSectorStatus] = useState([]);
@@ -32,17 +109,7 @@ function Reports() {
 
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchReports();
-  }, []);
-
   const getUserRole = () => {
-    const directRole = localStorage.getItem('role');
-
-    if (directRole) {
-      return directRole;
-    }
-
     try {
       const storedUser = JSON.parse(localStorage.getItem('user'));
       return storedUser?.role || '';
@@ -52,14 +119,36 @@ function Reports() {
   };
 
   const userRole = getUserRole();
+  const canViewReports = REPORT_ROLES.includes(userRole);
+  const canViewOfficeMinisterGraphs = canViewReports;
 
-  const canViewOfficeMinisterGraphs =
-    userRole === 'office_head' ||
-    userRole === 'office head' ||
-    userRole === 'officehead' ||
-    userRole === 'minister';
+  const transformSectorData = useCallback((data) => {
+    const grouped = {};
 
-  const fetchReports = async () => {
+    data.forEach((item) => {
+      const sector = item.sector || 'Unassigned';
+
+      if (!grouped[sector]) {
+        grouped[sector] = {
+          sector,
+          approved: 0,
+          rejected: 0,
+          pending: 0,
+          amended: 0,
+        };
+      }
+
+      const status = item.final_status || item.status || 'pending';
+
+      grouped[sector][status] = Number(item.count) || 0;
+    });
+
+    return Object.values(grouped);
+  }, []);
+
+  const fetchReports = useCallback(async () => {
+    if (!canViewReports) return;
+
     setError('');
 
     const results = await Promise.allSettled([
@@ -103,76 +192,154 @@ function Reports() {
         'Some report data could not be loaded. Please check backend report APIs.'
       );
     }
-  };
+  }, [canViewReports, transformSectorData]);
 
-  const transformSectorData = (data) => {
-    const grouped = {};
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
 
-    data.forEach((item) => {
-      const sector = item.sector || 'Unassigned';
+  const getCount = useCallback(
+    (status) => {
+      const found = statusSummary.find((item) => item.status === status);
 
-      if (!grouped[sector]) {
-        grouped[sector] = {
-          sector,
-          approved: 0,
-          rejected: 0,
-          pending: 0,
-          amended: 0,
-        };
-      }
-
-      const status = item.final_status || item.status || 'pending';
-
-      grouped[sector][status] = Number(item.count) || 0;
-    });
-
-    return Object.values(grouped);
-  };
-
-  const getCount = (status) => {
-    const found = statusSummary.find((item) => item.status === status);
-
-    return found ? Number(found.count) : 0;
-  };
-
-  const totalRequests = statusSummary.reduce(
-    (sum, item) => sum + Number(item.count || 0),
-    0
+      return found ? Number(found.count) : 0;
+    },
+    [statusSummary]
   );
 
-  const COLORS = [
-    '#2563eb',
-    '#16a34a',
-    '#dc2626',
-    '#f59e0b',
-    '#7c3aed',
+  const analytics = useMemo(() => {
+    const totalRequests = statusSummary.reduce(
+      (sum, item) => sum + Number(item.count || 0),
+      0
+    );
+    const approved = getCount('approved');
+    const rejected = getCount('rejected');
+    const pending = getCount('pending');
+    const amended = getCount('amended');
+    const completed = approved + rejected;
+    const approvalRate = completed
+      ? Math.round((approved / completed) * 100)
+      : 0;
+
+    return {
+      totalRequests,
+      approved,
+      rejected,
+      pending,
+      amended,
+      approvalRate,
+    };
+  }, [getCount, statusSummary]);
+
+  const summaryCards = [
+    {
+      label: 'Total Requests',
+      value: analytics.totalRequests,
+      detail: 'All registered travel requests',
+      tone: 'blue',
+    },
+    {
+      label: 'Approved',
+      value: analytics.approved,
+      detail: `${analytics.approvalRate}% approval rate`,
+      tone: 'green',
+    },
+    {
+      label: 'Rejected',
+      value: analytics.rejected,
+      detail: 'Final rejected requests',
+      tone: 'red',
+    },
+    {
+      label: 'Pending',
+      value: analytics.pending,
+      detail: `${analytics.amended} returned / amended`,
+      tone: 'amber',
+    },
   ];
+
+  const formattedStageSummary = stageSummary.map((item) => ({
+    ...item,
+    stageLabel: formatStage(item.current_stage),
+  }));
+
+  const forecastData = useMemo(
+    () => buildMonthlyForecast(monthlyRequests),
+    [monthlyRequests]
+  );
+
+  const forecastOnly = forecastData.filter((item) => item.type === 'Forecast');
+  const nextForecast = forecastOnly[0]?.forecast || 0;
+  const forecastAverage = forecastOnly.length
+    ? Math.round(
+        forecastOnly.reduce((sum, item) => sum + item.forecast, 0) /
+          forecastOnly.length
+      )
+    : 0;
+  const forecastPeak = forecastOnly.reduce(
+    (peak, item) => (item.forecast > peak.forecast ? item : peak),
+    { month: '-', forecast: 0 }
+  );
+
+  if (!canViewReports) {
+    return (
+      <div className="reports-page">
+        <div className="reports-access-card">
+          <h2>Reports Access Restricted</h2>
+          <p>
+            Analytical reports are available only to Admin, Super Admin,
+            Minister, and Office Head roles.
+          </p>
+          <span>Your role: {formatRole(userRole)}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="reports-page">
-  <h2 className="reports-title">Analytical Reports</h2>
+      <div className="reports-hero">
+        <div>
+          <span>FTMS Reports</span>
+          <h2 className="reports-title">Analytical Reports</h2>
+          <p>
+            Ministry-level travel analytics for Admin, Super Admin, Minister,
+            and Office Head review.
+          </p>
+        </div>
+
+        <button type="button" onClick={fetchReports}>
+          Refresh Reports
+        </button>
+      </div>
 
       {error && <div className="notice-error">{error}</div>}
 
       <div className="reports-summary-grid">
-        <div className="reports-stat-card">
-          <h3>Total Requests</h3>
-          <p>{totalRequests}</p>
-        </div>
+        {summaryCards.map((card) => (
+          <div className={`reports-stat-card ${card.tone}`} key={card.label}>
+            <h3>{card.label}</h3>
+            <p>{card.value}</p>
+            <small>{card.detail}</small>
+          </div>
+        ))}
+      </div>
 
-        <div className="reports-stat-card">
-          <h3>Approved</h3>
-          <p>{getCount('approved')}</p>
+      <div className="reports-forecast-strip">
+        <div>
+          <span>Next Month Forecast</span>
+          <strong>{nextForecast}</strong>
+          <small>Estimated approved travel requests</small>
         </div>
-
-        <div className="reports-stat-card">
-          <h3>Rejected</h3>
-          <p>{getCount('rejected')}</p>
+        <div>
+          <span>3-Month Average Forecast</span>
+          <strong>{forecastAverage}</strong>
+          <small>Expected monthly approval volume</small>
         </div>
-
-        <div className="reports-stat-card">
-          <h3>Pending</h3>
-          <p>{getCount('pending')}</p>
+        <div>
+          <span>Forecast Peak</span>
+          <strong>{forecastPeak.forecast}</strong>
+          <small>{forecastPeak.month}</small>
         </div>
       </div>
 
@@ -182,7 +349,10 @@ function Reports() {
 
       <div className="reports-grid">
         <div className="reports-card">
-          <h3>Monthly Travel Requests</h3>
+          <div className="reports-card-header">
+            <h3>Monthly Approved Travel</h3>
+            <p>Approved requests grouped by travel start month.</p>
+          </div>
 
           {monthlyRequests.length === 0 ? (
             <p className="reports-empty">No monthly data available</p>
@@ -213,7 +383,7 @@ function Reports() {
                     position="top"
                     style={{
                       fontSize: 12,
-                      fontWeight: 'bold',
+                      fontWeight: 700,
                       fill: '#2563eb',
                     }}
                   />
@@ -223,8 +393,51 @@ function Reports() {
           )}
         </div>
 
+        <div className="reports-card reports-card-wide">
+          <div className="reports-card-header">
+            <h3>3-Month Travel Forecast</h3>
+            <p>
+              Simple projection based on recent approved monthly travel volume.
+            </p>
+          </div>
+
+          {forecastData.length === 0 ? (
+            <p className="reports-empty">No monthly data available for forecasting</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={330}>
+              <LineChart data={forecastData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis allowDecimals={false} tickCount={6} domain={[0, 'auto']} />
+                <Tooltip />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="actual"
+                  name="Actual Approved"
+                  stroke="#2563eb"
+                  strokeWidth={3}
+                  connectNulls={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="forecast"
+                  name="Forecast"
+                  stroke="#f59e0b"
+                  strokeWidth={3}
+                  strokeDasharray="6 5"
+                  connectNulls={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
         <div className="reports-card">
-          <h3>Approved vs Rejected by Sector</h3>
+          <div className="reports-card-header">
+            <h3>Status by Structure</h3>
+            <p>Approved, rejected, and pending requests by sector or organization group.</p>
+          </div>
 
           {sectorStatus.length === 0 ? (
             <p className="reports-empty">No sector data available</p>
@@ -249,8 +462,8 @@ function Reports() {
                   fill="#16a34a"
                   label={{
                     position: 'top',
-                    fontWeight: 'bold',
-                    fill: '#000',
+                    fontWeight: 600,
+                    fill: '#334155',
                   }}
                 />
 
@@ -259,8 +472,8 @@ function Reports() {
                   fill="#dc2626"
                   label={{
                     position: 'top',
-                    fontWeight: 'bold',
-                    fill: '#000',
+                    fontWeight: 600,
+                    fill: '#334155',
                   }}
                 />
 
@@ -269,8 +482,8 @@ function Reports() {
                   fill="#f59e0b"
                   label={{
                     position: 'top',
-                    fontWeight: 'bold',
-                    fill: '#000',
+                    fontWeight: 600,
+                    fill: '#334155',
                   }}
                 />
               </BarChart>
@@ -279,7 +492,10 @@ function Reports() {
         </div>
 
         <div className="reports-card">
-          <h3>Requests by Workflow Stage</h3>
+          <div className="reports-card-header">
+            <h3>Requests by Workflow Stage</h3>
+            <p>Current workflow distribution across all requests.</p>
+          </div>
 
           {stageSummary.length === 0 ? (
             <p className="reports-empty">No workflow stage data available</p>
@@ -287,18 +503,18 @@ function Reports() {
             <ResponsiveContainer width="100%" height={350}>
               <PieChart>
                 <Pie
-                  data={stageSummary}
+                  data={formattedStageSummary}
                   dataKey="count"
-                  nameKey="current_stage"
+                  nameKey="stageLabel"
                   cx="50%"
                   cy="50%"
                   outerRadius={120}
                   label
                 >
-                  {stageSummary.map((entry, index) => (
+                  {formattedStageSummary.map((entry, index) => (
                     <Cell
                       key={index}
-                      fill={COLORS[index % COLORS.length]}
+                      fill={COLORS.stage[index % COLORS.stage.length]}
                     />
                   ))}
                 </Pie>
@@ -311,7 +527,10 @@ function Reports() {
         </div>
 
         <div className="reports-card">
-          <h3>Status Summary</h3>
+          <div className="reports-card-header">
+            <h3>Status Summary</h3>
+            <p>Overall final status distribution.</p>
+          </div>
 
           {statusSummary.length === 0 ? (
             <p className="reports-empty">No status data available</p>
@@ -336,8 +555,8 @@ function Reports() {
                   fill="#2563eb"
                   label={{
                     position: 'top',
-                    fontWeight: 'bold',
-                    fill: '#000',
+                    fontWeight: 600,
+                    fill: '#334155',
                   }}
                 />
               </BarChart>
@@ -352,13 +571,19 @@ function Reports() {
 
       {canViewOfficeMinisterGraphs && (
         <>
-          <h2 className="reports-section-title">
-  Part 2: Office Head and Minister Report
-</h2>
+          <div className="reports-section-heading">
+            <h2 className="reports-section-title">
+              Office Head and Minister Report
+            </h2>
+            <p>Organization-level reports visible to all report-authorized roles.</p>
+          </div>
 
           <div className="reports-grid">
             <div className="reports-card">
-              <h3>MoA vs Affiliate Institute Count</h3>
+              <div className="reports-card-header">
+                <h3>MoA vs Affiliate Institute Count</h3>
+                <p>Compares internal MoA and affiliate institution travel requests.</p>
+              </div>
 
               {moaVsAffiliateData.length === 0 ? (
                 <p className="reports-empty">No MoA or Affiliate Institute data available</p>
@@ -383,8 +608,8 @@ function Reports() {
                       fill="#2563eb"
                       label={{
                         position: 'top',
-                        fontWeight: 'bold',
-                        fill: '#000',
+                        fontWeight: 600,
+                        fill: '#334155',
                       }}
                     />
                   </BarChart>
@@ -393,7 +618,10 @@ function Reports() {
             </div>
 
             <div className="reports-card">
-              <h3>MoA Travelers by Sector</h3>
+              <div className="reports-card-header">
+                <h3>MoA Travelers by Sector</h3>
+                <p>MoA requests grouped by registered structure.</p>
+              </div>
 
               {moaSectorData.length === 0 ? (
                 <p className="reports-empty">No MoA sector data available</p>
@@ -424,8 +652,8 @@ function Reports() {
                       fill="#16a34a"
                       label={{
                         position: 'top',
-                        fontWeight: 'bold',
-                        fill: '#000',
+                        fontWeight: 600,
+                        fill: '#334155',
                       }}
                     />
                   </BarChart>
@@ -434,7 +662,10 @@ function Reports() {
             </div>
 
             <div className="reports-card">
-              <h3>Affiliate Institute Travelers by Organization</h3>
+              <div className="reports-card-header">
+                <h3>Affiliate Institute Travelers by Organization</h3>
+                <p>Affiliate institution requests grouped by organization.</p>
+              </div>
 
               {affiliateOrganizationData.length === 0 ? (
                 <p className="reports-empty">No affiliate organization data available</p>
@@ -465,8 +696,8 @@ function Reports() {
                       fill="#f97316"
                       label={{
                         position: 'top',
-                        fontWeight: 'bold',
-                        fill: '#000',
+                        fontWeight: 600,
+                        fill: '#334155',
                       }}
                     />
                   </BarChart>
