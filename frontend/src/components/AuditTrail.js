@@ -12,7 +12,9 @@ const stageLabels = {
   protocol_clearance: 'Protocol Clearance',
   office_head_final: 'Office Head Final Decision',
   minister_review: 'Minister Approval',
-  foreign_affairs_followup: 'Foreign Affairs Follow-up',
+  pm_office_submission: 'Protocol Submission to PM Office',
+  pm_office_followup: 'PM Office Follow-up',
+  foreign_affairs_followup: 'PM Office Follow-up',
   completed: 'Completed',
   traveler: 'Traveler Amendment',
 };
@@ -29,6 +31,7 @@ const roleLabels = {
   ceo: 'CEO',
   office_head: "Head of the Minister's Office",
   protocol: 'Protocol',
+  pm_office: 'PM Office',
   minister: 'Minister',
 };
 

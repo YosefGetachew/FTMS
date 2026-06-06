@@ -19,6 +19,7 @@ function UserManagement() {
     () => [
       { value: "admin", label: "Admin" },
       { value: "protocol", label: "Protocol" },
+      { value: "pm_office", label: "PM Office" },
       { value: "minister", label: "Minister" },
     ],
     []
@@ -142,6 +143,7 @@ function UserManagement() {
       expert: "Expert",
       lead_executive: "Lead Executive Officer",
       ceo: "CEO",
+      pm_office: "PM Office",
     };
 
     return fallbackRoles[role] || role || "-";
@@ -360,7 +362,7 @@ function UserManagement() {
       {
         label: "System Officers",
         value: systemOfficers.length,
-        helper: "Admin, protocol, and minister access",
+        helper: "Admin, protocol, PM Office, and minister access",
       },
       {
         label: "Travelers",

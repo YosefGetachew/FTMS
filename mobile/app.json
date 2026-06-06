@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "FTMS",
+    "slug": "ftms-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "ftms",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "et.gov.moa.ftms"
+    },
+    "android": {
+      "package": "et.gov.moa.ftms",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f5132"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-document-picker",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

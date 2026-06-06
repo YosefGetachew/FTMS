@@ -6,6 +6,12 @@ import API from '../services/api';
 const formatRole = (value) => {
   if (!value) return 'User';
 
+  const labels = {
+    pm_office: 'PM Office',
+  };
+
+  if (labels[value]) return labels[value];
+
   return value
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -29,6 +35,7 @@ const roleGuidance = {
   ceo: 'Decide CEO structure requests',
   office_head: 'Coordinate clearance and final office review',
   protocol: 'Process protocol clearance tasks',
+  pm_office: 'Review requests submitted by Protocol to the PM Office',
   minister: 'Final approval authority',
 };
 
@@ -43,6 +50,7 @@ function Sidebar({ setActivePage }) {
   const isProtocol = role === 'protocol';
   const isTraveler = role === 'traveler';
   const isMinister = role === 'minister';
+  const isPmOffice = role === 'pm_office';
   const formattedRole = formatRole(role);
 
   const [activeMenu, setActiveMenu] = useState(
@@ -53,8 +61,11 @@ function Sidebar({ setActivePage }) {
   const [submittedRequestCount, setSubmittedRequestCount] = useState(0);
 
   const [openSections, setOpenSections] = useState({
-    main: true,
-    admin: true,
+    overview: true,
+    travel: true,
+    insights: true,
+    people: true,
+    governance: true,
     account: true,
   });
 
@@ -142,7 +153,7 @@ function Sidebar({ setActivePage }) {
     }));
   };
 
-  const menuItems = useMemo(
+  const overviewItems = useMemo(
     () => [
       {
         id: 'dashboard',
@@ -151,18 +162,26 @@ function Sidebar({ setActivePage }) {
         icon: 'DS',
         show: !isTraveler,
       },
+    ],
+    [isTraveler]
+  );
+
+  const travelItems = useMemo(
+    () => [
       {
         id: 'travel-request',
         label: 'New Travel Request',
         description: 'Prepare and submit travel',
         icon: 'NT',
-        show: !isMinister,
+        show: !isMinister && !isPmOffice,
       },
       {
         id: 'submitted-requests',
         label: 'Submitted Requests',
         description: isTraveler
           ? 'Track your submitted and amended requests'
+          : isPmOffice
+          ? 'Review requests submitted to the PM Office'
           : 'Review assigned and historical travel requests',
         icon: 'RQ',
         badge: submittedRequestCount > 0 ? submittedRequestCount : null,
@@ -176,15 +195,21 @@ function Sidebar({ setActivePage }) {
         description: 'Diagram view of request progress',
         icon: '',
         iconClass: 'workflow-icon',
-        show: true,
+        show: !isPmOffice,
       },
       {
         id: 'notifications',
         label: 'Notifications',
         description: 'System messages and updates',
         icon: 'MS',
-        show: !isMinister,
+        show: !isMinister && !isPmOffice,
       },
+    ],
+    [isMinister, isPmOffice, isTraveler, submittedRequestCount]
+  );
+
+  const insightItems = useMemo(
+    () => [
       {
         id: 'reports',
         label: 'Reports',
@@ -194,15 +219,12 @@ function Sidebar({ setActivePage }) {
       },
     ],
     [
-      isTraveler,
-      isMinister,
-      submittedRequestCount,
       role,
       allowedReportRoles,
     ]
   );
 
-  const adminItems = useMemo(
+  const peopleItems = useMemo(
     () => [
       {
         id: 'pending-users',
@@ -221,6 +243,12 @@ function Sidebar({ setActivePage }) {
         icon: 'UM',
         show: isAdmin,
       },
+    ],
+    [pendingUserCount, isAdmin]
+  );
+
+  const governanceItems = useMemo(
+    () => [
       {
         id: 'settings',
         label: 'Organization Settings',
@@ -236,7 +264,7 @@ function Sidebar({ setActivePage }) {
         show: isAdmin || isProtocol,
       },
     ],
-    [pendingUserCount, isAdmin, isProtocol]
+    [isAdmin, isProtocol]
   );
 
   const accountItems = useMemo(
@@ -246,15 +274,30 @@ function Sidebar({ setActivePage }) {
         label: 'Reset Password',
         description: 'Secure account password',
         icon: 'PW',
-        show: !isMinister,
+        show: !isMinister && !isPmOffice,
       },
     ],
-    [isMinister]
+    [isMinister, isPmOffice]
   );
 
   const allVisibleItems = useMemo(
-    () => [...menuItems, ...adminItems, ...accountItems].filter((item) => item.show),
-    [menuItems, adminItems, accountItems]
+    () =>
+      [
+        ...overviewItems,
+        ...travelItems,
+        ...insightItems,
+        ...peopleItems,
+        ...governanceItems,
+        ...accountItems,
+      ].filter((item) => item.show),
+    [
+      overviewItems,
+      travelItems,
+      insightItems,
+      peopleItems,
+      governanceItems,
+      accountItems,
+    ]
   );
 
   const activeItem = allVisibleItems.find((item) => item.id === activeMenu);
@@ -330,11 +373,12 @@ function Sidebar({ setActivePage }) {
           onClick={() => toggleSection(sectionKey)}
         >
           <span className="sidebar-section-title">
-          <span>{title}</span>
-          <small>
-              {subtitle} / {visibleItems.length} item
-              {visibleItems.length === 1 ? '' : 's'}
-          </small>
+            <span>{title}</span>
+            <small>{subtitle}</small>
+          </span>
+
+          <span className="sidebar-section-count">
+            {visibleItems.length}
           </span>
 
           <span
@@ -423,9 +467,12 @@ function Sidebar({ setActivePage }) {
       </div>
 
       <nav className="sidebar-menu" aria-label="Main navigation">
-        {renderSection('main', 'Workspace', 'Daily travel operations', menuItems)}
-        {renderSection('admin', 'Administration', 'User and structure control', adminItems)}
-        {renderSection('account', 'Account', 'Personal access settings', accountItems)}
+        {renderSection('overview', 'Overview', 'Dashboard and operating picture', overviewItems)}
+        {renderSection('travel', 'Travel Work', 'Requests, status, and messages', travelItems)}
+        {renderSection('insights', 'Analytics', 'Reports and forecasting', insightItems)}
+        {renderSection('people', 'People Administration', 'User approvals and access', peopleItems)}
+        {renderSection('governance', 'System Governance', 'Organization setup and audit', governanceItems)}
+        {renderSection('account', 'Account Security', 'Password and personal access', accountItems)}
       </nav>
 
       <div className="sidebar-footer">

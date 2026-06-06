@@ -1,28 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import API from '../services/api';
+import './Notifications.css';
 
 function Notifications() {
-  const user = JSON.parse(localStorage.getItem('user'));
-  const [notifications, setNotifications] = useState([]);
-
-  useEffect(() => {
-    if (user?.email) {
-      fetchNotifications();
+  const user = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}');
+    } catch {
+      return {};
     }
   }, []);
 
-  const fetchNotifications = async () => {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const fetchNotifications = useCallback(async () => {
+    if (!user?.email) return;
+
+    setLoading(true);
+    setError('');
     try {
-      console.log('Logged in user:', user.email);
-
       const response = await API.get(`/notifications/${user.email}`);
-      console.log('Notifications:', response.data);
-
-      setNotifications(response.data);
+      setNotifications(response.data || []);
     } catch (error) {
       console.error('Notification Error:', error);
+      setError('Unable to load notifications. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [user?.email]);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
 
   const markAsRead = async (id) => {
     try {
@@ -33,11 +44,43 @@ function Notifications() {
     }
   };
 
+  const unreadCount = notifications.filter(
+    (notification) => !notification.is_read
+  ).length;
+
   return (
     <div className="notifications-container">
-      <h2>Notifications</h2>
+      <div className="notifications-header">
+        <div>
+          <span>FTMS Inbox</span>
+          <h2>Notifications</h2>
+          <p>Review task alerts, request updates, and account messages.</p>
+        </div>
 
-      {notifications.length === 0 && <p>No notifications found.</p>}
+        <button type="button" onClick={fetchNotifications} disabled={loading}>
+          {loading ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
+
+      <div className="notifications-summary">
+        <div>
+          <span>Total</span>
+          <strong>{notifications.length}</strong>
+        </div>
+        <div>
+          <span>Unread</span>
+          <strong>{unreadCount}</strong>
+        </div>
+      </div>
+
+      {error && <div className="notifications-error">{error}</div>}
+
+      {!loading && notifications.length === 0 && (
+        <div className="notifications-empty">
+          <strong>No notifications found</strong>
+          <span>New task and request updates will appear here.</span>
+        </div>
+      )}
 
       {notifications.map((notification) => (
         <div
@@ -46,16 +89,25 @@ function Notifications() {
             notification.is_read ? 'read' : 'unread'
           }`}
         >
-          <h4>{notification.title}</h4>
-          <p>{notification.message}</p>
+          <div className="notification-content">
+            <div className="notification-title-row">
+              <h4>{notification.title}</h4>
+              <span>
+                {notification.is_read ? 'Read' : 'Unread'}
+              </span>
+            </div>
 
-          <small>
-            {new Date(notification.created_at).toLocaleString()}
-          </small>
+            <p>{notification.message}</p>
+
+            <small>
+              {new Date(notification.created_at).toLocaleString()}
+            </small>
+          </div>
 
           {!notification.is_read && (
             <button
-              className="approve-btn"
+              type="button"
+              className="notification-read-btn"
               onClick={() => markAsRead(notification.id)}
             >
               Mark as Read

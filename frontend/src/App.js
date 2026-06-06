@@ -16,6 +16,7 @@ import Notifications from './components/Notifications';
 import AuditTrail from './components/AuditTrail';
 import PendingUsers from './components/PendingUsers';
 import TravelStatus from './components/TravelStatus';
+import './global-polish.css';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('token'));

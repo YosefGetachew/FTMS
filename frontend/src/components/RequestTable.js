@@ -15,6 +15,7 @@ function RequestTable() {
   const [updatingId, setUpdatingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [selectedActionIds, setSelectedActionIds] = useState([]);
 
   const API_ORIGIN =
     import.meta.env.VITE_API_ORIGIN ||
@@ -33,6 +34,7 @@ function RequestTable() {
       lead_executive_officer: ["lead_executive_officer", "lead_executive"],
       state_minister: ["state_minister"],
       office_head: ["office_head"],
+      pm_office: ["pm_office"],
     };
 
     return [...new Set(aliases[role] || [role])].filter(Boolean);
@@ -142,14 +144,16 @@ function RequestTable() {
       protocol_clearance: "Protocol Clearance",
       office_head_final: "Office Head Final Decision",
       minister_review: "Minister Approval",
-      foreign_affairs_followup: "Foreign Affairs Follow-up",
+      pm_office_submission: "Protocol Submission to PM Office",
+      pm_office_followup: "PM Office Follow-up",
+      foreign_affairs_followup: "PM Office Follow-up",
       completed: "Completed",
 
       state_minister: "State Minister",
       protocol: "Protocol",
       office_head: "Office Head",
       minister: "Minister",
-      protocol_final: "Pending Foreign Affairs Response",
+      protocol_final: "Pending PM Office Response",
       traveler: "Traveler Amendment",
       chief_executive_officer: "Chief Executive Officer",
     };
@@ -161,7 +165,7 @@ function RequestTable() {
     if (["completed"].includes(stage)) return "#166534";
     if (["expert_preparation"].includes(stage)) return "#b45309";
     if (["minister_review", "office_head_final"].includes(stage)) return "#7c3aed";
-    if (["protocol_clearance", "foreign_affairs_followup"].includes(stage)) return "#0369a1";
+    if (["protocol_clearance", "pm_office_submission", "pm_office_followup", "foreign_affairs_followup"].includes(stage)) return "#0369a1";
     return "#1d4ed8";
   };
 
@@ -175,6 +179,7 @@ function RequestTable() {
     if (request.current_stage === "protocol_clearance") return "Clear";
     if (request.current_stage === "office_head_final") return "Forward to Minister";
     if (request.current_stage === "minister_review") return "Approve and send to Protocol";
+    if (request.current_stage === "pm_office_submission") return "Submit to PM Office";
     return "Approve";
   };
 
@@ -185,11 +190,33 @@ function RequestTable() {
   const isLeadExecutive = ["lead_executive_officer", "lead_executive"].includes(user?.role);
   const isStateMinister = user?.role === "state_minister";
   const isProtocol = user?.role === "protocol";
+  const isPmOffice = user?.role === "pm_office";
   const isMinister = user?.role === "minister";
+  const canSeeHistorical = !isPmOffice;
+
+  const canTravelerEditBeforeAction = useCallback(
+    (request) => {
+      if (!request || !isTraveler) return false;
+
+      const sameTraveler =
+        normalizeText(request.email).trim() === normalizeText(user.email).trim();
+      const isOpen =
+        request.final_status === "pending" || request.final_status === "amended";
+      const noApproverAction =
+        request.has_workflow_action === false ||
+        request.has_workflow_action === "false" ||
+        request.has_workflow_action === 0 ||
+        request.has_workflow_action === "0";
+
+      return sameTraveler && isOpen && noApproverAction;
+    },
+    [isTraveler, user.email]
+  );
 
   const canDelete = isAdmin;
   const canViewPdf = [
     "protocol",
+    "pm_office",
     "admin",
     "super_admin",
     "office_head",
@@ -230,7 +257,10 @@ function RequestTable() {
         return true;
       }
       if (isOfficeHead && stageMatches(request, ["office_head_review", "office_head", "office_head_final"])) return true;
-      if (isProtocol && stageMatches(request, ["protocol_clearance", "protocol", "foreign_affairs_followup"])) {
+      if (isProtocol && stageMatches(request, ["protocol_clearance", "protocol", "pm_office_submission"])) {
+        return true;
+      }
+      if (isPmOffice && stageMatches(request, ["pm_office_followup", "foreign_affairs_followup"])) {
         return true;
       }
       if (isMinister && stageMatches(request, ["minister_review", "minister"])) return true;
@@ -243,6 +273,7 @@ function RequestTable() {
       isLeadExecutive,
       isMinister,
       isOfficeHead,
+      isPmOffice,
       isProtocol,
       isStateMinister,
       stageMatches,
@@ -308,6 +339,7 @@ function RequestTable() {
       if (activeFilter === "action" && !canDecideRequest(request)) return false;
       if (activeFilter === "amended" && finalStatus !== "amended") return false;
       if (activeFilter === "protocol" && !currentStage.includes("protocol")) return false;
+      if (activeFilter === "pm_office" && !currentStage.includes("pm_office")) return false;
 
       if (!keyword) return true;
 
@@ -326,6 +358,60 @@ function RequestTable() {
     });
   }, [activeFilter, activeSearch, submittedRequests, canDecideRequest]);
 
+  const isBulkActionable = useCallback(
+    (request) =>
+      canDecideRequest(request) &&
+      request.final_status === "pending" &&
+      request.current_stage !== "completed",
+    [canDecideRequest]
+  );
+
+  const visibleActionableIds = useMemo(
+    () =>
+      filteredSubmittedRequests
+        .filter(isBulkActionable)
+        .map((request) => request.id),
+    [filteredSubmittedRequests, isBulkActionable]
+  );
+
+  const showBulkActions = visibleActionableIds.length > 0;
+
+  const selectedVisibleActionIds = useMemo(
+    () =>
+      selectedActionIds.filter((id) => visibleActionableIds.includes(id)),
+    [selectedActionIds, visibleActionableIds]
+  );
+
+  const selectedVisibleRequests = useMemo(
+    () =>
+      filteredSubmittedRequests.filter((request) =>
+        selectedVisibleActionIds.includes(request.id)
+      ),
+    [filteredSubmittedRequests, selectedVisibleActionIds]
+  );
+
+  const allVisibleActionsSelected =
+    visibleActionableIds.length > 0 &&
+    selectedVisibleActionIds.length === visibleActionableIds.length;
+
+  const toggleActionSelection = (requestId) => {
+    setSelectedActionIds((prev) =>
+      prev.includes(requestId)
+        ? prev.filter((id) => id !== requestId)
+        : [...prev, requestId]
+    );
+  };
+
+  const toggleAllVisibleActions = () => {
+    setSelectedActionIds((prev) => {
+      if (allVisibleActionsSelected) {
+        return prev.filter((id) => !visibleActionableIds.includes(id));
+      }
+
+      return [...new Set([...prev, ...visibleActionableIds])];
+    });
+  };
+
   const queueSummary = useMemo(() => {
     const needsAction = submittedRequests.filter((request) => canDecideRequest(request)).length;
     const amended = submittedRequests.filter(
@@ -333,6 +419,10 @@ function RequestTable() {
     ).length;
     const protocol = submittedRequests.filter((request) =>
       normalizeText(request.current_stage).includes("protocol")
+    ).length;
+    const pmOffice = submittedRequests.filter((request) =>
+      normalizeText(request.current_stage).includes("pm_office") ||
+      normalizeText(request.current_stage).includes("foreign_affairs")
     ).length;
 
     return [
@@ -352,12 +442,12 @@ function RequestTable() {
         helper: "Needs correction",
       },
       {
-        label: "Protocol",
-        value: protocol,
-        helper: "Clearance stage",
+        label: isPmOffice ? "PM Office" : "Protocol",
+        value: isPmOffice ? pmOffice : protocol,
+        helper: isPmOffice ? "Submitted to PM Office" : "Clearance/submission",
       },
     ];
-  }, [submittedRequests, canDecideRequest]);
+  }, [submittedRequests, canDecideRequest, isPmOffice]);
 
   const updateStatus = async (id, action, comment = "") => {
     if (updatingId) return;
@@ -423,14 +513,14 @@ function RequestTable() {
     await updateStatus(id, "amend", comment.trim());
   };
 
-  const updateForeignAffairsStatus = async (id, action) => {
+  const updatePmOfficeStatus = async (id, action) => {
     const comment = prompt(
-      action === "foreign_affairs_approved"
-        ? "Enter Foreign Affairs approval note, if any"
-        : "Enter Foreign Affairs rejection reason"
+      action === "pm_office_approved"
+        ? "Enter PM Office approval note, if any"
+        : "Enter PM Office rejection reason"
     );
 
-    if (action === "foreign_affairs_rejected" && (!comment || !comment.trim())) {
+    if (action === "pm_office_rejected" && (!comment || !comment.trim())) {
       return;
     }
 
@@ -451,7 +541,7 @@ function RequestTable() {
       await fetchRequests();
       setNotice({
         type: "success",
-        message: "Foreign Affairs decision updated.",
+        message: "PM Office decision updated.",
       });
     } catch (error) {
       console.error(error);
@@ -459,7 +549,7 @@ function RequestTable() {
         type: "error",
         message:
           error.response?.data?.error ||
-          "Failed to update Foreign Affairs decision",
+          "Failed to update PM Office decision",
       });
     } finally {
       setUpdatingId(null);
@@ -514,6 +604,101 @@ function RequestTable() {
         type: "error",
         message: error.response?.data?.error || "Failed to update request",
       });
+    }
+  };
+
+  const getBulkPositiveAction = (request) => {
+    if (request.current_stage === "protocol_clearance") return "clear";
+    if (request.current_stage === "pm_office_submission") {
+      return "submit_to_pm_office";
+    }
+    if (
+      request.current_stage === "pm_office_followup" ||
+      request.current_stage === "foreign_affairs_followup"
+    ) {
+      return "pm_office_approved";
+    }
+
+    return "approve";
+  };
+
+  const getBulkNegativeAction = (request) => {
+    if (request.current_stage === "protocol_clearance") return "amend";
+    if (
+      request.current_stage === "pm_office_followup" ||
+      request.current_stage === "foreign_affairs_followup"
+    ) {
+      return "pm_office_rejected";
+    }
+
+    return "reject";
+  };
+
+  const runBulkWorkflowAction = async (mode) => {
+    if (updatingId || selectedVisibleRequests.length === 0) return;
+
+    const isReject = mode === "reject";
+    let comment = "";
+
+    if (isReject) {
+      comment = prompt(
+        "Enter one comment/reason to apply to all selected requests"
+      );
+
+      if (!comment || !comment.trim()) return;
+    } else {
+      const confirmApprove = window.confirm(
+        `Accept ${selectedVisibleRequests.length} selected request${
+          selectedVisibleRequests.length === 1 ? "" : "s"
+        }?`
+      );
+
+      if (!confirmApprove) return;
+    }
+
+    try {
+      setUpdatingId(`bulk-${mode}`);
+
+      const results = await Promise.allSettled(
+        selectedVisibleRequests.map((request) => {
+          const action = isReject
+            ? getBulkNegativeAction(request)
+            : getBulkPositiveAction(request);
+
+          return API.put(`/requests/${request.id}/status`, {
+            action,
+            role: user.role,
+            actorEmail: user.email,
+            actorId: user.id || null,
+            comment: comment.trim(),
+            foreignAffairsComment: comment.trim(),
+          });
+        })
+      );
+
+      const succeeded = results.filter(
+        (result) => result.status === "fulfilled"
+      ).length;
+      const failed = results.length - succeeded;
+
+      setSelectedActionIds([]);
+      await fetchRequests();
+      setNotice({
+        type: failed ? "error" : "success",
+        message: failed
+          ? `${succeeded} request${succeeded === 1 ? "" : "s"} updated; ${failed} failed.`
+          : `${succeeded} request${succeeded === 1 ? "" : "s"} updated successfully.`,
+      });
+    } catch (error) {
+      console.error(error);
+      setNotice({
+        type: "error",
+        message:
+          error.response?.data?.error ||
+          "Failed to update selected requests",
+      });
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -696,6 +881,8 @@ function RequestTable() {
         {!isCompleted &&
           canActAtStage(request) &&
           stage !== "protocol_clearance" &&
+          stage !== "pm_office_submission" &&
+          stage !== "pm_office_followup" &&
           stage !== "foreign_affairs_followup" &&
           stage !== "office_head_final" &&
           stage !== "minister_review" && (
@@ -786,36 +973,48 @@ function RequestTable() {
           </>
         )}
 
+        {!isCompleted && canActAtStage(request) && stage === "pm_office_submission" && (
+          <button
+            className="approve-btn action-icon-btn action-wide-btn"
+            title="Submit selected traveler to PM Office"
+            disabled={isBusy}
+            onClick={() => updateStatus(request.id, "submit_to_pm_office")}
+          >
+            {processingLabel || "Submit PM"}
+          </button>
+        )}
+
         {!isCompleted &&
           canActAtStage(request) &&
-          stage === "foreign_affairs_followup" && (
+          (stage === "pm_office_followup" ||
+            stage === "foreign_affairs_followup") && (
             <>
               <button
                 className="approve-btn action-icon-btn action-wide-btn"
-                title="Foreign Affairs approved"
+                title="PM Office approved"
                 disabled={isBusy}
                 onClick={() =>
-                  updateForeignAffairsStatus(
+                  updatePmOfficeStatus(
                     request.id,
-                    "foreign_affairs_approved"
+                    "pm_office_approved"
                   )
                 }
               >
-                {processingLabel || "FA OK"}
+                {processingLabel || "PM OK"}
               </button>
 
               <button
                 className="reject-btn action-icon-btn action-wide-btn"
-                title="Foreign Affairs rejected"
+                title="PM Office rejected"
                 disabled={isBusy}
                 onClick={() =>
-                  updateForeignAffairsStatus(
+                  updatePmOfficeStatus(
                     request.id,
-                    "foreign_affairs_rejected"
+                    "pm_office_rejected"
                   )
                 }
               >
-                {processingLabel || "FA Reject"}
+                {processingLabel || "PM Reject"}
               </button>
             </>
           )}
@@ -890,16 +1089,18 @@ function RequestTable() {
             {loading ? "Refreshing..." : "Refresh"}
           </button>
 
-          <button
-            type="button"
-            className="request-history-toggle"
-            onClick={() => setShowHistorical((prev) => !prev)}
-          >
-            {showHistorical ? "Hide Historical" : "Show Historical"}
-            {historicalRequests.length > 0
-              ? ` (${historicalRequests.length})`
-              : ""}
-          </button>
+          {canSeeHistorical && (
+            <button
+              type="button"
+              className="request-history-toggle"
+              onClick={() => setShowHistorical((prev) => !prev)}
+            >
+              {showHistorical ? "Hide Historical" : "Show Historical"}
+              {historicalRequests.length > 0
+                ? ` (${historicalRequests.length})`
+                : ""}
+            </button>
+          )}
         </div>
       </div>
 
@@ -940,6 +1141,7 @@ function RequestTable() {
           <option value="action">Needs my action</option>
           <option value="amended">Returned / amended</option>
           <option value="protocol">Protocol clearance</option>
+          <option value="pm_office">PM Office</option>
         </select>
       </div>
 
@@ -949,12 +1151,54 @@ function RequestTable() {
             <h3>Active Request Queue</h3>
             <p>{filteredSubmittedRequests.length} request{filteredSubmittedRequests.length === 1 ? "" : "s"} in this view</p>
           </div>
+
+          {showBulkActions && (
+            <div className="request-bulk-actions">
+              <label className="request-bulk-select">
+                <input
+                  type="checkbox"
+                  checked={allVisibleActionsSelected}
+                  onChange={toggleAllVisibleActions}
+                />
+                Select actionable requests
+              </label>
+
+              <button
+                type="button"
+                className="approve-btn action-icon-btn request-bulk-submit"
+                disabled={
+                  updatingId === "bulk-approve" ||
+                  selectedVisibleActionIds.length === 0
+                }
+                onClick={() => runBulkWorkflowAction("approve")}
+              >
+                {updatingId === "bulk-approve"
+                  ? "Updating..."
+                  : `Accept (${selectedVisibleActionIds.length})`}
+              </button>
+
+              <button
+                type="button"
+                className="reject-btn action-icon-btn request-bulk-submit"
+                disabled={
+                  updatingId === "bulk-reject" ||
+                  selectedVisibleActionIds.length === 0
+                }
+                onClick={() => runBulkWorkflowAction("reject")}
+              >
+                {updatingId === "bulk-reject"
+                  ? "Updating..."
+                  : `Reject (${selectedVisibleActionIds.length})`}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="request-table-scroll">
           <table>
             <thead>
               <tr>
+                {showBulkActions && <th className="request-select-col">Select</th>}
                 <th>Name</th>
                 <th>Sector / Lead Executive Office</th>
                 <th>Destination</th>
@@ -970,14 +1214,20 @@ function RequestTable() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="request-empty-cell" colSpan="9">
+                  <td
+                    className="request-empty-cell"
+                    colSpan={showBulkActions ? "10" : "9"}
+                  >
                     <strong>Loading submitted requests...</strong>
                     <span>Please wait while the request queue refreshes.</span>
                   </td>
                 </tr>
               ) : filteredSubmittedRequests.length === 0 ? (
                 <tr>
-                  <td className="request-empty-cell" colSpan="9">
+                  <td
+                    className="request-empty-cell"
+                    colSpan={showBulkActions ? "10" : "9"}
+                  >
                     <strong>No submitted requests found</strong>
                     <span>Try changing the search text or active request filter.</span>
                   </td>
@@ -985,6 +1235,21 @@ function RequestTable() {
               ) : (
                 filteredSubmittedRequests.map((request) => (
                   <tr key={request.id}>
+                    {showBulkActions && (
+                      <td className="request-select-col">
+                        {isBulkActionable(request) ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedActionIds.includes(request.id)}
+                            onChange={() => toggleActionSelection(request.id)}
+                            aria-label={`Select ${request.full_name || "request"} for bulk action`}
+                          />
+                        ) : (
+                          <span className="request-select-placeholder">-</span>
+                        )}
+                      </td>
+                    )}
+
                     {renderTravelerCell(request)}
 
                     {renderSectorDepartment(request)}
@@ -1010,7 +1275,7 @@ function RequestTable() {
         </div>
       </div>
 
-      {showHistorical && (
+      {canSeeHistorical && showHistorical && (
         <>
           <div
             className="table-header request-history-header"
@@ -1192,7 +1457,7 @@ function RequestTable() {
               </div>
 
               <div>
-                <strong>Foreign Affairs Status</strong>
+                <strong>PM Office Status</strong>
                 <p>{viewingRequest.foreign_affairs_status || "-"}</p>
               </div>
 
@@ -1268,6 +1533,18 @@ function RequestTable() {
             </div>
 
             <div className="modal-actions">
+              {canTravelerEditBeforeAction(viewingRequest) && (
+                <button
+                  className="approve-btn"
+                  onClick={() => {
+                    setEditingRequest(viewingRequest);
+                    setViewingRequest(null);
+                  }}
+                >
+                  Edit Request
+                </button>
+              )}
+
               <button
                 className="delete-btn"
                 onClick={() => setViewingRequest(null)}
@@ -1282,15 +1559,26 @@ function RequestTable() {
       {editingRequest && (
         <div className="modal-overlay">
           <div className="modal-content large-modal">
-            <h2>Edit Returned Request</h2>
+            <h2>
+              {editingRequest.final_status === "amended"
+                ? "Edit Returned Request"
+                : "Edit Travel Request"}
+            </h2>
 
-            <div className="notice-error">
-              <strong>Correction / Amendment Comment:</strong>
-              <br />
-              {editingRequest.amendment_comment ||
-                editingRequest.decision_comment ||
-                "Please update the request as required."}
-            </div>
+            {editingRequest.final_status === "amended" ? (
+              <div className="notice-error">
+                <strong>Correction / Amendment Comment:</strong>
+                <br />
+                {editingRequest.amendment_comment ||
+                  editingRequest.decision_comment ||
+                  "Please update the request as required."}
+              </div>
+            ) : (
+              <div className="request-notice success">
+                No approver action has been recorded yet. You can update the
+                request details without resubmitting the workflow.
+              </div>
+            )}
 
             <div className="request-detail-grid">
               <div>
@@ -1574,17 +1862,19 @@ function RequestTable() {
                 Save Changes
               </button>
 
-              <button
-                className="approve-btn"
-                disabled={updatingId === editingRequest.id}
-                onClick={async () => {
-                  await updateRequest();
-                  await resubmitRequest(editingRequest.id);
-                  setEditingRequest(null);
-                }}
-              >
-                Save and Resubmit
-              </button>
+              {editingRequest.final_status === "amended" && (
+                <button
+                  className="approve-btn"
+                  disabled={updatingId === editingRequest.id}
+                  onClick={async () => {
+                    await updateRequest();
+                    await resubmitRequest(editingRequest.id);
+                    setEditingRequest(null);
+                  }}
+                >
+                  Save and Resubmit
+                </button>
+              )}
 
               <button
                 className="delete-btn"

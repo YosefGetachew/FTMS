@@ -16,6 +16,12 @@ import API from "../services/api";
 const formatRole = (value) => {
   if (!value) return "User";
 
+  const labels = {
+    pm_office: "PM Office",
+  };
+
+  if (labels[value]) return labels[value];
+
   return value
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -39,7 +45,11 @@ const getDashboardScope = (user) => {
   }
 
   if (role === "protocol") {
-    return "Protocol clearance workload and follow-up requests";
+    return "Protocol clearance and PM Office submission workload";
+  }
+
+  if (role === "pm_office") {
+    return "PM Office requests submitted by Protocol";
   }
 
   if (role === "state_minister") {
@@ -90,7 +100,7 @@ function DashboardStats({ setActivePage }) {
       setError("");
 
       const [statsResponse, chartResponse] = await Promise.all([
-        API.get("/stats"),
+        API.get(`/stats?role=${role}`),
         API.get(`/dashboard/pending-by-sector?role=${role}&id=${user.id}`),
       ]);
 

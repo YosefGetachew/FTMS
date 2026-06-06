@@ -13,10 +13,11 @@
   position: sticky;
   top: 0;
   overflow: hidden;
-  color: #ecfdf5;
+  color: #14532d;
   background:
-    linear-gradient(180deg, rgba(6, 78, 59, 0.98) 0%, rgba(3, 52, 38, 0.99) 58%, #022c22 100%);
-  box-shadow: 8px 0 24px rgba(15, 23, 42, 0.14);
+    linear-gradient(180deg, #ecfdf5 0%, #dcfce7 55%, #bbf7d0 100%);
+  border-right: 1px solid #bbf7d0;
+  box-shadow: 8px 0 24px rgba(15, 23, 42, 0.08);
 }
 
 .sidebar-header {
@@ -24,7 +25,7 @@
   align-items: center;
   gap: 11px;
   padding: 6px 6px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(21, 128, 61, 0.18);
 }
 
 .sidebar-logo-box {
@@ -35,7 +36,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 10px 20px rgba(2, 44, 34, 0.24);
+  box-shadow: 0 10px 20px rgba(22, 101, 52, 0.16);
   flex-shrink: 0;
 }
 
@@ -51,7 +52,7 @@
 
 .sidebar-title-group h2 {
   margin: 0;
-  color: #ffffff;
+  color: #064e3b;
   font-size: 20px;
   font-weight: 820;
   letter-spacing: 0;
@@ -60,7 +61,7 @@
 .sidebar-title-group p {
   max-width: 180px;
   margin: 3px 0 0;
-  color: #bbf7d0;
+  color: #15803d;
   font-size: 10.8px;
   line-height: 1.35;
 }
@@ -72,9 +73,9 @@
 .sidebar-user-card {
   margin: 14px 0 9px;
   padding: 11px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(22, 163, 74, 0.22);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.68);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -85,8 +86,8 @@
   height: 40px;
   min-width: 40px;
   border-radius: 10px;
-  background: #facc15;
-  color: #064e3b;
+  background: #16a34a;
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -102,7 +103,7 @@
   max-width: 190px;
   margin: 0;
   overflow: hidden;
-  color: #ffffff;
+  color: #064e3b;
   font-size: 13px;
   font-weight: 760;
   line-height: 1.25;
@@ -116,7 +117,7 @@
   max-width: 190px;
   margin: 3px 0 0;
   overflow: hidden;
-  color: #d1fae5;
+  color: #15803d;
   font-size: 11px;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -124,7 +125,7 @@
 }
 
 .sidebar-user-info small {
-  color: rgba(209, 250, 229, 0.72);
+  color: #047857;
   font-size: 10.5px;
 }
 
@@ -138,8 +139,8 @@
 .sidebar-profile-panel {
   margin: 0 0 9px;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(22, 163, 74, 0.2);
+  background: rgba(255, 255, 255, 0.52);
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -155,7 +156,7 @@
 }
 
 .sidebar-profile-heading {
-  color: #a7f3d0;
+  color: #15803d;
 }
 
 .sidebar-profile-row {
@@ -166,7 +167,7 @@
 }
 
 .sidebar-profile-row span {
-  color: rgba(209, 250, 229, 0.68);
+  color: #047857;
   font-size: 10.5px;
   font-weight: 650;
   line-height: 1.3;
@@ -174,7 +175,7 @@
 
 .sidebar-profile-row strong {
   overflow: hidden;
-  color: #ffffff;
+  color: #064e3b;
   font-size: 11.2px;
   font-weight: 720;
   line-height: 1.3;
@@ -185,19 +186,19 @@
 .sidebar-role-note {
   margin: 0 0 9px;
   padding: 10px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
-  background: rgba(250, 204, 21, 0.1);
+  border: 1px solid rgba(22, 163, 74, 0.22);
+  background: rgba(240, 253, 244, 0.8);
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
 .sidebar-role-note strong {
-  color: #fde68a;
+  color: #166534;
 }
 
 .sidebar-role-note span {
-  color: #fef3c7;
+  color: #14532d;
   font-size: 11.3px;
   line-height: 1.4;
 }
@@ -212,8 +213,8 @@
 .sidebar-summary-card {
   min-height: 70px;
   padding: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.075);
+  border: 1px solid rgba(22, 163, 74, 0.2);
+  background: rgba(255, 255, 255, 0.58);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -221,21 +222,21 @@
 }
 
 .sidebar-summary-card span {
-  color: #bbf7d0;
+  color: #15803d;
   font-size: 10px;
   font-weight: 720;
   line-height: 1.25;
 }
 
 .sidebar-summary-card strong {
-  color: #ffffff;
+  color: #064e3b;
   font-size: 20px;
   font-weight: 820;
   line-height: 1;
 }
 
 .sidebar-summary-card small {
-  color: rgba(209, 250, 229, 0.72);
+  color: #047857;
   font-size: 10px;
   line-height: 1.25;
 }
@@ -243,10 +244,10 @@
 .sidebar-current-page {
   margin: 0 0 11px;
   padding: 10px;
-  border: 1px solid rgba(250, 204, 21, 0.36);
-  background: #facc15;
+  border: 1px solid rgba(22, 163, 74, 0.32);
+  background: #ffffff;
   color: #064e3b;
-  box-shadow: 0 10px 18px rgba(250, 204, 21, 0.14);
+  box-shadow: 0 10px 18px rgba(22, 101, 52, 0.1);
 }
 
 .sidebar-current-page span,
@@ -264,7 +265,7 @@
 
 .sidebar-current-page small {
   margin-top: 3px;
-  color: rgba(6, 78, 59, 0.78);
+  color: #047857;
   font-size: 10.5px;
   font-weight: 650;
   line-height: 1.3;
@@ -289,7 +290,7 @@
 
 .sidebar-menu::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.23);
+  background: rgba(21, 128, 61, 0.28);
 }
 
 .sidebar-section {
@@ -301,18 +302,18 @@
   width: 100%;
   border: 0;
   background: transparent;
-  color: #a7f3d0;
-  display: flex;
+  color: #15803d;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   padding: 9px 5px 6px;
   cursor: pointer;
   text-align: left;
 }
 
 .sidebar-section-toggle:hover {
-  color: #ffffff;
+  color: #064e3b;
 }
 
 .sidebar-section-title {
@@ -331,20 +332,33 @@
 
 .sidebar-section-title small {
   overflow: hidden;
-  color: rgba(209, 250, 229, 0.72);
-  font-size: 10.3px;
+  color: #047857;
+  font-size: 10px;
   font-weight: 560;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.sidebar-section-count {
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(22, 163, 74, 0.12);
+  color: #166534;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 760;
+}
+
 .section-chevron {
   width: 22px;
   height: 22px;
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #d1fae5;
+  background: rgba(22, 163, 74, 0.12);
+  color: #166534;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -356,7 +370,7 @@
 
 .section-chevron.open {
   transform: rotate(180deg);
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(22, 163, 74, 0.18);
 }
 
 .sidebar-section-content {
@@ -380,33 +394,33 @@
 .sidebar-menu-btn {
   position: relative;
   width: 100%;
-  min-height: 54px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 52px;
+  border: 1px solid rgba(22, 163, 74, 0.18);
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.055);
-  color: #ecfdf5;
+  background: rgba(255, 255, 255, 0.56);
+  color: #14532d;
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) auto 12px;
   align-items: center;
   gap: 9px;
-  padding: 9px 8px 9px 10px;
+  padding: 8px 8px 8px 10px;
   text-align: left;
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 .sidebar-menu-btn:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.11);
-  color: #ffffff;
+  border-color: rgba(22, 163, 74, 0.36);
+  background: #ffffff;
+  color: #064e3b;
   transform: translateX(2px);
 }
 
 .sidebar-menu-btn.active {
-  border-color: #facc15;
-  background: #facc15;
-  color: #064e3b;
-  box-shadow: 0 12px 22px rgba(250, 204, 21, 0.18);
+  border-color: #15803d;
+  background: #15803d;
+  color: #ffffff;
+  box-shadow: 0 12px 22px rgba(22, 101, 52, 0.16);
 }
 
 .sidebar-active-line {
@@ -416,7 +430,7 @@
   bottom: 11px;
   width: 0;
   border-radius: 999px;
-  background: #064e3b;
+  background: #bbf7d0;
   transition: width 0.18s ease;
 }
 
@@ -428,8 +442,8 @@
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.11);
-  color: #d1fae5;
+  background: rgba(22, 163, 74, 0.12);
+  color: #166534;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -470,8 +484,8 @@
 }
 
 .sidebar-menu-btn.active .sidebar-menu-icon {
-  background: rgba(6, 78, 59, 0.12);
-  color: #064e3b;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
 }
 
 .sidebar-menu-text {
@@ -484,7 +498,7 @@
 .sidebar-menu-label {
   overflow: hidden;
   color: inherit;
-  font-size: 13px;
+  font-size: 12.6px;
   font-weight: 730;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -492,10 +506,10 @@
 }
 
 .sidebar-menu-description {
-  color: rgba(209, 250, 229, 0.72);
+  color: #047857;
   display: -webkit-box;
   overflow: hidden;
-  font-size: 10.5px;
+  font-size: 10.2px;
   font-weight: 560;
   line-height: 1.3;
   -webkit-box-orient: vertical;
@@ -503,7 +517,7 @@
 }
 
 .sidebar-menu-btn.active .sidebar-menu-description {
-  color: rgba(6, 78, 59, 0.76);
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .sidebar-menu-badge {
@@ -535,12 +549,12 @@
 .sidebar-footer {
   margin-top: 12px;
   padding: 12px 6px 3px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid rgba(22, 163, 74, 0.18);
 }
 
 .sidebar-footer p {
   margin: 0;
-  color: #ffffff;
+  color: #064e3b;
   font-size: 11.5px;
   font-weight: 720;
 }
@@ -548,7 +562,7 @@
 .sidebar-footer small {
   display: block;
   margin-top: 4px;
-  color: #bbf7d0;
+  color: #15803d;
   font-size: 10.3px;
   line-height: 1.35;
 }

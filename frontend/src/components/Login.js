@@ -113,7 +113,12 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
 
             <div className="structure-item">
               <span>7</span>
-              <p>Protocol updates Foreign Affairs status</p>
+              <p>Protocol submits approved travelers to the PM Office</p>
+            </div>
+
+            <div className="structure-item">
+              <span>8</span>
+              <p>PM Office updates the final response</p>
             </div>
           </div>
         </div>

@@ -47,7 +47,9 @@ const formatStage = (stage) => {
     protocol_clearance: 'Protocol Clearance',
     office_head_final: 'Office Head Final',
     minister_review: 'Minister Review',
-    foreign_affairs_followup: 'Foreign Affairs Follow-up',
+    pm_office_submission: 'Protocol Submission to PM Office',
+    pm_office_followup: 'PM Office Follow-up',
+    foreign_affairs_followup: 'PM Office Follow-up',
     completed: 'Completed',
   };
 
@@ -347,7 +349,7 @@ function Reports() {
           PART 1: GENERAL ANALYTICAL REPORTS
       ============================================================ */}
 
-      <div className="reports-grid">
+      <div className="reports-chart-pair">
         <div className="reports-card">
           <div className="reports-card-header">
             <h3>Monthly Approved Travel</h3>
@@ -393,7 +395,7 @@ function Reports() {
           )}
         </div>
 
-        <div className="reports-card reports-card-wide">
+        <div className="reports-card">
           <div className="reports-card-header">
             <h3>3-Month Travel Forecast</h3>
             <p>
@@ -432,7 +434,9 @@ function Reports() {
             </ResponsiveContainer>
           )}
         </div>
+      </div>
 
+      <div className="reports-grid">
         <div className="reports-card">
           <div className="reports-card-header">
             <h3>Status by Structure</h3>

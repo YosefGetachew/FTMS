@@ -140,6 +140,57 @@
   font-size: 12.5px;
 }
 
+.request-bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.request-bulk-select {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #3730a3;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.request-bulk-select input,
+.request-select-col input {
+  width: 15px;
+  height: 15px;
+  accent-color: #0f766e;
+}
+
+.request-bulk-submit {
+  min-height: 34px;
+  padding: 7px 11px;
+  border-radius: 8px;
+}
+
+.request-bulk-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.request-select-col {
+  width: 54px;
+  min-width: 54px;
+  text-align: center;
+  vertical-align: middle !important;
+}
+
+.request-select-placeholder {
+  color: #94a3b8;
+}
+
 .request-table-scroll {
   width: 100%;
   overflow-x: hidden;
@@ -272,6 +323,12 @@
 
   .request-table-controls {
     grid-template-columns: 1fr;
+  }
+
+  .request-section-header,
+  .request-bulk-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

@@ -10,6 +10,8 @@ const workflowPath = {
     "Protocol for Clearance",
     "Office Head",
     "Minister",
+    "Protocol PM Submission",
+    "PM Office",
   ],
   ceo_structure: [
     "Expert",
@@ -18,6 +20,8 @@ const workflowPath = {
     "Protocol for Clearance",
     "Office Head",
     "Minister",
+    "Protocol PM Submission",
+    "PM Office",
   ],
   office_head_structure: [
     "Expert",
@@ -26,6 +30,16 @@ const workflowPath = {
     "Protocol for Clearance",
     "Office Head",
     "Minister",
+    "Protocol PM Submission",
+    "PM Office",
+  ],
+  affiliate_institution: [
+    "Expert",
+    "Protocol for Clearance",
+    "Office Head",
+    "Minister",
+    "Protocol PM Submission",
+    "PM Office",
   ],
 };
 
@@ -91,15 +105,28 @@ const StepIndicator = ({ step, setStep, step1Valid, step2Valid }) => (
   <div className="mb-8">
     <div className="stepper-row">
       {[
-        { number: "1", label: "Traveler", stepNumber: 1, enabled: true },
-        { number: "2", label: "Trip", stepNumber: 2, enabled: step1Valid },
+        {
+          number: "1",
+          label: "Traveler",
+          description: "Organization and contact details",
+          stepNumber: 1,
+          enabled: true,
+        },
+        {
+          number: "2",
+          label: "Trip",
+          description: "Destination, dates, and purpose",
+          stepNumber: 2,
+          enabled: step1Valid,
+        },
         {
           number: "3",
           label: "Attachments",
+          description: "Documents and final review",
           stepNumber: 3,
           enabled: step1Valid && step2Valid,
         },
-      ].map(({ number, label, stepNumber, enabled }) => (
+      ].map(({ number, label, description, stepNumber, enabled }) => (
         <button
           key={stepNumber}
           type="button"
@@ -107,8 +134,11 @@ const StepIndicator = ({ step, setStep, step1Valid, step2Valid }) => (
           disabled={!enabled}
           className={`step-btn ${step === stepNumber ? "active" : ""} ${!enabled ? "disabled" : ""}`}
         >
-          <span className="step-btn-number">{number}.</span>
-          <span className="step-btn-label">{label}</span>
+          <span className="step-btn-number">{number}</span>
+          <span className="step-btn-copy">
+            <span className="step-btn-label">{label}</span>
+            <small>{description}</small>
+          </span>
         </button>
       ))}
     </div>
@@ -181,6 +211,14 @@ const Divider = ({ label }) => (
     <div className="form-divider-line" />
     <span className="form-divider-label">{label}</span>
     <div className="form-divider-line" />
+  </div>
+);
+
+const SectionHeader = ({ eyebrow, title, subtitle }) => (
+  <div className="request-section-title">
+    {eyebrow && <span>{eyebrow}</span>}
+    <h2>{title}</h2>
+    {subtitle && <p>{subtitle}</p>}
   </div>
 );
 
@@ -663,7 +701,9 @@ export default function RequestForm() {
 
       setNotice({
         type: "success",
-        message: "Travel request submitted and routed to Lead Executive Officer Review.",
+        message: isAffiliate
+          ? "Travel request submitted and routed to Protocol Clearance."
+          : "Travel request submitted and routed to Lead Executive Officer Review.",
       });
       resetForm({ keepNotice: true });
     } catch (error) {
@@ -687,8 +727,12 @@ export default function RequestForm() {
             <div>
               <h1 className="text-2xl font-extrabold text-slate-900">New Travel Request</h1>
               <p className="mt-2 text-sm text-slate-600">
-                Prepare the traveler profile, trip details, and supporting documents before submitting for approval.
+                Prepare the traveler profile, trip plan, and optional supporting documents for approval routing.
               </p>
+            </div>
+            <div className="request-hero-badge">
+              <span>FTMS</span>
+              <strong>Foreign Travel</strong>
             </div>
           </div>
         </div>
@@ -702,7 +746,7 @@ export default function RequestForm() {
         <form className="ministry-card p-6 md:p-8" onSubmit={(e) => e.preventDefault()}>
           <div className="request-context-grid">
             <div>
-          <span>Assigned MoA Structure</span>
+              <span>Assigned Structure</span>
               <strong title={currentUser.sector || "Not assigned"}>
                 {currentUser.sector || "Not assigned"}
               </strong>
@@ -726,10 +770,11 @@ export default function RequestForm() {
           {step === 1 && (
             <div className="space-y-7">
               <div>
-                <div className="section-title text-base mb-1">Organization Type</div>
-                <div className="section-subtitle mb-4">
-                  Is the traveler a Ministry of Agriculture staff member or from an affiliate institution?
-                </div>
+                <SectionHeader
+                  eyebrow="Step 1"
+                  title="Traveler Information"
+                  subtitle="Select the traveler source, then complete the structure and contact details."
+                />
                 <Field name="organizationType" label="Organization Type" required touched={touched} errors={errors}>
                   <RadioCards
                     name="organizationType"
@@ -737,8 +782,16 @@ export default function RequestForm() {
                     onChange={handleChange}
                     cols={2}
                     options={[
-                      { value: "moa", label: "Ministry of Agriculture (MoA)" },
-                      { value: "affiliate", label: "Affiliate Institute" },
+                      {
+                        value: "moa",
+                        label: "Ministry of Agriculture",
+                        description: "Sector, CEO, or Head of Office structure",
+                      },
+                      {
+                        value: "affiliate",
+                        label: "Affiliate Institute",
+                        description: "Routes first to Protocol for clearance",
+                      },
                     ]}
                   />
                 </Field>
@@ -764,11 +817,11 @@ export default function RequestForm() {
                       <Divider label="MoA Structure" />
                       <Field
                         name="workflowType"
-                        label="MoA Structure Type"
+                        label="Structure Category"
                         required
                         touched={touched}
                         errors={errors}
-                        hint="Select the same structure type registered in Settings."
+                        hint="Select the category registered in Organization Settings."
                       >
                         <RadioCards
                           name="workflowType"
@@ -784,6 +837,7 @@ export default function RequestForm() {
                   {formData.workflowType && (
                     <>
                       <div className="workflow-preview">
+                        <span>Approval Workflow</span>
                         <div className="workflow-preview-path">
                           {(workflowPath[formData.workflowType] || []).map((stage, index) => (
                             <span key={`${stage}-${index}`}>{stage}</span>
@@ -872,6 +926,18 @@ export default function RequestForm() {
               {isAffiliate && (
                 <div>
                   <Divider label="Affiliate Institution" />
+                  <div className="workflow-preview">
+                    <span>Approval Workflow</span>
+                    <div className="workflow-preview-path">
+                      {workflowPath.affiliate_institution.map((stage, index) => (
+                        <span key={`${stage}-${index}`}>{stage}</span>
+                      ))}
+                    </div>
+                    <small>
+                      Affiliate Institute requests are first reviewed by Protocol
+                      for clearance or amendment, then sent to the Office Head.
+                    </small>
+                  </div>
                   <Field name="organizationName" label="Affiliate Institution" required touched={touched} errors={errors}>
                     <select
                       name="organizationName"
@@ -985,8 +1051,11 @@ export default function RequestForm() {
           {step === 2 && (
             <div className="space-y-8">
               <div>
-                <div className="section-title text-base">Trip Details</div>
-                <div className="section-subtitle">Provide destination, dates, and purpose of travel.</div>
+                <SectionHeader
+                  eyebrow="Step 2"
+                  title="Trip Details"
+                  subtitle="Add destination, travel dates, sponsor, passport reference, and purpose."
+                />
               </div>
 
               {tripDuration && (
@@ -1096,8 +1165,11 @@ export default function RequestForm() {
           {step === 3 && (
             <div className="space-y-8">
               <div>
-                <div className="section-title text-base">Attachments</div>
-                <div className="section-subtitle">Optional - attach documents to speed up processing.</div>
+                <SectionHeader
+                  eyebrow="Step 3"
+                  title="Attachments and Review"
+                  subtitle="Attach available documents, confirm the summary, then submit the request."
+                />
               </div>
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -1143,14 +1215,10 @@ export default function RequestForm() {
                   )}
                   {isMoA && (
                     <div>
-                  <span>MoA Structure Type</span>
-                      <strong>{selectedWorkflow?.label || "-"}</strong>
-                    </div>
-                  )}
-                  {isMoA && (
-                    <div>
-                      <span>{selectedStructureTypeLabel} Structure</span>
-                      <strong>{formData.sector || "-"}</strong>
+                      <span>MoA Structure</span>
+                      <strong>
+                        {selectedWorkflow?.label || "-"}: {formData.sector || "-"}
+                      </strong>
                     </div>
                   )}
                   {isMoA && (
@@ -1174,6 +1242,12 @@ export default function RequestForm() {
                   <div className="review-route">
                     <span>Approval route</span>
                     <strong>{selectedWorkflow.route}</strong>
+                  </div>
+                )}
+                {isAffiliate && (
+                  <div className="review-route">
+                    <span>Approval route</span>
+                    <strong>{workflowPath.affiliate_institution.join(" -> ")}</strong>
                   </div>
                 )}
               </div>

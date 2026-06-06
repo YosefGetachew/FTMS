@@ -19,6 +19,8 @@ function Topbar({ handleLogout }) {
 
       protocol: 'Protocol',
 
+      pm_office: 'PM Office',
+
       office_head:
         'Office Head',
 

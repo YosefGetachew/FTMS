@@ -19,7 +19,9 @@ const stageLabels = {
   protocol_clearance: 'Protocol Clearance',
   office_head_final: 'Office Head',
   minister_review: 'Minister Approval',
-  foreign_affairs_followup: 'Foreign Affairs',
+  pm_office_submission: 'Protocol Submission',
+  pm_office_followup: 'PM Office',
+  foreign_affairs_followup: 'PM Office',
   completed: 'Completed',
 };
 
@@ -27,6 +29,7 @@ const workflowLabels = {
   sector_structure: 'Sector',
   ceo_structure: 'CEO',
   office_head_structure: "Head of the Minister's Office",
+  affiliate_institution: 'Affiliate Institute',
 };
 
 const workflowStages = {
@@ -37,7 +40,8 @@ const workflowStages = {
     'protocol_clearance',
     'office_head_final',
     'minister_review',
-    'foreign_affairs_followup',
+    'pm_office_submission',
+    'pm_office_followup',
     'completed',
   ],
   ceo_structure: [
@@ -47,7 +51,8 @@ const workflowStages = {
     'protocol_clearance',
     'office_head_final',
     'minister_review',
-    'foreign_affairs_followup',
+    'pm_office_submission',
+    'pm_office_followup',
     'completed',
   ],
   office_head_structure: [
@@ -57,7 +62,17 @@ const workflowStages = {
     'protocol_clearance',
     'office_head_final',
     'minister_review',
-    'foreign_affairs_followup',
+    'pm_office_submission',
+    'pm_office_followup',
+    'completed',
+  ],
+  affiliate_institution: [
+    'expert_preparation',
+    'protocol_clearance',
+    'office_head_final',
+    'minister_review',
+    'pm_office_submission',
+    'pm_office_followup',
     'completed',
   ],
 };
@@ -69,6 +84,7 @@ const roleAliases = {
   lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
   state_minister: ['state_minister'],
   office_head: ['office_head'],
+  pm_office: ['pm_office'],
 };
 
 const normalizeText = (value) => String(value || '').toLowerCase();
@@ -178,7 +194,10 @@ function TravelStatus() {
   const diagramStages = useMemo(() => {
     if (!selectedRequest) return [];
 
-    const workflowType = selectedRequest.workflow_type || 'office_head_structure';
+    const workflowType =
+      selectedRequest.traveler_category === 'affiliate_institution'
+        ? 'affiliate_institution'
+        : selectedRequest.workflow_type || 'office_head_structure';
     const stages = workflowStages[workflowType] || workflowStages.office_head_structure;
     const currentStage = selectedRequest.current_stage;
     const finalStatus = selectedRequest.final_status;
@@ -230,7 +249,7 @@ function TravelStatus() {
         value: requests.filter((request) =>
           ['approved', 'rejected'].includes(request.final_status)
         ).length,
-        helper: 'Foreign Affairs status completed',
+        helper: 'PM Office status completed',
       },
     ],
     [requests]
@@ -310,7 +329,13 @@ function TravelStatus() {
           <div className="travel-status-diagram-card">
             <div className="travel-status-card-header">
               <div>
-                <h3>{workflowLabels[selectedRequest.workflow_type] || 'Workflow'} Approval Path</h3>
+                <h3>
+                  {workflowLabels[
+                    selectedRequest.traveler_category === 'affiliate_institution'
+                      ? 'affiliate_institution'
+                      : selectedRequest.workflow_type
+                  ] || 'Workflow'} Approval Path
+                </h3>
                 <p>{selectedRequest.status || 'Request status not set'}</p>
               </div>
             </div>

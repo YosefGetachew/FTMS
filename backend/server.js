@@ -45,7 +45,8 @@ const STAGES = {
   PROTOCOL_CLEARANCE: 'protocol_clearance',
   OFFICE_HEAD_FINAL: 'office_head_final',
   MINISTER_REVIEW: 'minister_review',
-  FOREIGN_AFFAIRS: 'foreign_affairs_followup',
+  PM_OFFICE_SUBMISSION: 'pm_office_submission',
+  PM_OFFICE: 'pm_office_followup',
   COMPLETED: 'completed',
 };
 
@@ -72,7 +73,9 @@ const STAGE_NAMES = {
   protocol_clearance: 'Protocol Clearance',
   office_head_final: 'Office Head Final Decision',
   minister_review: 'Minister Approval',
-  foreign_affairs_followup: 'Foreign Affairs Follow-up',
+  pm_office_submission: 'Protocol Submission to PM Office',
+  pm_office_followup: 'PM Office Follow-up',
+  foreign_affairs_followup: 'PM Office Follow-up',
   completed: 'Completed',
 };
 
@@ -86,7 +89,9 @@ const STAGE_ROLES = {
   protocol_clearance: 'protocol',
   office_head_final: 'office_head',
   minister_review: 'minister',
-  foreign_affairs_followup: 'protocol',
+  pm_office_submission: 'protocol',
+  pm_office_followup: 'pm_office',
+  foreign_affairs_followup: 'pm_office',
 };
 
 const ROLE_STAGES = {
@@ -98,7 +103,8 @@ const ROLE_STAGES = {
   lead_executive_officer: [STAGES.LEAD_EXECUTIVE_REVIEW],
   lead_executive: [STAGES.LEAD_EXECUTIVE_REVIEW],
   state_minister: [STAGES.STATE_MINISTER_REVIEW],
-  protocol: [STAGES.PROTOCOL_CLEARANCE, STAGES.FOREIGN_AFFAIRS],
+  protocol: [STAGES.PROTOCOL_CLEARANCE, STAGES.PM_OFFICE_SUBMISSION],
+  pm_office: [STAGES.PM_OFFICE],
   minister: [STAGES.MINISTER_REVIEW],
 };
 
@@ -115,6 +121,7 @@ const APPROVER_ROLES = [
   'ceo',
   'minister',
   'protocol',
+  'pm_office',
 ];
 
 /* ── Helpers ─────────────────────────────────────────────── */
@@ -352,6 +359,7 @@ const ROLE_ALIASES = {
   lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
   lead_executive: ['lead_executive_officer', 'lead_executive'],
   protocol: ['protocol'],
+  pm_office: ['pm_office'],
   minister: ['minister'],
   state_minister: ['state_minister'],
 };
@@ -550,6 +558,10 @@ const getScopedDecisionError = async ({
   }
 
   if (stage === STAGES.OFFICE_HEAD_REVIEW) {
+    if (request.traveler_category === 'affiliate_institution') {
+      return '';
+    }
+
     if (
       workflow !== WORKFLOW.OFFICE_HEAD ||
       !sameText(actor.sector, request.sector)
@@ -820,6 +832,14 @@ const accountEmail = (user, activated) =>
     `);
 
     await query(`
+      UPDATE requests
+      SET current_stage='pm_office_followup',
+          status='Submitted to PM Office'
+      WHERE current_stage='foreign_affairs_followup'
+        AND final_status='pending'
+    `);
+
+    await query(`
       CREATE TABLE IF NOT EXISTS request_audit_trails (
         id SERIAL PRIMARY KEY,
         request_id INTEGER REFERENCES requests(id) ON DELETE CASCADE,
@@ -919,18 +939,6 @@ const accountEmail = (user, activated) =>
         END IF;
       END
       $$;
-    `);
-
-    await query(`
-      INSERT INTO moa_sectors (name, workflow_type)
-      VALUES
-        ('Livestock Sector', 'sector_structure'),
-        ('Crop Sector', 'sector_structure'),
-        ('Natural Resource Sector', 'sector_structure'),
-        ('Agricultural Extension Sector', 'sector_structure'),
-        ('CEO Office', 'ceo_structure'),
-        ('Office Head', 'office_head_structure')
-      ON CONFLICT (name) DO NOTHING
     `);
 
     console.log('DB migration OK');
@@ -1230,7 +1238,14 @@ app.post('/api/requests', uploadFields, async (req, res) => {
 const SECTOR_EXPR = `CASE WHEN r.traveler_category='affiliate_institution' THEN 'Affiliate Institute'
   ELSE COALESCE(r.sector,traveler.sector,'Unassigned') END`;
 
-const BASE_SELECT = `SELECT r.*, ${SECTOR_EXPR} AS sector
+const BASE_SELECT = `SELECT r.*,
+    ${SECTOR_EXPR} AS sector,
+    EXISTS (
+      SELECT 1
+      FROM request_audit_trails a
+      WHERE a.request_id = r.id
+        AND COALESCE(a.action,'') NOT IN ('submit','resubmit')
+    ) AS has_workflow_action
   FROM requests r
   LEFT JOIN users traveler
     ON LOWER(TRIM(r.email))=LOWER(TRIM(traveler.email))`;
@@ -1274,15 +1289,28 @@ const ROLE_QUERIES = {
     WHERE (
          r.current_stage='office_head_review'
          AND r.final_status='pending'
-         AND r.workflow_type='office_head_structure'
          AND EXISTS (
            SELECT 1 FROM users me
            WHERE LOWER(TRIM(me.email))=LOWER(TRIM($1))
              AND me.role='office_head'
-             AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
+             AND (
+               r.traveler_category='affiliate_institution'
+               OR (
+                 r.traveler_category<>'affiliate_institution'
+                 AND r.workflow_type='office_head_structure'
+                 AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
+               )
+             )
          )
        )
-       OR (r.current_stage='office_head_final' AND r.final_status='pending')
+       OR (
+         r.current_stage='office_head_final'
+         AND r.final_status='pending'
+         AND (
+           r.traveler_category <> 'affiliate_institution'
+           OR r.traveler_category='affiliate_institution'
+         )
+       )
        OR r.final_status IN ('approved','rejected')
     ORDER BY CASE WHEN r.current_stage IN ('office_head_review','office_head_final') AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 
@@ -1333,7 +1361,7 @@ const ROLE_QUERIES = {
     ORDER BY CASE WHEN r.current_stage='state_minister_review' AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 
   protocol: `${BASE_SELECT}
-    WHERE (r.current_stage IN ('protocol_clearance','foreign_affairs_followup') AND r.final_status='pending')
+    WHERE (r.current_stage IN ('protocol_clearance','pm_office_submission') AND r.final_status='pending')
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (
@@ -1343,7 +1371,11 @@ const ROLE_QUERIES = {
              AND LOWER(TRIM(COALESCE(a.actor_email,'')))=LOWER(TRIM($1))
          )
        )
-    ORDER BY CASE WHEN r.current_stage IN ('protocol_clearance','foreign_affairs_followup') AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
+    ORDER BY CASE WHEN r.current_stage IN ('protocol_clearance','pm_office_submission') AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
+
+  pm_office: `${BASE_SELECT}
+    WHERE (r.current_stage IN ('pm_office_followup','foreign_affairs_followup') AND r.final_status='pending')
+    ORDER BY CASE WHEN r.current_stage IN ('pm_office_followup','foreign_affairs_followup') AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 
   minister: `${BASE_SELECT}
     WHERE (r.current_stage='minister_review' AND r.final_status='pending')
@@ -1545,13 +1577,21 @@ app.put('/api/requests/:id/status', async (req, res) => {
 
       /*
         Approval flow:
-          - sector_structure: Expert -> Lead Executive Officer -> State Minister -> Protocol -> Office Head -> Minister -> Protocol Foreign Affairs
-          - ceo_structure: Expert -> Lead Executive Officer -> CEO -> Protocol -> Office Head -> Minister -> Protocol Foreign Affairs
-          - office_head_structure: Expert -> Lead Executive Officer -> Office Head -> Protocol -> Office Head -> Minister -> Protocol Foreign Affairs
+          - sector_structure: Expert -> Lead Executive Officer -> State Minister -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
+          - ceo_structure: Expert -> Lead Executive Officer -> CEO -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
+          - office_head_structure: Expert -> Lead Executive Officer -> Office Head -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
+          - affiliate_institution: Expert -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
       */
-      nextStage = STAGES.LEAD_EXECUTIVE_REVIEW;
+      const isAffiliateRequest =
+        existing.traveler_category === 'affiliate_institution';
+
+      nextStage = isAffiliateRequest
+        ? STAGES.PROTOCOL_CLEARANCE
+        : STAGES.LEAD_EXECUTIVE_REVIEW;
       finalStatus = STATUS.PENDING;
-      displayStatus = 'Submitted to Lead Executive Officer';
+      displayStatus = isAffiliateRequest
+        ? 'Submitted to Protocol Clearance'
+        : 'Submitted to Lead Executive Officer';
     }
 
     else if (act === 'approve') {
@@ -1598,7 +1638,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
 
         [STAGES.MINISTER_REVIEW]: {
           roles: ['minister', 'admin', 'super_admin'],
-          next: STAGES.FOREIGN_AFFAIRS,
+          next: STAGES.PM_OFFICE_SUBMISSION,
         },
       };
 
@@ -1619,8 +1659,8 @@ app.put('/api/requests/:id/status', async (req, res) => {
       nextStage = mapping.next;
       finalStatus = STATUS.PENDING;
       displayStatus =
-        mapping.next === STAGES.FOREIGN_AFFAIRS
-          ? 'Minister Approved - Sent to Protocol for Foreign Affairs'
+        mapping.next === STAGES.PM_OFFICE_SUBMISSION
+          ? 'Minister Approved - Sent to Protocol for PM Office Submission'
           : `Approved by ${role
               .replace(/_/g, ' ')
               .replace(/\b\w/g, (c) => c.toUpperCase())}`;
@@ -1710,29 +1750,53 @@ app.put('/api/requests/:id/status', async (req, res) => {
       displayStatus = 'Forwarded to Minister';
     }
 
-    else if (
-      act === 'foreign_affairs_approved' ||
-      act === 'foreign_affairs_rejected'
-    ) {
-      if (cur !== STAGES.FOREIGN_AFFAIRS) {
+    else if (act === 'submit_to_pm_office') {
+      if (cur !== STAGES.PM_OFFICE_SUBMISSION) {
         return res.status(400).json({
-          error: 'Only valid at Foreign Affairs stage.',
+          error: 'Submit to PM Office is only valid after Minister approval.',
         });
       }
 
       if (!['protocol', 'admin', 'super_admin'].includes(role)) {
         return res.status(403).json({
-          error: 'Only Protocol can update.',
+          error: 'Only Protocol can submit to PM Office.',
         });
       }
 
-      const approved = act === 'foreign_affairs_approved';
+      nextStage = STAGES.PM_OFFICE;
+      finalStatus = STATUS.PENDING;
+      displayStatus = 'Submitted to PM Office';
+      faStatus = 'submitted';
+      faComment = comment || faComment;
+      faUpdated = new Date();
+    }
+
+    else if (
+      act === 'foreign_affairs_approved' ||
+      act === 'foreign_affairs_rejected' ||
+      act === 'pm_office_approved' ||
+      act === 'pm_office_rejected'
+    ) {
+      if (![STAGES.PM_OFFICE, 'foreign_affairs_followup'].includes(cur)) {
+        return res.status(400).json({
+          error: 'Only valid at PM Office stage.',
+        });
+      }
+
+      if (!['pm_office', 'admin', 'super_admin'].includes(role)) {
+        return res.status(403).json({
+          error: 'Only PM Office can update.',
+        });
+      }
+
+      const approved =
+        act === 'foreign_affairs_approved' || act === 'pm_office_approved';
 
       nextStage = STAGES.COMPLETED;
       finalStatus = approved ? STATUS.APPROVED : STATUS.REJECTED;
       displayStatus = approved
-        ? 'Foreign Affairs Approved'
-        : 'Foreign Affairs Rejected';
+        ? 'PM Office Approved'
+        : 'PM Office Rejected';
 
       faStatus = approved ? 'approved' : 'rejected';
       faUpdated = new Date();
@@ -1848,6 +1912,140 @@ app.put('/api/requests/:id/status', async (req, res) => {
 
 /* ── Requests: Resubmit ─────────────────────────────────── */
 
+app.put('/api/requests/bulk/submit-to-pm-office', async (req, res) => {
+  try {
+    const { requestIds, role, actorEmail, actorId, comment } = req.body;
+    const ids = [
+      ...new Set((requestIds || []).map((id) => Number(id)).filter(Boolean)),
+    ];
+
+    if (!ids.length) {
+      return res.status(400).json({ error: 'Select at least one request.' });
+    }
+
+    if (!['protocol', 'admin', 'super_admin'].includes(role)) {
+      return res.status(403).json({
+        error: 'Only Protocol can submit bulk requests to PM Office.',
+      });
+    }
+
+    const actor = await getActorUser({ actorId, actorEmail });
+
+    if (!['admin', 'super_admin'].includes(role)) {
+      if (!actor) {
+        return res.status(403).json({
+          error: 'Unable to verify the acting user.',
+        });
+      }
+
+      if (!getRolesForLookup(role).includes(actor.role)) {
+        return res.status(403).json({
+          error: 'Logged-in account does not match the submitted role.',
+        });
+      }
+    }
+
+    const existing = await query(
+      `SELECT *
+       FROM requests
+       WHERE id = ANY($1::int[])
+       ORDER BY id ASC`,
+      [ids]
+    );
+
+    const validRequests = existing.rows.filter(
+      (request) =>
+        request.current_stage === STAGES.PM_OFFICE_SUBMISSION &&
+        request.final_status === STATUS.PENDING
+    );
+
+    if (!validRequests.length) {
+      return res.status(400).json({
+        error: 'No selected requests are ready for PM Office submission.',
+      });
+    }
+
+    const validIds = validRequests.map((request) => request.id);
+
+    const updated = await query(
+      `UPDATE requests
+       SET status='Submitted to PM Office',
+           current_stage=$1,
+           final_status=$2,
+           decision_comment=COALESCE($3,decision_comment),
+           last_decision_by=COALESCE($4,last_decision_by),
+           last_decision_at=NOW(),
+           foreign_affairs_status='submitted',
+           foreign_affairs_comment=COALESCE($3,foreign_affairs_comment),
+           foreign_affairs_updated_at=NOW()
+       WHERE id = ANY($5::int[])
+       RETURNING *`,
+      [
+        STAGES.PM_OFFICE,
+        STATUS.PENDING,
+        comment || null,
+        actorId || null,
+        validIds,
+      ]
+    );
+
+    for (const request of updated.rows) {
+      await addAudit({
+        requestId: request.id,
+        action: 'bulk_submit_to_pm_office',
+        actorRole: role,
+        actorEmail,
+        comment: comment || 'Bulk submitted to PM Office by Protocol.',
+        oldStage: STAGES.PM_OFFICE_SUBMISSION,
+        newStage: STAGES.PM_OFFICE,
+        oldStatus: STATUS.PENDING,
+        newStatus: STATUS.PENDING,
+      });
+
+      await addNotification({
+        userEmail: request.email,
+        title: 'Travel Request Submitted to PM Office',
+        message: `Your request to ${request.country} was submitted to the PM Office.`,
+      });
+    }
+
+    const pmOfficeUser = await getFirstUserForStage(
+      STAGES.PM_OFFICE,
+      updated.rows[0]
+    );
+
+    if (pmOfficeUser) {
+      await taskEmail({
+        to: pmOfficeUser.email,
+        recipientName: pmOfficeUser.full_name,
+        request: updated.rows[0],
+        stageName: 'PM Office Follow-up',
+        actionUrl: FRONTEND_URL,
+      });
+
+      await addNotification({
+        userEmail: pmOfficeUser.email,
+        title: 'Bulk PM Office Submission',
+        message: `${updated.rowCount} travel request${
+          updated.rowCount === 1 ? '' : 's'
+        } were submitted to the PM Office queue.`,
+      });
+    }
+
+    res.json({
+      message: `${updated.rowCount} request${
+        updated.rowCount === 1 ? '' : 's'
+      } submitted to PM Office.`,
+      submittedCount: updated.rowCount,
+      skippedCount: ids.length - validIds.length,
+      requests: updated.rows,
+    });
+  } catch (e) {
+    console.error('BULK PM OFFICE SUBMIT ERROR:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.put('/api/requests/:id/resubmit', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1870,6 +2068,18 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
       });
     }
 
+    const isAffiliateRequest =
+      existing.traveler_category === 'affiliate_institution';
+    const nextStage = isAffiliateRequest
+      ? STAGES.PROTOCOL_CLEARANCE
+      : STAGES.LEAD_EXECUTIVE_REVIEW;
+    const displayStatus = isAffiliateRequest
+      ? 'Resubmitted to Protocol Clearance'
+      : 'Resubmitted to Lead Executive Officer';
+    const nextStageName = isAffiliateRequest
+      ? 'Protocol Clearance'
+      : 'Lead Executive Officer Review';
+
     const r = await query(
       `UPDATE requests
        SET current_stage=$1,
@@ -1879,9 +2089,9 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
        WHERE id=$4
        RETURNING *`,
       [
-        STAGES.LEAD_EXECUTIVE_REVIEW,
+        nextStage,
         STATUS.PENDING,
-        'Resubmitted to Lead Executive Officer',
+        displayStatus,
         id,
       ]
     );
@@ -1895,7 +2105,7 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
       actorEmail: actorEmail || existing.email,
       comment: 'Traveler resubmitted corrected request.',
       oldStage: existing.current_stage,
-      newStage: STAGES.LEAD_EXECUTIVE_REVIEW,
+      newStage: nextStage,
       oldStatus: existing.final_status,
       newStatus: STATUS.PENDING,
     });
@@ -1905,35 +2115,32 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
       title: 'Travel Request Resubmitted',
       message: `Your corrected request to ${safeText(
         req2.country
-      )} has been resubmitted to Lead Executive Officer Review.`,
+      )} has been resubmitted to ${nextStageName}.`,
     });
 
     await travelerEmail({
       request: req2,
       status: 'resubmit',
-      displayStatus: 'Resubmitted to Lead Executive Officer',
+      displayStatus,
     });
 
-    const leadExecutive = await getFirstUserForStage(
-      STAGES.LEAD_EXECUTIVE_REVIEW,
-      req2
-    );
+    const nextApprover = await getFirstUserForStage(nextStage, req2);
 
-    if (leadExecutive) {
+    if (nextApprover) {
       await taskEmail({
-        to: leadExecutive.email,
-        recipientName: leadExecutive.full_name,
+        to: nextApprover.email,
+        recipientName: nextApprover.full_name,
         request: req2,
-        stageName: 'Lead Executive Officer Review',
+        stageName: nextStageName,
         actionUrl: FRONTEND_URL,
       });
 
       await addNotification({
-        userEmail: leadExecutive.email,
+        userEmail: nextApprover.email,
         title: 'New FTMS Task Assigned',
         message: `A corrected travel request from ${safeText(
           req2.full_name
-        )} is waiting for Lead Executive Officer Review.`,
+        )} is waiting for ${nextStageName}.`,
       });
     }
 
@@ -2494,25 +2701,36 @@ app.put('/api/users/:id/change-password', async (req, res) => {
 });
 /* ── Stats & Dashboard ──────────────────────────────────── */
 
-app.get('/api/stats', async (_req, res) => {
+app.get('/api/stats', async (req, res) => {
   try {
+    const { role } = req.query;
+    const scope =
+      role === 'pm_office'
+        ? `WHERE current_stage IN ('pm_office_followup','foreign_affairs_followup')
+             AND final_status='pending'`
+        : '';
+    const scopedStatusAnd = scope ? 'AND' : 'WHERE';
+
     const [[total], [approved], [pending], [rejected]] = await Promise.all(
       [
-        query(`SELECT COUNT(*)::int AS count FROM requests`),
+        query(`SELECT COUNT(*)::int AS count FROM requests ${scope}`),
         query(
           `SELECT COUNT(*)::int AS count
            FROM requests
-           WHERE final_status='approved'`
+           ${scope}
+           ${scopedStatusAnd} final_status='approved'`
         ),
         query(
           `SELECT COUNT(*)::int AS count
            FROM requests
-           WHERE final_status='pending'`
+           ${scope}
+           ${scopedStatusAnd} final_status='pending'`
         ),
         query(
           `SELECT COUNT(*)::int AS count
            FROM requests
-           WHERE final_status='rejected'`
+           ${scope}
+           ${scopedStatusAnd} final_status='rejected'`
         ),
       ].map((p) => p.then((r) => r.rows))
     );
@@ -2548,7 +2766,8 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
       lead_executive_officer: `r.current_stage='lead_executive_review'`,
       lead_executive: `r.current_stage='lead_executive_review'`,
       state_minister: `r.current_stage='state_minister_review'`,
-      protocol: `r.current_stage IN ('protocol_clearance','foreign_affairs_followup')`,
+      protocol: `r.current_stage IN ('protocol_clearance','pm_office_submission')`,
+      pm_office: `r.current_stage IN ('pm_office_followup','foreign_affairs_followup')`,
       minister: `r.current_stage='minister_review'`,
     };
 
@@ -2767,7 +2986,7 @@ app.get('/api/generate-pdf/:id', async (req, res) => {
       ['Passport Number', r.passport_number],
       ['System Status', r.status],
       ['Final Status', r.final_status],
-      ['Foreign Affairs Status', r.foreign_affairs_status],
+      ['PM Office Status', r.foreign_affairs_status],
     ]);
 
     doc.addPage();
