@@ -340,6 +340,10 @@ const getStageName = (s) => STAGE_NAMES[s] || s || '-';
 const normalizeWorkflow = (w) =>
   Object.values(WORKFLOW).includes(w) ? w : WORKFLOW.OFFICE_HEAD;
 
+const EMAIL_FROM = process.env.EMAIL_USER
+  ? `"MoA-Foreign Travel" <${process.env.EMAIL_USER}>`
+  : '"MoA-Foreign Travel"';
+
 const sendEmailSafe = async (opts, label = 'EMAIL ERROR') => {
   if (!opts?.to) return;
 
@@ -647,7 +651,7 @@ const archiveFile = (filename) => {
 const taskEmail = ({ to, recipientName, request: r, stageName, actionUrl }) =>
   sendEmailSafe(
     {
-      from: process.env.EMAIL_USER,
+      from: EMAIL_FROM,
       to,
       subject: `FTMS Pending Task: ${safeText(r.full_name)} - ${safeText(
         r.country
@@ -694,7 +698,7 @@ const travelerEmail = ({ request: r, status, displayStatus, amendmentComment }) 
   r?.email &&
   sendEmailSafe(
     {
-      from: process.env.EMAIL_USER,
+      from: EMAIL_FROM,
       to: r.email,
       subject:
         status === 'amend'
@@ -736,7 +740,7 @@ const travelerEmail = ({ request: r, status, displayStatus, amendmentComment }) 
 const accountEmail = (user, activated) =>
   sendEmailSafe(
     {
-      from: process.env.EMAIL_USER,
+      from: EMAIL_FROM,
       to: user.email,
       subject: activated
         ? 'FTMS Account Activated'
