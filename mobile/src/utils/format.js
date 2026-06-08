@@ -23,13 +23,16 @@ export function formatStage(stage) {
     protocol_clearance: 'Protocol Clearance',
     office_head_final: 'Office Head Final Decision',
     minister_review: 'Minister Review',
-    foreign_affairs_followup: 'Foreign Affairs Follow-up',
+    pm_office_submission: 'Protocol Submission to PM Office',
+    pm_office_followup: 'PM Office Follow-up',
+    foreign_affairs_followup: 'PM Office Follow-up',
     completed: 'Completed',
     state_minister: 'State Minister',
     protocol: 'Protocol',
     office_head: 'Office Head',
     minister: 'Minister',
-    protocol_final: 'Pending Foreign Affairs Response',
+    pm_office: 'PM Office',
+    protocol_final: 'Pending PM Office Response',
     traveler: 'Traveler Amendment',
     chief_executive_officer: 'Chief Executive Officer',
     ceo: 'CEO',
@@ -52,6 +55,7 @@ export function getRoleAliases(role) {
     lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
     state_minister: ['state_minister'],
     office_head: ['office_head'],
+    pm_office: ['pm_office'],
   };
 
   return [...new Set(aliases[role] || [role])].filter(Boolean);

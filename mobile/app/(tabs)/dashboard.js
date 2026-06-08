@@ -8,6 +8,8 @@ import { colors } from '../../src/styles/theme';
 export default function DashboardScreen() {
   const { user } = useAuth();
   const { loading, error, summary, refresh } = useRequests(user);
+  const isTraveler = ['traveler', 'expert'].includes(user?.role);
+  const canViewReports = ['admin', 'super_admin', 'minister', 'office_head'].includes(user?.role);
 
   return (
     <ScrollView
@@ -30,18 +32,39 @@ export default function DashboardScreen() {
         <Metric label="Completed" value={summary.completed} />
       </View>
 
-      <Card style={styles.actionCard}>
-        <Text style={styles.actionTitle}>Traveler workflow</Text>
-        <Text style={styles.actionText}>Create a travel request or check where an existing request is in the approval path.</Text>
-        <View style={styles.actions}>
-          <Link href="/request/new" asChild>
-            <Button style={styles.actionButton}>New Request</Button>
-          </Link>
-          <Link href="/status" asChild>
-            <Button variant="secondary" style={styles.actionButton}>Track Status</Button>
-          </Link>
-        </View>
-      </Card>
+      {isTraveler ? (
+        <Card style={styles.actionCard}>
+          <Text style={styles.actionTitle}>Traveler workflow</Text>
+          <Text style={styles.actionText}>Create a travel request or check where an existing request is in the approval path.</Text>
+          <View style={styles.actions}>
+            <Link href="/request/new" asChild>
+              <Button style={styles.actionButton}>New Request</Button>
+            </Link>
+            <Link href="/status" asChild>
+              <Button variant="secondary" style={styles.actionButton}>Track Status</Button>
+            </Link>
+          </View>
+        </Card>
+      ) : (
+        <Card style={styles.actionCard}>
+          <Text style={styles.actionTitle}>Leadership workspace</Text>
+          <Text style={styles.actionText}>Review assigned travel requests and open ministry-level analytics for broader visibility.</Text>
+          <View style={styles.actions}>
+            <Link href="/requests" asChild>
+              <Button style={styles.actionButton}>Review Requests</Button>
+            </Link>
+            {canViewReports ? (
+              <Link href="/reports" asChild>
+                <Button variant="secondary" style={styles.actionButton}>Reports</Button>
+              </Link>
+            ) : (
+              <Link href="/status" asChild>
+                <Button variant="secondary" style={styles.actionButton}>Status</Button>
+              </Link>
+            )}
+          </View>
+        </Card>
+      )}
     </ScrollView>
   );
 }

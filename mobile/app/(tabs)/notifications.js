@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, EmptyState, Notice } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
-import API from '../../src/services/api';
+import API, { getApiErrorMessage } from '../../src/services/api';
 import { colors } from '../../src/styles/theme';
 import { formatDate } from '../../src/utils/format';
 
@@ -20,7 +20,7 @@ export default function NotificationsScreen() {
       const response = await API.get(`/notifications?email=${encodeURIComponent(user.email)}`);
       setItems(response.data || []);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load notifications.');
+      setError(getApiErrorMessage(err, 'Failed to load notifications.'));
     } finally {
       setLoading(false);
     }

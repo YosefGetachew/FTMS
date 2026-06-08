@@ -20,6 +20,11 @@ export default function RootLayout() {
         <Stack.Screen name="register" options={{ title: 'Create Account' }} />
         <Stack.Screen name="request/new" options={{ title: 'New Travel Request' }} />
         <Stack.Screen name="request/[id]" options={{ title: 'Request Details' }} />
+        <Stack.Screen name="admin/pending-users" options={{ title: 'Pending Users' }} />
+        <Stack.Screen name="admin/users" options={{ title: 'User Management' }} />
+        <Stack.Screen name="admin/settings" options={{ title: 'Organization Settings' }} />
+        <Stack.Screen name="admin/audit" options={{ title: 'Audit Trail' }} />
+        <Stack.Screen name="account/password" options={{ title: 'Reset Password' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
     </AuthProvider>

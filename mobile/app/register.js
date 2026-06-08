@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Field, Notice } from '../src/components/ui';
-import API from '../src/services/api';
+import API, { getApiErrorMessage } from '../src/services/api';
 import { colors } from '../src/styles/theme';
 
 const initialForm = {
@@ -43,8 +43,11 @@ export default function RegisterScreen() {
         ]);
         setMoaSectors(sectorResponse.data || []);
         setAffiliates(affiliateResponse.data || []);
-      } catch {
-        setNotice({ type: 'error', message: 'Failed to load organization settings.' });
+      } catch (err) {
+        setNotice({
+          type: 'error',
+          message: getApiErrorMessage(err, 'Failed to load organization settings.'),
+        });
       } finally {
         setLoadingLists(false);
       }
@@ -63,8 +66,11 @@ export default function RegisterScreen() {
       try {
         const response = await API.get(`/moa-executive-offices?sectorId=${form.sectorId}`);
         setOffices(response.data || []);
-      } catch {
-        setNotice({ type: 'error', message: 'Failed to load Lead Executive Offices.' });
+      } catch (err) {
+        setNotice({
+          type: 'error',
+          message: getApiErrorMessage(err, 'Failed to load Lead Executive Offices.'),
+        });
       }
     }
 
@@ -138,7 +144,7 @@ export default function RegisterScreen() {
       setForm(initialForm);
       setNotice({ type: 'success', message: 'Account request submitted. You can login after admin approval.' });
     } catch (err) {
-      setNotice({ type: 'error', message: err.response?.data?.error || 'Registration failed.' });
+      setNotice({ type: 'error', message: getApiErrorMessage(err, 'Registration failed.') });
     } finally {
       setLoading(false);
     }

@@ -7,9 +7,10 @@ import { colors } from '../../src/styles/theme';
 import { formatDate, formatStage, normalizeText } from '../../src/utils/format';
 
 const workflowStages = {
-  sector_structure: ['expert_preparation', 'lead_executive_review', 'state_minister_review', 'protocol_clearance', 'office_head_final', 'minister_review', 'completed'],
-  ceo_structure: ['expert_preparation', 'lead_executive_review', 'ceo_review', 'protocol_clearance', 'office_head_final', 'minister_review', 'completed'],
-  office_head_structure: ['expert_preparation', 'lead_executive_review', 'office_head_review', 'protocol_clearance', 'office_head_final', 'minister_review', 'completed'],
+  sector_structure: ['expert_preparation', 'lead_executive_review', 'state_minister_review', 'protocol_clearance', 'office_head_final', 'minister_review', 'pm_office_submission', 'pm_office_followup', 'completed'],
+  ceo_structure: ['expert_preparation', 'lead_executive_review', 'ceo_review', 'protocol_clearance', 'office_head_final', 'minister_review', 'pm_office_submission', 'pm_office_followup', 'completed'],
+  office_head_structure: ['expert_preparation', 'lead_executive_review', 'office_head_review', 'protocol_clearance', 'office_head_final', 'minister_review', 'pm_office_submission', 'pm_office_followup', 'completed'],
+  affiliate_institution: ['expert_preparation', 'protocol_clearance', 'office_head_final', 'minister_review', 'pm_office_submission', 'pm_office_followup', 'completed'],
 };
 
 export default function StatusScreen() {
@@ -24,8 +25,16 @@ export default function StatusScreen() {
   }, [requests, search]);
 
   const selected = filtered[0];
-  const stages = selected ? workflowStages[selected.workflow_type] || workflowStages.office_head_structure : [];
-  const currentIndex = selected ? Math.max(stages.indexOf(selected.current_stage), 0) : 0;
+  const stages = selected && selected.traveler_category === 'affiliate_institution'
+    ? workflowStages.affiliate_institution
+    : selected
+    ? workflowStages[selected.workflow_type] || workflowStages.office_head_structure
+    : [];
+  const normalizedStage =
+    selected?.current_stage === 'foreign_affairs_followup'
+      ? 'pm_office_followup'
+      : selected?.current_stage;
+  const currentIndex = selected ? Math.max(stages.indexOf(normalizedStage), 0) : 0;
 
   return (
     <ScrollView

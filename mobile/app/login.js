@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { Button, Field, Notice } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
+import { apiOrigin, getApiErrorMessage } from '../src/services/api';
 import { colors } from '../src/styles/theme';
 
 export default function LoginScreen() {
@@ -18,13 +19,24 @@ export default function LoginScreen() {
       return;
     }
 
+    let step = 'sending login request';
+
     try {
       setLoading(true);
       setError('');
+      step = 'calling login API';
       await signIn({ email, password });
+    } catch (err) {
+      setError(getApiErrorMessage(err, `Login failed while ${step}.`));
+      setLoading(false);
+      return;
+    }
+
+    try {
+      step = 'opening dashboard';
       router.replace('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed. Check your email and password.');
+      setError(getApiErrorMessage(err, `Login succeeded, but failed while ${step}.`));
     } finally {
       setLoading(false);
     }
@@ -64,6 +76,8 @@ export default function LoginScreen() {
         />
 
         <Button loading={loading} onPress={submit}>Login</Button>
+
+        <Text style={styles.apiHint}>API: {apiOrigin}</Text>
 
         <View style={styles.registerRow}>
           <Text style={styles.registerText}>Need traveler access?</Text>
@@ -128,5 +142,11 @@ const styles = StyleSheet.create({
   registerLink: {
     color: colors.primary,
     fontWeight: '800',
+  },
+  apiHint: {
+    color: colors.muted,
+    fontSize: 11,
+    marginTop: 12,
+    textAlign: 'center',
   },
 });

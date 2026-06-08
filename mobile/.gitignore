@@ -1,6 +1,7 @@
 node_modules/
 .expo/
 dist/
+dist-ios-check/
 build/
 .env
 *.log

@@ -5,14 +5,16 @@ import RequestCard from '../../src/components/RequestCard';
 import { Button, EmptyState, Field, Notice } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRequests } from '../../src/hooks/useRequests';
-import API from '../../src/services/api';
+import API, { getApiErrorMessage } from '../../src/services/api';
 import { colors } from '../../src/styles/theme';
+import { canCreateRequest } from '../../src/utils/access';
 import { normalizeText } from '../../src/utils/format';
-import { canDecideRequest, getPrimaryAction } from '../../src/utils/permissions';
+import { canDecideRequest, getNegativeAction, getPrimaryAction } from '../../src/utils/permissions';
 
 export default function RequestsScreen() {
   const { user } = useAuth();
   const { requests, loading, error, refresh } = useRequests(user);
+  const showNewRequest = canCreateRequest(user?.role);
   const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
 
@@ -46,16 +48,27 @@ export default function RequestsScreen() {
       });
       await refresh();
     } catch (err) {
-      Alert.alert('Update failed', err.response?.data?.error || 'Could not update request.');
+      Alert.alert('Update failed', getApiErrorMessage(err, 'Could not update request.'));
     } finally {
       setUpdatingId(null);
     }
   };
 
   const confirmReject = (request) => {
-    Alert.alert('Reject request', 'Return or reject this request?', [
+    const negative = getNegativeAction(request);
+
+    Alert.alert(negative.label, 'Apply this decision to the selected request?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Reject', style: 'destructive', onPress: () => updateStatus(request, 'reject') },
+      {
+        text: negative.label,
+        style: 'destructive',
+        onPress: () =>
+          updateStatus(
+            request,
+            negative.action,
+            `${negative.label} from FTMS mobile.`
+          ),
+      },
     ]);
   };
 
@@ -67,9 +80,11 @@ export default function RequestsScreen() {
     >
       <View style={styles.header}>
         <Text style={styles.title}>Requests</Text>
-        <Link href="/request/new" asChild>
-          <Button style={styles.newButton}>New</Button>
-        </Link>
+        {showNewRequest ? (
+          <Link href="/request/new" asChild>
+            <Button style={styles.newButton}>New</Button>
+          </Link>
+        ) : null}
       </View>
 
       <Field label="Search" value={search} onChangeText={setSearch} placeholder="Traveler, country, status..." />
@@ -80,6 +95,7 @@ export default function RequestsScreen() {
       ) : (
         filtered.map((request) => {
           const primary = getPrimaryAction(request);
+          const negative = getNegativeAction(request);
           const canDecide = canDecideRequest(user, request);
 
           return (
@@ -96,9 +112,11 @@ export default function RequestsScreen() {
                     >
                       {primary.label}
                     </Button>
-                    <Button variant="danger" style={styles.smallButton} onPress={() => confirmReject(request)}>
-                      Reject
-                    </Button>
+                    {negative ? (
+                      <Button variant="danger" style={styles.smallButton} onPress={() => confirmReject(request)}>
+                        {negative.label}
+                      </Button>
+                    ) : null}
                   </View>
                 ) : null
               }

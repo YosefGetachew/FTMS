@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import API from '../services/api';
+import API, { getApiErrorMessage } from '../services/api';
 import { getRoleAliases } from '../utils/format';
 
 export function useRequests(user) {
@@ -39,7 +39,7 @@ export function useRequests(user) {
       successful.forEach((request) => merged.set(request.id, request));
       setRequests([...merged.values()].sort((a, b) => b.id - a.id));
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load requests.');
+      setError(getApiErrorMessage(err, 'Failed to load requests.'));
     } finally {
       setLoading(false);
     }

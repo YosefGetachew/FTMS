@@ -1,8 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import API from '../services/api';
-import { deleteSessionItem, getSessionItem, setSessionItem } from '../services/sessionStore';
+import API, { setAuthToken } from '../services/api';
 
 const AuthContext = createContext(null);
+
+function normalizeUser(user) {
+  if (!user) return null;
+
+  return {
+    ...user,
+    full_name: user.full_name || user.fullName || '',
+    fullName: user.fullName || user.full_name || '',
+    account_status: user.account_status || user.accountStatus || '',
+    accountStatus: user.accountStatus || user.account_status || '',
+  };
+}
 
 export function AuthProvider({ children }) {
   const [ready, setReady] = useState(false);
@@ -10,33 +21,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    let mounted = true;
-
-    async function loadSession() {
-      try {
-        const [savedToken, savedUser] = await Promise.all([
-          getSessionItem('ftms.token'),
-          getSessionItem('ftms.user'),
-        ]);
-
-        if (!mounted) return;
-        setToken(savedToken || null);
-        setUser(savedUser ? JSON.parse(savedUser) : null);
-      } catch {
-        if (mounted) {
-          setToken(null);
-          setUser(null);
-        }
-      } finally {
-        if (mounted) setReady(true);
-      }
-    }
-
-    loadSession();
-
-    return () => {
-      mounted = false;
-    };
+    setReady(true);
   }, []);
 
   const signIn = useCallback(async ({ email, password }) => {
@@ -46,24 +31,16 @@ export function AuthProvider({ children }) {
     });
 
     const nextToken = response.data.token;
-    const nextUser = response.data.user;
+    const nextUser = normalizeUser(response.data.user);
 
-    await Promise.all([
-      setSessionItem('ftms.token', nextToken),
-      setSessionItem('ftms.user', JSON.stringify(nextUser)),
-    ]);
-
+    setAuthToken(nextToken);
     setToken(nextToken);
     setUser(nextUser);
     return nextUser;
   }, []);
 
   const signOut = useCallback(async () => {
-    await Promise.all([
-      deleteSessionItem('ftms.token'),
-      deleteSessionItem('ftms.user'),
-    ]);
-
+    setAuthToken('');
     setToken(null);
     setUser(null);
   }, []);

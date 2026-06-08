@@ -2,10 +2,11 @@ import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Button, Card, Field, Notice } from '../../src/components/ui';
+import { Button, Card, EmptyState, Field, Notice } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
-import API from '../../src/services/api';
+import API, { getApiErrorMessage } from '../../src/services/api';
 import { colors } from '../../src/styles/theme';
+import { canCreateRequest } from '../../src/utils/access';
 
 const initialForm = {
   organizationType: '',
@@ -78,6 +79,10 @@ export default function NewRequestScreen() {
 
     loadSettings();
   }, []);
+
+  if (!canCreateRequest(user?.role)) {
+    return <EmptyState title="Access restricted" message="This role does not create new travel requests." />;
+  }
 
   const update = (name, value) => {
     setNotice(null);
@@ -163,19 +168,30 @@ export default function NewRequestScreen() {
       })).data;
 
       if (created?.id) {
-        await API.put(`/requests/${created.id}/status`, {
-          action: 'submit',
-          role: user?.role || 'traveler',
-          actorEmail: user?.email || form.email,
-          actorId: user?.id || null,
-          comment: 'Request prepared and submitted from FTMS mobile.',
-        });
+        try {
+          await API.put(`/requests/${created.id}/status`, {
+            action: 'submit',
+            role: user?.role || 'traveler',
+            actorEmail: user?.email || form.email,
+            actorId: user?.id || null,
+            comment: 'Request prepared and submitted from FTMS mobile.',
+          });
+        } catch (submitError) {
+          setNotice({
+            type: 'error',
+            message: getApiErrorMessage(
+              submitError,
+              'Request was created, but submission failed.'
+            ),
+          });
+          return;
+        }
       }
 
       setNotice({ type: 'success', message: 'Travel request submitted successfully.' });
       setTimeout(() => router.replace('/requests'), 600);
     } catch (err) {
-      setNotice({ type: 'error', message: err.response?.data?.error || 'Failed to submit request.' });
+      setNotice({ type: 'error', message: getApiErrorMessage(err, 'Failed to submit request.') });
     } finally {
       setLoading(false);
     }
