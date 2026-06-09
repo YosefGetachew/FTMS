@@ -952,7 +952,7 @@ const accountEmail = (user, activated) =>
 
   try {
     const email = normalizeEmail(
-      process.env.SUPER_ADMIN_EMAIL || 'superadmin@ftms.local'
+      process.env.SUPER_ADMIN_EMAIL || 'yosefgetachew@gmail.com'
     );
 
     const exists = await query(
@@ -3087,6 +3087,9 @@ app.post('/api/moa-sectors', async (req, res) => {
 });
 
 app.put('/api/moa-sectors/:id', async (req, res) => {
+  let client;
+  let inTransaction = false;
+
   try {
     const { name, workflowType } = req.body;
     const cleanName = String(name || '').trim();
@@ -3103,7 +3106,27 @@ app.put('/api/moa-sectors/:id', async (req, res) => {
       });
     }
 
-    const r = await query(
+    client = await pool.connect();
+
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const existing = (
+      await client.query(`SELECT id,name FROM moa_sectors WHERE id=$1`, [
+        req.params.id,
+      ])
+    ).rows[0];
+
+    if (!existing) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(404).json({
+        error: 'Sector / Office not found.',
+      });
+    }
+
+    const r = await client.query(
       `UPDATE moa_sectors
        SET name=$1,
            workflow_type=$2
@@ -3112,17 +3135,34 @@ app.put('/api/moa-sectors/:id', async (req, res) => {
       [cleanName, workflowType, req.params.id]
     );
 
-    if (!r.rows.length) {
-      return res.status(404).json({
-        error: 'Sector / Office not found.',
-      });
-    }
+    const usersUpdate = await client.query(
+      `UPDATE users
+       SET sector=$1
+       WHERE LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($2))`,
+      [cleanName, existing.name]
+    );
+
+    const requestsUpdate = await client.query(
+      `UPDATE requests
+       SET sector=$1
+       WHERE LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($2))`,
+      [cleanName, existing.name]
+    );
+
+    await client.query('COMMIT');
+    inTransaction = false;
 
     res.json({
       message: 'Sector / Office updated.',
       sector: r.rows[0],
+      updatedUsers: usersUpdate.rowCount,
+      updatedRequests: requestsUpdate.rowCount,
     });
   } catch (e) {
+    if (client && inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+
     console.error('UPDATE MOA SECTOR ERROR:', e);
 
     if (e.code === '23505') {
@@ -3134,23 +3174,64 @@ app.put('/api/moa-sectors/:id', async (req, res) => {
     res.status(500).json({
       error: e.message || 'Failed to update Sector / Office.',
     });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
 app.delete('/api/moa-sectors/:id', async (req, res) => {
   try {
+    const existing = (
+      await query(`SELECT id,name FROM moa_sectors WHERE id=$1`, [
+        req.params.id,
+      ])
+    ).rows[0];
+
+    if (!existing) {
+      return res.status(404).json({
+        error: 'Sector / Office not found.',
+      });
+    }
+
+    const userCount = Number(
+      (
+        await query(
+          `SELECT COUNT(*) AS count
+           FROM users
+           WHERE LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($1))`,
+          [existing.name]
+        )
+      ).rows[0].count
+    );
+
+    const requestCount = Number(
+      (
+        await query(
+          `SELECT COUNT(*) AS count
+           FROM requests
+           WHERE LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($1))`,
+          [existing.name]
+        )
+      ).rows[0].count
+    );
+
+    if (userCount || requestCount) {
+      return res.status(409).json({
+        error:
+          'This Sector / Office is used by users or travel requests. Reassign them before deleting it.',
+        linkedUsers: userCount,
+        linkedRequests: requestCount,
+      });
+    }
+
     const r = await query(
       `DELETE FROM moa_sectors
        WHERE id=$1
        RETURNING id,name`,
       [req.params.id]
     );
-
-    if (!r.rows.length) {
-      return res.status(404).json({
-        error: 'Sector / Office not found.',
-      });
-    }
 
     res.json({
       message: 'Sector / Office deleted.',
@@ -3246,6 +3327,9 @@ app.post('/api/moa-executive-offices', async (req, res) => {
 });
 
 app.put('/api/moa-executive-offices/:id', async (req, res) => {
+  let client;
+  let inTransaction = false;
+
   try {
     const { sectorId, name } = req.body;
     const cleanName = String(name || '').trim();
@@ -3256,7 +3340,49 @@ app.put('/api/moa-executive-offices/:id', async (req, res) => {
       });
     }
 
-    const r = await query(
+    client = await pool.connect();
+
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const existing = (
+      await client.query(
+        `SELECT eo.id,
+                eo.sector_id,
+                COALESCE(eo.name, eo.office_name) AS name,
+                s.name AS sector_name
+         FROM moa_executive_offices eo
+         JOIN moa_sectors s ON s.id = eo.sector_id
+         WHERE eo.id=$1`,
+        [req.params.id]
+      )
+    ).rows[0];
+
+    if (!existing) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(404).json({
+        error: 'Executive Office not found.',
+      });
+    }
+
+    const targetSector = (
+      await client.query(`SELECT id,name FROM moa_sectors WHERE id=$1`, [
+        sectorId,
+      ])
+    ).rows[0];
+
+    if (!targetSector) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(400).json({
+        error: 'Selected Sector / Office does not exist.',
+      });
+    }
+
+    const r = await client.query(
       `UPDATE moa_executive_offices
        SET sector_id=$1,
            name=$2,
@@ -3266,17 +3392,46 @@ app.put('/api/moa-executive-offices/:id', async (req, res) => {
       [sectorId, cleanName, req.params.id]
     );
 
-    if (!r.rows.length) {
-      return res.status(404).json({
-        error: 'Executive Office not found.',
-      });
-    }
+    const usersUpdate = await client.query(
+      `UPDATE users
+       SET department=$1,
+           sector=$2
+       WHERE LOWER(TRIM(COALESCE(department,''))) = LOWER(TRIM($3))
+         AND (
+           sector IS NULL
+           OR TRIM(COALESCE(sector,'')) = ''
+           OR LOWER(TRIM(sector)) = LOWER(TRIM($4))
+         )`,
+      [cleanName, targetSector.name, existing.name, existing.sector_name]
+    );
+
+    const requestsUpdate = await client.query(
+      `UPDATE requests
+       SET department=$1,
+           sector=$2
+       WHERE LOWER(TRIM(COALESCE(department,''))) = LOWER(TRIM($3))
+         AND (
+           sector IS NULL
+           OR TRIM(COALESCE(sector,'')) = ''
+           OR LOWER(TRIM(sector)) = LOWER(TRIM($4))
+         )`,
+      [cleanName, targetSector.name, existing.name, existing.sector_name]
+    );
+
+    await client.query('COMMIT');
+    inTransaction = false;
 
     res.json({
       message: 'Executive Office updated.',
       executiveOffice: r.rows[0],
+      updatedUsers: usersUpdate.rowCount,
+      updatedRequests: requestsUpdate.rowCount,
     });
   } catch (e) {
+    if (client && inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+
     console.error('UPDATE EXECUTIVE OFFICE ERROR:', e);
 
     if (e.code === '23505') {
@@ -3295,23 +3450,80 @@ app.put('/api/moa-executive-offices/:id', async (req, res) => {
     res.status(500).json({
       error: e.message || 'Failed to update Executive Office.',
     });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
 app.delete('/api/moa-executive-offices/:id', async (req, res) => {
   try {
+    const existing = (
+      await query(
+        `SELECT eo.id,
+                COALESCE(eo.name, eo.office_name) AS name,
+                s.name AS sector_name
+         FROM moa_executive_offices eo
+         JOIN moa_sectors s ON s.id = eo.sector_id
+         WHERE eo.id=$1`,
+        [req.params.id]
+      )
+    ).rows[0];
+
+    if (!existing) {
+      return res.status(404).json({
+        error: 'Executive Office not found.',
+      });
+    }
+
+    const userCount = Number(
+      (
+        await query(
+          `SELECT COUNT(*) AS count
+           FROM users
+           WHERE LOWER(TRIM(COALESCE(department,''))) = LOWER(TRIM($1))
+             AND (
+               sector IS NULL
+               OR TRIM(COALESCE(sector,'')) = ''
+               OR LOWER(TRIM(sector)) = LOWER(TRIM($2))
+             )`,
+          [existing.name, existing.sector_name]
+        )
+      ).rows[0].count
+    );
+
+    const requestCount = Number(
+      (
+        await query(
+          `SELECT COUNT(*) AS count
+           FROM requests
+           WHERE LOWER(TRIM(COALESCE(department,''))) = LOWER(TRIM($1))
+             AND (
+               sector IS NULL
+               OR TRIM(COALESCE(sector,'')) = ''
+               OR LOWER(TRIM(sector)) = LOWER(TRIM($2))
+             )`,
+          [existing.name, existing.sector_name]
+        )
+      ).rows[0].count
+    );
+
+    if (userCount || requestCount) {
+      return res.status(409).json({
+        error:
+          'This Executive Office is used by users or travel requests. Reassign them before deleting it.',
+        linkedUsers: userCount,
+        linkedRequests: requestCount,
+      });
+    }
+
     const r = await query(
       `DELETE FROM moa_executive_offices
        WHERE id=$1
        RETURNING id,COALESCE(name,office_name) AS name`,
       [req.params.id]
     );
-
-    if (!r.rows.length) {
-      return res.status(404).json({
-        error: 'Executive Office not found.',
-      });
-    }
 
     res.json({
       message: 'Executive Office deleted.',

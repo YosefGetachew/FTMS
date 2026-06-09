@@ -585,6 +585,7 @@ function Settings() {
       setEditingSector(null);
       fetchMoaSectors();
       fetchExecutiveOffices();
+      fetchSectorApprovers();
     } catch (error) {
       console.error(error);
       alert(error.response?.data?.error || "Failed to update structure");
@@ -648,6 +649,7 @@ function Settings() {
 
       setEditingExecutiveOffice(null);
       fetchExecutiveOffices();
+      fetchSectorApprovers();
     } catch (error) {
       console.error(error);
       alert(error.response?.data?.error || "Failed to update Executive Office");
