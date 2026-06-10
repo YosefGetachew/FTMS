@@ -387,12 +387,18 @@ const getFirstUserByRole = async (role) => {
   return r.rows[0] || null;
 };
 
-const getFirstUserByRoleAndSector = async (role, sector, department = '') => {
+const getFirstUserByRoleAndSector = async (
+  role,
+  sector,
+  department = '',
+  options = {}
+) => {
   const roles = getRolesForLookup(role);
   const cleanSector = String(sector || '').trim();
   const cleanDepartment = String(department || '').trim();
+  const allowFallback = options.allowFallback !== false;
 
-  if (!cleanSector) return getFirstUserByRole(role);
+  if (!cleanSector) return allowFallback ? getFirstUserByRole(role) : null;
 
   if (cleanDepartment) {
     const officeMatch = await query(
@@ -425,6 +431,8 @@ const getFirstUserByRoleAndSector = async (role, sector, department = '') => {
 
   if (exact.rows[0]) return exact.rows[0];
 
+  if (!allowFallback) return null;
+
   const partial = await query(
     `SELECT id, full_name, email, role, sector, department
      FROM users
@@ -446,6 +454,7 @@ const getFirstUserByRoleAndSector = async (role, sector, department = '') => {
 const getSectorForStage = (stage, request) => {
   const workflow = normalizeWorkflow(request?.workflow_type);
   const requestSector = request?.sector;
+  const affiliateOrganization = request?.organization_name || requestSector;
 
   if ([STAGES.DIRECTOR_REVIEW, STAGES.LEAD_EXECUTIVE_REVIEW].includes(stage)) {
     return requestSector;
@@ -460,6 +469,10 @@ const getSectorForStage = (stage, request) => {
   }
 
   if (stage === STAGES.OFFICE_HEAD_REVIEW) {
+    if (request?.traveler_category === 'affiliate_institution') {
+      return affiliateOrganization;
+    }
+
     return workflow === WORKFLOW.OFFICE_HEAD ? requestSector : null;
   }
 
@@ -479,10 +492,102 @@ const getFirstUserForStage = async (stage, request = null) => {
     stage === STAGES.LEAD_EXECUTIVE_REVIEW ? request?.department : '';
 
   if (sector) {
-    return getFirstUserByRoleAndSector(role, sector, department);
+    const requiresExactSector =
+      stage === STAGES.OFFICE_HEAD_REVIEW &&
+      request?.traveler_category === 'affiliate_institution';
+
+    return getFirstUserByRoleAndSector(role, sector, department, {
+      allowFallback: !requiresExactSector,
+    });
   }
 
   return getFirstUserByRole(role);
+};
+
+const isSameUser = (a, b) => {
+  if (!a || !b) return false;
+
+  if (a.id && b.id && Number(a.id) === Number(b.id)) return true;
+
+  return sameText(a.email, b.email);
+};
+
+const getNextStageAfterApproval = (stage, request = {}) => {
+  const wf = normalizeWorkflow(request.workflow_type);
+
+  if (stage === STAGES.LEAD_EXECUTIVE_REVIEW) {
+    if (wf === WORKFLOW.SECTOR) return STAGES.STATE_MINISTER_REVIEW;
+    if (wf === WORKFLOW.CEO) return STAGES.CEO_REVIEW;
+    return STAGES.OFFICE_HEAD_REVIEW;
+  }
+
+  if (stage === STAGES.STATE_MINISTER_REVIEW) return STAGES.PROTOCOL_CLEARANCE;
+  if (stage === STAGES.CEO_REVIEW) return STAGES.PROTOCOL_CLEARANCE;
+  if (stage === STAGES.OFFICE_HEAD_REVIEW) return STAGES.PROTOCOL_CLEARANCE;
+  if (stage === STAGES.PROTOCOL_CLEARANCE) return STAGES.OFFICE_HEAD_FINAL;
+  if (stage === STAGES.OFFICE_HEAD_FINAL) return STAGES.MINISTER_REVIEW;
+  if (stage === STAGES.MINISTER_REVIEW) return STAGES.PM_OFFICE_SUBMISSION;
+  if (stage === STAGES.PM_OFFICE_SUBMISSION) return STAGES.PM_OFFICE;
+
+  return stage;
+};
+
+const getInitialReviewStage = (request, actor) => {
+  if (request?.traveler_category === 'affiliate_institution') {
+    return STAGES.OFFICE_HEAD_REVIEW;
+  }
+
+  const wf = normalizeWorkflow(request?.workflow_type);
+
+  if (
+    actor?.role === 'state_minister' &&
+    wf === WORKFLOW.SECTOR &&
+    sameText(actor.sector, request?.sector)
+  ) {
+    return STAGES.STATE_MINISTER_REVIEW;
+  }
+
+  if (
+    ['chief_executive_officer', 'ceo'].includes(actor?.role) &&
+    wf === WORKFLOW.CEO &&
+    sameText(actor.sector, request?.sector)
+  ) {
+    return STAGES.CEO_REVIEW;
+  }
+
+  if (
+    actor?.role === 'office_head' &&
+    wf === WORKFLOW.OFFICE_HEAD &&
+    sameText(actor.sector, request?.sector)
+  ) {
+    return STAGES.OFFICE_HEAD_REVIEW;
+  }
+
+  return STAGES.LEAD_EXECUTIVE_REVIEW;
+};
+
+const resolveNextStageSkippingSelf = async (startStage, request, actor) => {
+  let stage = startStage;
+  const traveler = { email: request?.email };
+
+  for (let i = 0; i < 8; i += 1) {
+    if ([STAGES.EXPERT_PREPARATION, STAGES.COMPLETED].includes(stage)) {
+      return stage;
+    }
+
+    const approver = await getFirstUserForStage(stage, request);
+
+    if (!isSameUser(actor, approver) && !isSameUser(traveler, approver)) {
+      return stage;
+    }
+
+    const next = getNextStageAfterApproval(stage, request);
+    if (!next || next === stage) return stage;
+
+    stage = next;
+  }
+
+  return stage;
 };
 
 const getActorUser = async ({ actorId, actorEmail }) => {
@@ -530,7 +635,7 @@ const getScopedDecisionError = async ({
   }
 
   if (action === 'submit' || action === 'resubmit') {
-    if (['traveler', 'expert'].includes(role) && !sameText(actor.email, request.email)) {
+    if (!sameText(actor.email, request.email)) {
       return 'You can only submit your own travel request.';
     }
 
@@ -563,6 +668,13 @@ const getScopedDecisionError = async ({
 
   if (stage === STAGES.OFFICE_HEAD_REVIEW) {
     if (request.traveler_category === 'affiliate_institution') {
+      const assignedAffiliate =
+        request.organization_name || request.sector || request.organizationName;
+
+      if (!sameText(actor.sector, assignedAffiliate)) {
+        return 'This request is assigned to another Affiliate Institution Director General.';
+      }
+
       return '';
     }
 
@@ -1172,6 +1284,16 @@ app.post('/api/requests', uploadFields, async (req, res) => {
       await query(`SELECT * FROM users WHERE LOWER(TRIM(email))=$1`, [ne])
     ).rows[0];
 
+    const cleanTravelerCategory = travelerCategory || 'ministry_staff';
+    const isAffiliateRequest =
+      cleanTravelerCategory === 'affiliate_institution';
+    const requestOrganization = isAffiliateRequest
+      ? organizationName || existingUser?.organization_name || null
+      : organizationName || null;
+    const requestSector = isAffiliateRequest
+      ? requestOrganization
+      : sector || existingUser?.sector || null;
+
     const r = await query(
       `INSERT INTO requests(
         traveler_category,
@@ -1200,15 +1322,15 @@ app.post('/api/requests', uploadFields, async (req, res) => {
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
       RETURNING *`,
       [
-        travelerCategory || 'ministry_staff',
-        organizationName || null,
+        cleanTravelerCategory,
+        requestOrganization,
         normalizeWorkflow(workflowType),
         STAGES.EXPERT_PREPARATION,
         STATUS.PENDING,
         fullName,
         position || null,
         department || null,
-        sector || existingUser?.sector || null,
+        requestSector,
         country,
         startDate,
         endDate,
@@ -1298,7 +1420,11 @@ const ROLE_QUERIES = {
            WHERE LOWER(TRIM(me.email))=LOWER(TRIM($1))
              AND me.role='office_head'
              AND (
-               r.traveler_category='affiliate_institution'
+               (
+                 r.traveler_category='affiliate_institution'
+                 AND LOWER(TRIM(COALESCE(me.sector,''))) =
+                     LOWER(TRIM(COALESCE(r.organization_name,r.sector,'')))
+               )
                OR (
                  r.traveler_category<>'affiliate_institution'
                  AND r.workflow_type='office_head_structure'
@@ -1528,9 +1654,11 @@ app.put('/api/requests/:id/status', async (req, res) => {
       return res.status(400).json({ error: 'Request already finalized.' });
     }
 
+    const isSubmitAction = act === 'submit' || act === 'resubmit';
     const allowedStages = ROLE_STAGES[role] || [];
 
     if (
+      !isSubmitAction &&
       allowedStages.length &&
       !allowedStages.includes(existing.current_stage)
     ) {
@@ -1551,6 +1679,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
       return res.status(403).json({ error: scopedDecisionError });
     }
 
+    const actor = await getActorUser({ actorId, actorEmail });
     const wf = normalizeWorkflow(existing.workflow_type);
 
     let nextStage = existing.current_stage;
@@ -1567,9 +1696,9 @@ app.put('/api/requests/:id/status', async (req, res) => {
     const cur = existing.current_stage;
 
     if (act === 'submit') {
-      if (!['traveler', 'expert', 'admin', 'super_admin'].includes(role)) {
+      if (!role) {
         return res.status(403).json({
-          error: 'Only Expert/Traveler can submit.',
+          error: 'A valid logged-in user is required to submit.',
         });
       }
 
@@ -1584,18 +1713,23 @@ app.put('/api/requests/:id/status', async (req, res) => {
           - sector_structure: Expert -> Lead Executive Officer -> State Minister -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
           - ceo_structure: Expert -> Lead Executive Officer -> CEO -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
           - office_head_structure: Expert -> Lead Executive Officer -> Office Head -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
-          - affiliate_institution: Expert -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
+          - affiliate_institution: Expert -> Director General -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
       */
       const isAffiliateRequest =
         existing.traveler_category === 'affiliate_institution';
 
-      nextStage = isAffiliateRequest
-        ? STAGES.PROTOCOL_CLEARANCE
-        : STAGES.LEAD_EXECUTIVE_REVIEW;
+      const firstReviewStage = getInitialReviewStage(existing, actor);
+
+      nextStage = await resolveNextStageSkippingSelf(
+        firstReviewStage,
+        existing,
+        actor
+      );
       finalStatus = STATUS.PENDING;
-      displayStatus = isAffiliateRequest
-        ? 'Submitted to Protocol Clearance'
-        : 'Submitted to Lead Executive Officer';
+      displayStatus =
+        nextStage === STAGES.OFFICE_HEAD_REVIEW && isAffiliateRequest
+          ? 'Submitted to Director General Review'
+          : `Submitted to ${getStageName(nextStage)}`;
     }
 
     else if (act === 'approve') {
@@ -1660,10 +1794,14 @@ app.put('/api/requests/:id/status', async (req, res) => {
         });
       }
 
-      nextStage = mapping.next;
+      nextStage = await resolveNextStageSkippingSelf(
+        mapping.next,
+        existing,
+        actor
+      );
       finalStatus = STATUS.PENDING;
       displayStatus =
-        mapping.next === STAGES.PM_OFFICE_SUBMISSION
+        nextStage === STAGES.PM_OFFICE_SUBMISSION
           ? 'Minister Approved - Sent to Protocol for PM Office Submission'
           : `Approved by ${role
               .replace(/_/g, ' ')
@@ -1813,6 +1951,24 @@ app.put('/api/requests/:id/status', async (req, res) => {
       });
     }
 
+    let nextApprover = null;
+
+    if (![STAGES.COMPLETED, STAGES.EXPERT_PREPARATION].includes(nextStage)) {
+      nextApprover = await getFirstUserForStage(nextStage, existing);
+
+      if (!nextApprover) {
+        const nextStageLabel =
+          nextStage === STAGES.OFFICE_HEAD_REVIEW &&
+          existing.traveler_category === 'affiliate_institution'
+            ? 'Affiliate Institution Director General'
+            : getStageName(nextStage);
+
+        return res.status(400).json({
+          error: `No active ${nextStageLabel} approver is configured for this request.`,
+        });
+      }
+    }
+
     const updated = await query(
       `UPDATE requests SET
         status=$1,
@@ -1877,8 +2033,6 @@ app.put('/api/requests/:id/status', async (req, res) => {
       displayStatus,
       amendmentComment: amendComment,
     });
-
-    const nextApprover = await getFirstUserForStage(nextStage, req2);
 
     if (
       nextApprover &&
@@ -2053,7 +2207,7 @@ app.put('/api/requests/bulk/submit-to-pm-office', async (req, res) => {
 app.put('/api/requests/:id/resubmit', async (req, res) => {
   try {
     const { id } = req.params;
-    const { actorEmail, role } = req.body;
+    const { actorEmail, actorId, role } = req.body;
 
     const existing = (
       await query(`SELECT * FROM requests WHERE id=$1`, [id])
@@ -2074,15 +2228,36 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
 
     const isAffiliateRequest =
       existing.traveler_category === 'affiliate_institution';
-    const nextStage = isAffiliateRequest
-      ? STAGES.PROTOCOL_CLEARANCE
-      : STAGES.LEAD_EXECUTIVE_REVIEW;
+    const actor = await getActorUser({ actorId, actorEmail });
+    const firstReviewStage = getInitialReviewStage(existing, actor);
+    const nextStage = await resolveNextStageSkippingSelf(
+      firstReviewStage,
+      existing,
+      actor
+    );
     const displayStatus = isAffiliateRequest
-      ? 'Resubmitted to Protocol Clearance'
-      : 'Resubmitted to Lead Executive Officer';
+      ? nextStage === STAGES.OFFICE_HEAD_REVIEW
+        ? 'Resubmitted to Director General Review'
+        : `Resubmitted to ${getStageName(nextStage)}`
+      : `Resubmitted to ${getStageName(nextStage)}`;
     const nextStageName = isAffiliateRequest
-      ? 'Protocol Clearance'
-      : 'Lead Executive Officer Review';
+      ? nextStage === STAGES.OFFICE_HEAD_REVIEW
+        ? 'Director General Review'
+        : getStageName(nextStage)
+      : getStageName(nextStage);
+
+    const nextApprover = await getFirstUserForStage(nextStage, existing);
+
+    if (!nextApprover) {
+      const nextStageLabel =
+        nextStage === STAGES.OFFICE_HEAD_REVIEW && isAffiliateRequest
+          ? 'Affiliate Institution Director General'
+          : nextStageName;
+
+      return res.status(400).json({
+        error: `No active ${nextStageLabel} approver is configured for this request.`,
+      });
+    }
 
     const r = await query(
       `UPDATE requests
@@ -2127,8 +2302,6 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
       status: 'resubmit',
       displayStatus,
     });
-
-    const nextApprover = await getFirstUserForStage(nextStage, req2);
 
     if (nextApprover) {
       await taskEmail({

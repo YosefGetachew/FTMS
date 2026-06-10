@@ -290,7 +290,10 @@ function Settings() {
   };
 
   const getStructureWorkflowType = (structureName) =>
-    moaSectors.find((item) => item.name === structureName)?.workflow_type || "";
+    moaSectors.find((item) => item.name === structureName)?.workflow_type ||
+    (affiliateInstitutions.some((item) => item.organization_name === structureName)
+      ? "affiliate_structure"
+      : "");
 
   const sortByWorkflowBranch = (items, getWorkflowType, getName) =>
     [...items].sort((first, second) => {
@@ -424,6 +427,14 @@ function Settings() {
     };
 
     return fallbackRoles[role] || role || "-";
+  };
+
+  const formatApproverRoleForArea = (role, workflowType) => {
+    if (workflowType === "affiliate_structure" && role === "office_head") {
+      return "Director General";
+    }
+
+    return formatRole(role);
   };
 
   const formatWorkflowType = (workflowType) => {
@@ -690,7 +701,14 @@ function Settings() {
     let finalSector = "";
     let finalDepartment = "";
 
-    if (approverRole === "state_minister") {
+    if (approverStructureType === "affiliate_structure") {
+      if (!sector.trim()) {
+        alert("Please select the Affiliate Institution for this Director General");
+        return;
+      }
+
+      finalSector = sector.trim();
+    } else if (approverRole === "state_minister") {
       if (!sector.trim()) {
         alert("Please select the sector for this State Minister");
         return;
@@ -710,13 +728,6 @@ function Settings() {
     } else if (isParentRole) {
       if (!sector.trim()) {
         alert(`Please select the ${getStructureLabelForApproverRole(approverRole)}`);
-        return;
-      }
-
-      finalSector = sector.trim();
-    } else if (approverStructureType === "affiliate_structure") {
-      if (!sector.trim()) {
-        alert("Please select the Affiliate Institute for this Office Head approver");
         return;
       }
 
@@ -1235,22 +1246,12 @@ function Settings() {
             </select>
           </div>
 
-          {approverStructureType === "affiliate_structure" ? (
-            <div className="settings-group workflow-approver-structure">
-              <label>Affiliate Approver</label>
-              <input
-                value="Uses the existing Head of the Minister's Office approver"
-                disabled
-                readOnly
-              />
-              <small className="workflow-approver-help">
-                Affiliate Institute requests are assigned to the already
-                registered Office Head. No duplicate account is required.
-              </small>
-            </div>
-          ) : (
           <div className="settings-group workflow-approver-structure">
-            <label>Structure</label>
+            <label>
+              {approverStructureType === "affiliate_structure"
+                ? "Affiliate Institution"
+                : "Structure"}
+            </label>
 
             <>
                 <select
@@ -1276,7 +1277,18 @@ function Settings() {
                 {getStructuresForWorkflowType(approverStructureType).length ===
                   0 && (
                   <small style={{ color: "#dc2626", fontSize: "12px" }}>
-                    Please register this structure first.
+                    Please register this{" "}
+                    {approverStructureType === "affiliate_structure"
+                      ? "affiliate institution"
+                      : "structure"}{" "}
+                    first.
+                  </small>
+                )}
+
+                {sector && approverStructureType === "affiliate_structure" && (
+                  <small className="workflow-approver-help">
+                    This approver will act as the affiliate Director General for
+                    traveler requests under this institution.
                   </small>
                 )}
 
@@ -1301,7 +1313,6 @@ function Settings() {
               )}
             </>
           </div>
-          )}
 
           <div className="settings-group">
             <label>Approver Role</label>
@@ -1311,7 +1322,7 @@ function Settings() {
             >
               {getApproverRolesForStructureType(approverStructureType).map((role) => (
                 <option key={role.value} value={role.value}>
-                  {role.label}
+                  {formatApproverRoleForArea(role.value, approverStructureType)}
                 </option>
               ))}
             </select>
@@ -1346,43 +1357,43 @@ function Settings() {
             )}
           </div>
 
-          {approverStructureType !== "affiliate_structure" && (
-            <>
-              <div className="settings-group">
-                <label>Approver Full Name</label>
-                <input
-                  type="text"
-                  value={approverName}
-                  onChange={(e) => setApproverName(e.target.value)}
-                />
-              </div>
+          <>
+            <div className="settings-group">
+              <label>
+                {approverStructureType === "affiliate_structure"
+                  ? "Director General Full Name"
+                  : "Approver Full Name"}
+              </label>
+              <input
+                type="text"
+                value={approverName}
+                onChange={(e) => setApproverName(e.target.value)}
+              />
+            </div>
 
-              <div className="settings-group">
-                <label>Email</label>
-                <input
-                  type="email"
-                  value={approverEmail}
-                  onChange={(e) => setApproverEmail(e.target.value)}
-                />
-              </div>
+            <div className="settings-group">
+              <label>Email</label>
+              <input
+                type="email"
+                value={approverEmail}
+                onChange={(e) => setApproverEmail(e.target.value)}
+              />
+            </div>
 
-              <div className="settings-group">
-                <label>Temporary Password</label>
-                <input
-                  type="password"
-                  value={approverPassword}
-                  onChange={(e) => setApproverPassword(e.target.value)}
-                />
-              </div>
-            </>
-          )}
+            <div className="settings-group">
+              <label>Temporary Password</label>
+              <input
+                type="password"
+                value={approverPassword}
+                onChange={(e) => setApproverPassword(e.target.value)}
+              />
+            </div>
+          </>
         </div>
 
-        {approverStructureType !== "affiliate_structure" && (
-          <button className="save-settings-btn" onClick={addSectorApprover}>
-            Add Approver
-          </button>
-        )}
+        <button className="save-settings-btn" onClick={addSectorApprover}>
+          Add Approver
+        </button>
       </div>
 
       <div className="settings-container" style={{ marginTop: "35px" }}>
@@ -1434,7 +1445,12 @@ function Settings() {
                           <small>{group.label}</small>
                         </td>
                         <td>{approver.department || "-"}</td>
-                        <td>{formatRole(approver.role)}</td>
+                        <td>
+                          {formatApproverRoleForArea(
+                            approver.role,
+                            group.value
+                          )}
+                        </td>
                         <td>{approver.full_name || "-"}</td>
                         <td>{approver.email || "-"}</td>
                         <td>

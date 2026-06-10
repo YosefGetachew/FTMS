@@ -35,6 +35,7 @@ const workflowPath = {
   ],
   affiliate_institution: [
     "Expert",
+    "Director General",
     "Protocol for Clearance",
     "Office Head",
     "Minister",
@@ -309,6 +310,24 @@ export default function RequestForm() {
 
   const assignedSector = String(currentUser?.sector || "").trim();
   const assignedLeadExecutiveOffice = String(currentUser?.department || "").trim();
+  const isStateMinisterSectorTraveler =
+    currentUser?.role === "state_minister" &&
+    formData.workflowType === "sector_structure";
+  const isAffiliateDirectorGeneralTraveler =
+    currentUser?.role === "office_head" &&
+    isAffiliate &&
+    normalizeComparable(currentUser?.sector) ===
+      normalizeComparable(formData.organizationName);
+  const displayedWorkflowPath = isStateMinisterSectorTraveler
+    ? [
+        "State Minister",
+        "Protocol for Clearance",
+        "Office Head",
+        "Minister",
+        "Protocol PM Submission",
+        "PM Office",
+      ]
+    : workflowPath[formData.workflowType] || [];
 
   const sectorOptions = useMemo(
     () =>
@@ -410,7 +429,7 @@ export default function RequestForm() {
       if (!formData.travelerType) e.travelerType = "Select traveler type.";
       if (!formData.workflowType) e.workflowType = "Select the MoA structure type.";
       if (!formData.sector.trim()) e.sector = "MoA Structure is required.";
-      if (!formData.leadExecutiveOffice.trim()) {
+      if (!isStateMinisterSectorTraveler && !formData.leadExecutiveOffice.trim()) {
         e.leadExecutiveOffice = "Lead Executive Office is required.";
       }
     }
@@ -421,7 +440,9 @@ export default function RequestForm() {
 
     if (!formData.fullName.trim()) e.fullName = "Full name is required.";
     if (!formData.position.trim()) e.position = "Position is required.";
-    if (!formData.department.trim()) e.department = "Department is required.";
+    if (!isAffiliateDirectorGeneralTraveler && !formData.department.trim()) {
+      e.department = "Department is required.";
+    }
 
     const email = (formData.email || "").trim();
     if (!email) e.email = "Email is required.";
@@ -441,7 +462,13 @@ export default function RequestForm() {
     if (!formData.purpose.trim()) e.purpose = "Purpose is required.";
 
     return e;
-  }, [formData, isMoA, isAffiliate]);
+  }, [
+    formData,
+    isMoA,
+    isAffiliate,
+    isStateMinisterSectorTraveler,
+    isAffiliateDirectorGeneralTraveler,
+  ]);
 
   const step1Valid = ![
     "organizationType",
@@ -457,6 +484,8 @@ export default function RequestForm() {
     "phone",
   ].some((k) => {
     if (isAffiliate && ["travelerType", "workflowType", "sector", "leadExecutiveOffice"].includes(k)) return false;
+    if (isAffiliateDirectorGeneralTraveler && k === "department") return false;
+    if (isStateMinisterSectorTraveler && k === "leadExecutiveOffice") return false;
     if (isMoA && k === "organizationName") return false;
     if (
       !formData.organizationType &&
@@ -663,7 +692,16 @@ export default function RequestForm() {
       data.append("travelerCategory", isAffiliate ? "affiliate_institution" : formData.travelerType);
       data.append("workflowType", isMoA ? formData.workflowType : "office_head_structure");
       data.append("organizationName", isAffiliate ? formData.organizationName : "MoA");
-      data.append("department", isMoA ? formData.leadExecutiveOffice : formData.department);
+      data.append(
+        "department",
+        isMoA
+          ? isStateMinisterSectorTraveler
+            ? "State Minister"
+            : formData.leadExecutiveOffice
+          : isAffiliateDirectorGeneralTraveler
+          ? "Director General"
+          : formData.department
+      );
 
       [
         "fullName",
@@ -701,9 +739,7 @@ export default function RequestForm() {
 
       setNotice({
         type: "success",
-        message: isAffiliate
-          ? "Travel request submitted and routed to Protocol Clearance."
-          : "Travel request submitted and routed to Lead Executive Officer Review.",
+        message: "Travel request submitted and routed to the next approver.",
       });
       resetForm({ keepNotice: true });
     } catch (error) {
@@ -839,11 +875,15 @@ export default function RequestForm() {
                       <div className="workflow-preview">
                         <span>Approval Workflow</span>
                         <div className="workflow-preview-path">
-                          {(workflowPath[formData.workflowType] || []).map((stage, index) => (
+                          {displayedWorkflowPath.map((stage, index) => (
                             <span key={`${stage}-${index}`}>{stage}</span>
                           ))}
                         </div>
-                        <small>{selectedOwnerLabel} decides this structure before the next workflow stage.</small>
+                        <small>
+                          {isStateMinisterSectorTraveler
+                            ? "State Minister self-approval is skipped and the request continues to the next stage."
+                            : `${selectedOwnerLabel} decides this structure before the next workflow stage.`}
+                        </small>
                       </div>
 
                     <div>
@@ -882,39 +922,56 @@ export default function RequestForm() {
 
                         <Field
                           name="leadExecutiveOffice"
-                          label="Lead Executive Office"
-                          required
+                          label={
+                            isStateMinisterSectorTraveler
+                              ? "Approver Level"
+                              : "Lead Executive Office"
+                          }
+                          required={!isStateMinisterSectorTraveler}
                           touched={touched}
                           errors={errors}
-                          hint={`Select the Lead Executive Office under the selected ${selectedStructureTypeLabel} structure.`}
+                          hint={
+                            isStateMinisterSectorTraveler
+                              ? "State Minister travelers are routed directly to the next formal approver."
+                              : `Select the Lead Executive Office under the selected ${selectedStructureTypeLabel} structure.`
+                          }
                         >
-                          <select
-                            name="leadExecutiveOffice"
-                            value={formData.leadExecutiveOffice}
-                            onChange={handleChange}
-                            onBlur={() => markTouched("leadExecutiveOffice")}
-                            className="ministry-input"
-                            disabled={
-                              !formData.sector ||
-                              loading.leadExecutiveOffices ||
-                              hasAssignedLeadExecutiveOfficeOption
-                            }
-                          >
-                            <option value="">
-                              {!formData.sector
-                                ? `Select ${selectedStructureTypeLabel} Structure first`
-                                : loading.leadExecutiveOffices
-                                ? "Loading Lead Executive Offices..."
-                                : assignedLeadExecutiveOffice && !leadExecutiveOfficeOptions.length
-                                ? "No matching assigned office found"
-                                : "Select Lead Executive Office"}
-                            </option>
-                            {leadExecutiveOfficeOptions.map((office) => (
-                              <option key={office.id || office.name} value={office.name}>
-                                {office.name}
+                          {isStateMinisterSectorTraveler ? (
+                            <input
+                              className="ministry-input"
+                              value="State Minister"
+                              disabled
+                              readOnly
+                            />
+                          ) : (
+                            <select
+                              name="leadExecutiveOffice"
+                              value={formData.leadExecutiveOffice}
+                              onChange={handleChange}
+                              onBlur={() => markTouched("leadExecutiveOffice")}
+                              className="ministry-input"
+                              disabled={
+                                !formData.sector ||
+                                loading.leadExecutiveOffices ||
+                                hasAssignedLeadExecutiveOfficeOption
+                              }
+                            >
+                              <option value="">
+                                {!formData.sector
+                                  ? `Select ${selectedStructureTypeLabel} Structure first`
+                                  : loading.leadExecutiveOffices
+                                  ? "Loading Lead Executive Offices..."
+                                  : assignedLeadExecutiveOffice && !leadExecutiveOfficeOptions.length
+                                  ? "No matching assigned office found"
+                                  : "Select Lead Executive Office"}
                               </option>
-                            ))}
-                          </select>
+                              {leadExecutiveOfficeOptions.map((office) => (
+                                <option key={office.id || office.name} value={office.name}>
+                                  {office.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </Field>
                       </div>
                     </div>
@@ -934,8 +991,8 @@ export default function RequestForm() {
                       ))}
                     </div>
                     <small>
-                      Affiliate Institute requests are first reviewed by Protocol
-                      for clearance or amendment, then sent to the Office Head.
+                      Affiliate Institute requests are first reviewed by the
+                      Director General, then continue through the formal route.
                     </small>
                   </div>
                   <Field name="organizationName" label="Affiliate Institution" required touched={touched} errors={errors}>
@@ -989,18 +1046,33 @@ export default function RequestForm() {
 
                       <Field
                         name="department"
-                        label={isMoA ? "Requester Department / Unit" : "Department"}
-                        required
+                        label={
+                          isAffiliateDirectorGeneralTraveler
+                            ? "Approver Level"
+                            : isMoA
+                            ? "Requester Department / Unit"
+                            : "Department"
+                        }
+                        required={!isAffiliateDirectorGeneralTraveler}
                         touched={touched}
                         errors={errors}
                       >
-                        <input
-                          name="department"
-                          value={formData.department}
-                          onChange={handleChange}
-                          onBlur={() => markTouched("department")}
-                          className="ministry-input"
-                        />
+                        {isAffiliateDirectorGeneralTraveler ? (
+                          <input
+                            className="ministry-input"
+                            value="Director General"
+                            disabled
+                            readOnly
+                          />
+                        ) : (
+                          <input
+                            name="department"
+                            value={formData.department}
+                            onChange={handleChange}
+                            onBlur={() => markTouched("department")}
+                            className="ministry-input"
+                          />
+                        )}
                       </Field>
                     </div>
 
@@ -1223,8 +1295,16 @@ export default function RequestForm() {
                   )}
                   {isMoA && (
                     <div>
-                      <span>Lead Executive Office</span>
-                      <strong>{formData.leadExecutiveOffice || "-"}</strong>
+                      <span>
+                        {isStateMinisterSectorTraveler
+                          ? "Approver Level"
+                          : "Lead Executive Office"}
+                      </span>
+                      <strong>
+                        {isStateMinisterSectorTraveler
+                          ? "State Minister"
+                          : formData.leadExecutiveOffice || "-"}
+                      </strong>
                     </div>
                   )}
                   <div>

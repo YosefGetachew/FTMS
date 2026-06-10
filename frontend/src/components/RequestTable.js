@@ -711,6 +711,7 @@ function RequestTable() {
       await API.put(`/requests/${id}/resubmit`, {
         role: user.role,
         actorEmail: user.email,
+        actorId: user.id || null,
       });
 
       await fetchRequests();
