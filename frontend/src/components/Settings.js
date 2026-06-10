@@ -98,6 +98,7 @@ function Settings() {
   const [generalDirectorName, setGeneralDirectorName] = useState("");
   const [organizationEmail, setOrganizationEmail] = useState("");
   const [organizationPhone, setOrganizationPhone] = useState("");
+  const [generalDirectorPassword, setGeneralDirectorPassword] = useState("");
 
   const [sectorName, setSectorName] = useState("");
   const [sectorWorkflowType, setSectorWorkflowType] =
@@ -521,14 +522,17 @@ function Settings() {
         generalDirectorName,
         email: organizationEmail,
         phone: organizationPhone,
+        password: generalDirectorPassword,
       });
 
       setOrganizationName("");
       setGeneralDirectorName("");
       setOrganizationEmail("");
       setOrganizationPhone("");
+      setGeneralDirectorPassword("");
 
       fetchAffiliateInstitutions();
+      fetchSectorApprovers();
     } catch (error) {
       console.error(error);
       alert(error.response?.data?.error || "Failed to add organization");
@@ -547,10 +551,12 @@ function Settings() {
         generalDirectorName: editingOrganization.general_director_name,
         email: editingOrganization.email,
         phone: editingOrganization.phone,
+        password: editingOrganization.password,
       });
 
       setEditingOrganization(null);
       fetchAffiliateInstitutions();
+      fetchSectorApprovers();
     } catch (error) {
       console.error(error);
       alert(error.response?.data?.error || "Failed to update organization");
@@ -925,6 +931,20 @@ function Settings() {
               onChange={(e) => setOrganizationPhone(e.target.value)}
               placeholder="+251..."
             />
+          </div>
+
+          <div className="settings-group">
+            <label>General Director Temporary Password</label>
+            <input
+              type="password"
+              value={generalDirectorPassword}
+              onChange={(e) => setGeneralDirectorPassword(e.target.value)}
+              placeholder="Required when creating a new DG account"
+            />
+            <small className="workflow-approver-help">
+              The General Director is automatically created as this affiliate
+              institution's approver.
+            </small>
           </div>
         </div>
 
@@ -1706,6 +1726,22 @@ function Settings() {
                     setEditingOrganization({
                       ...editingOrganization,
                       phone: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="settings-group">
+                <label>Reset General Director Password</label>
+                <input
+                  type="password"
+                  className="ministry-input"
+                  placeholder="Leave blank to keep current password"
+                  value={editingOrganization.password || ""}
+                  onChange={(e) =>
+                    setEditingOrganization({
+                      ...editingOrganization,
+                      password: e.target.value,
                     })
                   }
                 />

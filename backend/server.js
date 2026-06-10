@@ -356,6 +356,109 @@ const sendEmailSafe = async (opts, label = 'EMAIL ERROR') => {
 
 const query = (sql, params) => pool.query(sql, params);
 
+const syncAffiliateDirectorGeneral = async (
+  db,
+  {
+    organizationName,
+    previousOrganizationName = '',
+    generalDirectorName,
+    email,
+    phone,
+    password,
+  }
+) => {
+  const cleanOrganizationName = String(organizationName || '').trim();
+  const cleanPreviousOrganizationName = String(previousOrganizationName || '').trim();
+  const cleanEmail = normalizeEmail(email);
+  const cleanName = String(generalDirectorName || '').trim();
+
+  if (!cleanOrganizationName || !cleanEmail) return null;
+
+  const existing = (
+    await db.query(
+      `SELECT id,password
+       FROM users
+       WHERE LOWER(TRIM(email))=$1
+          OR (
+            role='office_head'
+            AND $2::text <> ''
+            AND LOWER(TRIM(COALESCE(sector,'')))=LOWER(TRIM($2))
+          )
+       ORDER BY CASE WHEN LOWER(TRIM(email))=$1 THEN 0 ELSE 1 END, id ASC
+       LIMIT 1`,
+      [cleanEmail, cleanPreviousOrganizationName]
+    )
+  ).rows[0];
+
+  const cleanPassword = String(password || '').trim();
+
+  if (!existing && !cleanPassword) {
+    const error = new Error(
+      'Temporary password is required to create the General Director approver account.'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const hashed = cleanPassword ? await bcrypt.hash(cleanPassword, 10) : null;
+
+  if (existing) {
+    const r = await db.query(
+      `UPDATE users
+       SET full_name=$1,
+           email=$2,
+           password=COALESCE($3,password),
+           role='office_head',
+           phone=COALESCE($4,phone),
+           sector=$5,
+           department=NULL,
+           organization_type='Affiliate',
+           organization_name=$5,
+           account_status='active',
+           is_active=true
+       WHERE id=$6
+       RETURNING id,full_name,email,role,sector,department`,
+      [
+        cleanName || cleanEmail,
+        cleanEmail,
+        hashed,
+        normalizePhone(phone),
+        cleanOrganizationName,
+        existing.id,
+      ]
+    );
+
+    return { user: r.rows[0], created: false };
+  }
+
+  const r = await db.query(
+    `INSERT INTO users(
+      full_name,
+      email,
+      password,
+      role,
+      phone,
+      sector,
+      department,
+      organization_type,
+      organization_name,
+      account_status,
+      is_active
+    )
+    VALUES($1,$2,$3,'office_head',$4,$5,NULL,'Affiliate',$5,'active',true)
+    RETURNING id,full_name,email,role,sector,department`,
+    [
+      cleanName || cleanEmail,
+      cleanEmail,
+      hashed,
+      normalizePhone(phone),
+      cleanOrganizationName,
+    ]
+  );
+
+  return { user: r.rows[0], created: true };
+};
+
 const ROLE_ALIASES = {
   chief_executive_officer: ['chief_executive_officer', 'ceo'],
   ceo: ['chief_executive_officer', 'ceo'],
@@ -3728,16 +3831,25 @@ app.get('/api/affiliate-institutions', async (_req, res) => {
 });
 
 app.post('/api/affiliate-institutions', async (req, res) => {
-  try {
-    const { organizationName, generalDirectorName, email, phone } = req.body;
+  let client;
+  let inTransaction = false;
 
-    if (!organizationName) {
+  try {
+    const { organizationName, generalDirectorName, email, phone, password } =
+      req.body;
+    const cleanOrganizationName = String(organizationName || '').trim();
+
+    if (!cleanOrganizationName) {
       return res.status(400).json({
         error: 'Organization name is required.',
       });
     }
 
-    const r = await query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const r = await client.query(
       `INSERT INTO affiliate_institutions(
         organization_name,
         general_director_name,
@@ -3747,36 +3859,85 @@ app.post('/api/affiliate-institutions', async (req, res) => {
       VALUES($1,$2,$3,$4)
       RETURNING *`,
       [
-        organizationName.trim(),
+        cleanOrganizationName,
         generalDirectorName || null,
-        email || null,
+        email ? normalizeEmail(email) : null,
         normalizePhone(phone),
       ]
     );
 
-    res.status(201).json(r.rows[0]);
+    const directorGeneral = await syncAffiliateDirectorGeneral(client, {
+      organizationName: cleanOrganizationName,
+      generalDirectorName,
+      email,
+      phone,
+      password,
+    });
+
+    await client.query('COMMIT');
+    inTransaction = false;
+
+    res.status(201).json({
+      ...r.rows[0],
+      directorGeneral,
+    });
   } catch (e) {
+    if (client && inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+
     if (e.code === '23505') {
       return res.status(409).json({
         error: 'This organization already exists.',
       });
     }
 
-    res.status(500).json({ error: e.message });
+    res.status(e.statusCode || 500).json({ error: e.message });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
 app.put('/api/affiliate-institutions/:id', async (req, res) => {
-  try {
-    const { organizationName, generalDirectorName, email, phone } = req.body;
+  let client;
+  let inTransaction = false;
 
-    if (!organizationName) {
+  try {
+    const { organizationName, generalDirectorName, email, phone, password } =
+      req.body;
+    const cleanOrganizationName = String(organizationName || '').trim();
+
+    if (!cleanOrganizationName) {
       return res.status(400).json({
         error: 'Organization name is required.',
       });
     }
 
-    const r = await query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const existing = (
+      await client.query(
+        `SELECT id,organization_name
+         FROM affiliate_institutions
+         WHERE id=$1`,
+        [req.params.id]
+      )
+    ).rows[0];
+
+    if (!existing) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(404).json({
+        error: 'Organization not found.',
+      });
+    }
+
+    const r = await client.query(
       `UPDATE affiliate_institutions
        SET organization_name=$1,
            general_director_name=$2,
@@ -3785,32 +3946,60 @@ app.put('/api/affiliate-institutions/:id', async (req, res) => {
        WHERE id=$5
        RETURNING *`,
       [
-        organizationName.trim(),
+        cleanOrganizationName,
         generalDirectorName || null,
-        email || null,
+        email ? normalizeEmail(email) : null,
         normalizePhone(phone),
         req.params.id,
       ]
     );
 
-    if (!r.rows.length) {
-      return res.status(404).json({
-        error: 'Organization not found.',
-      });
-    }
+    const requestsUpdate = await client.query(
+      `UPDATE requests
+       SET organization_name=$1,
+           sector=$1
+       WHERE traveler_category='affiliate_institution'
+         AND (
+           LOWER(TRIM(COALESCE(organization_name,''))) = LOWER(TRIM($2))
+           OR LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($2))
+         )`,
+      [cleanOrganizationName, existing.organization_name]
+    );
+
+    const directorGeneral = await syncAffiliateDirectorGeneral(client, {
+      organizationName: cleanOrganizationName,
+      previousOrganizationName: existing.organization_name,
+      generalDirectorName,
+      email,
+      phone,
+      password,
+    });
+
+    await client.query('COMMIT');
+    inTransaction = false;
 
     res.json({
       message: 'Organization updated.',
       organization: r.rows[0],
+      directorGeneral,
+      updatedRequests: requestsUpdate.rowCount,
     });
   } catch (e) {
+    if (client && inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+
     if (e.code === '23505') {
       return res.status(409).json({
         error: 'This organization already exists.',
       });
     }
 
-    res.status(500).json({ error: e.message });
+    res.status(e.statusCode || 500).json({ error: e.message });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
