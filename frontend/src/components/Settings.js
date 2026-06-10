@@ -148,6 +148,10 @@ function Settings() {
   );
 
   const getOwnerForStructure = (structure) => {
+    if (structure.workflow_type === "affiliate_structure") {
+      return officeHeads.find((user) => user.sector === structure.name);
+    }
+
     if (structure.workflow_type === "sector_structure") {
       return stateMinisters.find((user) => user.sector === structure.name);
     }
@@ -174,6 +178,7 @@ function Settings() {
       return "Head of the Minister's Office";
     }
     if (workflowType === "minister_structure") return "Minister";
+    if (workflowType === "affiliate_structure") return "Director General";
     return "Owner";
   };
 
@@ -269,7 +274,16 @@ function Settings() {
         item.workflow_type === approverStructureType && item.name === sector
     );
 
-  const filteredInheritanceStructures = moaSectors.filter((item) => {
+  const affiliateStructures = affiliateInstitutions.map((item) => ({
+    id: `affiliate-${item.id}`,
+    name: item.organization_name,
+    workflow_type: "affiliate_structure",
+    source: "affiliate",
+  }));
+
+  const allStructures = [...moaSectors, ...affiliateStructures];
+
+  const filteredInheritanceStructures = allStructures.filter((item) => {
     if (!inheritanceFilter) return true;
     return item.name === inheritanceFilter;
   });
@@ -285,8 +299,8 @@ function Settings() {
   });
 
   const getWorkflowTypeRank = (workflowType) => {
-    const index = workflowTypes.findIndex((item) => item.value === workflowType);
-    return index === -1 ? workflowTypes.length : index;
+    const index = approverAreaTypes.findIndex((item) => item.value === workflowType);
+    return index === -1 ? approverAreaTypes.length : index;
   };
 
   const getStructureWorkflowType = (structureName) =>
@@ -306,8 +320,8 @@ function Settings() {
       return (getName(first) || "").localeCompare(getName(second) || "");
     });
 
-  const sortedMoaSectors = sortByWorkflowBranch(
-    moaSectors,
+  const sortedStructureRegistryItems = sortByWorkflowBranch(
+    allStructures,
     (item) => item.workflow_type,
     (item) => item.name
   );
@@ -331,7 +345,7 @@ function Settings() {
   );
 
   const getWorkflowGroups = (items, getWorkflowType) =>
-    workflowTypes
+    approverAreaTypes
       .map((workflowType) => ({
         ...workflowType,
         items: items.filter((item) => getWorkflowType(item) === workflowType.value),
@@ -1045,39 +1059,57 @@ function Settings() {
             </thead>
 
             <tbody>
-              {sortedMoaSectors.length === 0 ? (
+              {sortedStructureRegistryItems.length === 0 ? (
                 <tr>
                   <td colSpan="2">No structure registered</td>
                 </tr>
               ) : (
-                getWorkflowGroups(sortedMoaSectors, (item) => item.workflow_type).map((group) => (
+                getWorkflowGroups(sortedStructureRegistryItems, (item) => item.workflow_type).map((group) => (
                   <Fragment key={group.value}>
                     {renderBranchHeaderRow(group.label, 2)}
-                    {group.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="settings-structure-cell">
-                          <strong>{item.name}</strong>
-                          <small>{group.label} structure</small>
-                        </td>
-                        <td>
-                          <div className="table-action-group">
-                            <button
-                              className="edit-btn"
-                              onClick={() => setEditingSector(item)}
-                            >
-                              Edit
-                            </button>
+                    {group.items.map((item) => {
+                      const isAffiliateStructure =
+                        item.workflow_type === "affiliate_structure";
 
-                            <button
-                              className="delete-btn"
-                              onClick={() => deleteMoaSector(item.id)}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                      return (
+                        <tr key={item.id}>
+                          <td className="settings-structure-cell">
+                            <strong>{item.name}</strong>
+                            <small>
+                              {isAffiliateStructure
+                                ? "Affiliate institution structure"
+                                : `${group.label} structure`}
+                            </small>
+                          </td>
+                          <td>
+                            {isAffiliateStructure ? (
+                              <button
+                                className="edit-btn"
+                                onClick={() => setActiveSettingsSection("affiliates")}
+                              >
+                                Manage in Affiliates
+                              </button>
+                            ) : (
+                              <div className="table-action-group">
+                                <button
+                                  className="edit-btn"
+                                  onClick={() => setEditingSector(item)}
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  className="delete-btn"
+                                  onClick={() => deleteMoaSector(item.id)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </Fragment>
                 ))
               )}
@@ -1406,7 +1438,7 @@ function Settings() {
             onChange={(e) => setApproverListFilter(e.target.value)}
           >
             <option value="">All Structures</option>
-            {moaSectors.map((item) => (
+            {allStructures.map((item) => (
               <option key={item.id} value={item.name}>
                 {item.name} - {formatWorkflowType(item.workflow_type)}
               </option>
@@ -1493,7 +1525,7 @@ function Settings() {
             onChange={(e) => setInheritanceFilter(e.target.value)}
           >
             <option value="">All Structures</option>
-            {moaSectors.map((item) => (
+            {allStructures.map((item) => (
               <option key={item.id} value={item.name}>
                 {item.name} - {formatWorkflowType(item.workflow_type)}
               </option>
@@ -1526,6 +1558,8 @@ function Settings() {
                     {group.items.map((item) => {
                       const owner = getOwnerForStructure(item);
                       const sectorOffices = getLeadExecutiveOfficesForSector(item.name);
+                      const isAffiliateStructure =
+                        item.workflow_type === "affiliate_structure";
 
                       return (
                         <tr key={item.id}>
@@ -1542,7 +1576,17 @@ function Settings() {
                               : "Not assigned"}
                           </td>
                           <td>
-                            {sectorOffices.length ? (
+                            {isAffiliateStructure ? (
+                              <div>
+                                <strong>Director General approval branch</strong>
+                                <br />
+                                <small>
+                                  Affiliate traveler requests go to the Director
+                                  General, then continue through Protocol,
+                                  Office Head, Minister, and PM Office.
+                                </small>
+                              </div>
+                            ) : sectorOffices.length ? (
                               sectorOffices.map((office) => {
                                 const officeLeaders = getLeadExecutivesForOffice(
                                   item.name,
