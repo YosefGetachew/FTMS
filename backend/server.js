@@ -1813,10 +1813,11 @@ app.put('/api/requests/:id/status', async (req, res) => {
 
       /*
         Approval flow:
-          - sector_structure: Expert -> Lead Executive Officer -> State Minister -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
-          - ceo_structure: Expert -> Lead Executive Officer -> CEO -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
-          - office_head_structure: Expert -> Lead Executive Officer -> Office Head -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
-          - affiliate_institution: Expert -> Director General -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
+          - sector_structure: Expert -> Lead Executive Officer -> State Minister -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
+          - ceo_structure: Expert -> Lead Executive Officer -> CEO -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
+          - office_head_structure: Expert -> Lead Executive Officer -> Office Head -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
+          - affiliate_institution: Expert -> Director General -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
+          - At Office Head final stage, the Office Head can approve, reject, or forward to Minister.
       */
       const isAffiliateRequest =
         existing.traveler_category === 'affiliate_institution';
@@ -1874,7 +1875,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
 
         [STAGES.OFFICE_HEAD_FINAL]: {
           roles: ['office_head', 'admin', 'super_admin'],
-          next: STAGES.MINISTER_REVIEW,
+          next: STAGES.PM_OFFICE_SUBMISSION,
         },
 
         [STAGES.MINISTER_REVIEW]: {
@@ -1905,7 +1906,9 @@ app.put('/api/requests/:id/status', async (req, res) => {
       finalStatus = STATUS.PENDING;
       displayStatus =
         nextStage === STAGES.PM_OFFICE_SUBMISSION
-          ? 'Minister Approved - Sent to Protocol for PM Office Submission'
+          ? cur === STAGES.OFFICE_HEAD_FINAL
+            ? 'Office Head Approved - Sent to Protocol for PM Office Submission'
+            : 'Minister Approved - Sent to Protocol for PM Office Submission'
           : `Approved by ${role
               .replace(/_/g, ' ')
               .replace(/\b\w/g, (c) => c.toUpperCase())}`;
@@ -3209,6 +3212,220 @@ app.get('/api/reports/office-minister-summary', async (_req, res) => {
 /* ── PDF Generation ─────────────────────────────────────── */
 
 app.get('/api/generate-pdf/:id', async (req, res) => {
+  try {
+    const r = (
+      await query(`SELECT * FROM requests WHERE id=$1`, [req.params.id])
+    ).rows[0];
+
+    if (!r) {
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+
+    const supportLetterStages = [
+      STAGES.PM_OFFICE_SUBMISSION,
+      STAGES.PM_OFFICE,
+      'foreign_affairs_followup',
+      STAGES.COMPLETED,
+    ];
+
+    if (
+      !supportLetterStages.includes(r.current_stage) &&
+      r.final_status !== STATUS.APPROVED
+    ) {
+      return res.status(400).json({
+        error:
+          'The PM Office support letter is generated only after the request is approved for PM Office submission.',
+      });
+    }
+
+    const pdfDir = path.join(__dirname, 'pdfs');
+
+    if (!fs.existsSync(pdfDir)) {
+      fs.mkdirSync(pdfDir, { recursive: true });
+    }
+
+    const filePath = path.join(pdfDir, `travel-request-${req.params.id}.pdf`);
+    const fontPath = path.join(
+      __dirname,
+      'fonts',
+      'NotoSansEthiopic-Regular.ttf'
+    );
+    const logoCandidates = [
+      path.join(__dirname, '..', 'frontend', 'public', 'ministry-logo.png'),
+      path.join(__dirname, '..', 'frontend', 'src', 'assets', 'ministry-logo.png'),
+      path.join(__dirname, 'ministry-logo.png'),
+    ];
+    const logoPath = logoCandidates.find((item) => fs.existsSync(item));
+
+    const doc = new PDFDocument({ size: 'A4', margin: 46 });
+    const stream = fs.createWriteStream(filePath);
+
+    doc.pipe(stream);
+
+    if (fs.existsSync(fontPath)) doc.font(fontPath);
+
+    const page = {
+      left: doc.page.margins.left,
+      right: doc.page.width - doc.page.margins.right,
+      top: doc.page.margins.top,
+      bottom: doc.page.height - doc.page.margins.bottom,
+      width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+    };
+    const generatedDate = new Date();
+    const refNo = `FTMS/${r.id}/${generatedDate.getFullYear()}`;
+    const travelDates = formatTravelDateRangeAmharic(r.start_date, r.end_date);
+    const travelerName = safeText(r.full_name, '-');
+    const position = safeText(r.position, '-');
+    const organization = safeText(r.organization_name || r.sector, '-');
+    const destination = safeText(r.country, '-');
+    const purpose = safeText(r.purpose, 'የውጭ ጉዞ ተልዕኮ');
+    const sponsor = safeText(r.sponsor, '-');
+    const passport = safeText(r.passport_number, '-');
+    const recipient = 'ጠቅላይ ሚኒስትር ጽ/ቤት';
+
+    const drawLine = (y, color = '#606975', width = 1) => {
+      doc
+        .save()
+        .strokeColor(color)
+        .lineWidth(width)
+        .moveTo(page.left, y)
+        .lineTo(page.right, y)
+        .stroke()
+        .restore();
+    };
+
+    if (logoPath) {
+      doc.image(logoPath, page.left, page.top - 10, { fit: [150, 92] });
+    } else {
+      doc
+        .fontSize(16)
+        .fillColor('#173f35')
+        .text('MINISTRY OF AGRICULTURE', page.left, page.top + 18);
+    }
+
+    drawLine(128, '#5b6470', 1.4);
+
+    doc
+      .fontSize(12)
+      .fillColor('#4b5563')
+      .text('ቁጥር', 395, 146)
+      .text('Ref. No', 395, 162)
+      .fillColor('#111827')
+      .text(refNo, 455, 162)
+      .moveTo(455, 177)
+      .lineTo(548, 177)
+      .strokeColor('#9ca3af')
+      .stroke()
+      .fillColor('#4b5563')
+      .text('ቀን', 395, 190)
+      .text('Date', 395, 206)
+      .fillColor('#111827')
+      .text(generatedDate.toLocaleDateString('en-GB'), 455, 206)
+      .moveTo(455, 221)
+      .lineTo(548, 221)
+      .strokeColor('#9ca3af')
+      .stroke();
+
+    doc
+      .fontSize(12.5)
+      .fillColor('#111827')
+      .text(`ለ${recipient}`, page.left + 70, 255)
+      .text('አዲስ አበባ', page.left + 70, 277);
+
+    doc
+      .fontSize(13)
+      .fillColor('#111827')
+      .text('ጉዳዩ፡- የውጭ አገር የጉዞ ፈቃድን ይመለከታል፤', page.left, 330, {
+        align: 'center',
+        underline: true,
+      });
+
+    const paragraphOptions = {
+      width: page.width - 85,
+      align: 'justify',
+      lineGap: 5,
+    };
+
+    doc
+      .fontSize(12.2)
+      .fillColor('#374151')
+      .text(
+        `የ${organization} ሰራተኛ የሆኑት ${travelerName} (${position}) ወደ ${destination} ለሚያደርጉት የውጭ አገር ጉዞ ጥያቄ  በስራ ሂደት ተገምግሞ በሚኒስቴሩ የተፈቀደ በመሆኑ ለጠቅላይ ሚኒስትር ጽ/ቤት የሚቀርብ የድጋፍ ደብዳቤ ነው።`,
+        page.left + 45,
+        372,
+        paragraphOptions
+      )
+      .moveDown(1.2)
+      .text(
+        `ጉዞው ከ${travelDates} ድረስ የሚካሄድ ሲሆን ዋና ዓላማው ${purpose} ነው። የጉዞው ወጪ የሚሸፈነው በ${sponsor} ሲሆን የፓስፖርት ቁጥር ${passport} ነው።`,
+        paragraphOptions
+      )
+      .moveDown(1.2)
+      .text(
+        'በመሆኑም ከላይ የተጠቀሰውን የጉዞ ጥያቄ እንዲፈቀድላቸው በአክብሮት እንጠያቃለን፡፡',
+        paragraphOptions
+      );
+
+    const signatureTop = 620;
+    doc
+      .fontSize(12.5)
+      .fillColor('#374151')
+      .text('ከሰላምታ ጋር', 394, signatureTop)
+      .moveTo(395, signatureTop + 42)
+      .lineTo(548, signatureTop + 42)
+      .strokeColor('#9ca3af')
+      .stroke()
+      .fontSize(11.5)
+      // .text('የተፈቀደ ፊርማ', 420, signatureTop + 52);
+
+    doc
+      .save()
+      .circle(285, signatureTop + 72, 48)
+      .strokeColor('#64748b')
+      .lineWidth(1)
+      .dash(4, { space: 3 })
+      .stroke()
+      .undash()
+      .fontSize(10)
+      .fillColor('#64748b')
+      .text('OFFICIAL STAMP', 240, signatureTop + 68, {
+        width: 90,
+        align: 'center',
+      })
+      .restore();
+
+    drawLine(page.bottom - 64, '#206cc9', 1);
+    doc
+      .fontSize(9.5)
+      .fillColor('#64748b')
+      .text('+251 116 411969/71', page.left, page.bottom - 50, {
+        width: 160,
+      })
+      .text('info@moa.gov.et', page.left + 210, page.bottom - 50, {
+        width: 130,
+      })
+      .text('www.moa.gov.et', page.left + 385, page.bottom - 50, {
+        width: 120,
+      })
+      .text(
+        'Bole Sub City, Woreda 06, Gurd Shola, Addis Ababa, Ethiopia',
+        page.left,
+        page.bottom - 30,
+        {
+          width: page.width,
+          align: 'center',
+        }
+      );
+
+    doc.end();
+
+    stream.on('finish', () => res.download(filePath));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/generate-pdf-summary/:id', async (req, res) => {
   try {
     const r = (
       await query(`SELECT * FROM requests WHERE id=$1`, [req.params.id])

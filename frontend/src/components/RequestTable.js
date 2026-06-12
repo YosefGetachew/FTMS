@@ -177,7 +177,7 @@ function RequestTable() {
 
   const getPrimaryActionLabel = (request) => {
     if (request.current_stage === "protocol_clearance") return "Clear";
-    if (request.current_stage === "office_head_final") return "Forward to Minister";
+    if (request.current_stage === "office_head_final") return "Approve and send to Protocol for PM Office";
     if (request.current_stage === "minister_review") return "Approve and send to Protocol";
     if (request.current_stage === "pm_office_submission") return "Submit to PM Office";
     return "Approve";
@@ -227,6 +227,21 @@ function RequestTable() {
     "lead_executive_officer",
     "lead_executive",
   ].includes(user?.role);
+
+  const canGenerateSupportLetter = useCallback(
+    (request) => {
+      if (!canViewPdf) return false;
+
+      const stage = normalizeText(request.current_stage);
+      const finalStatus = normalizeText(request.final_status);
+
+      return (
+        ["pm_office_submission", "pm_office_followup", "foreign_affairs_followup", "completed"].includes(stage) ||
+        finalStatus === "approved"
+      );
+    },
+    [canViewPdf]
+  );
 
   const stageMatches = useCallback((request, stages) => {
     const currentStage = normalizeText(request.current_stage);
@@ -295,11 +310,11 @@ function RequestTable() {
 
       if (isAmendedForTraveler) return true;
       if (!isPending) return false;
-      if (isTraveler) return true;
+      if (isTraveler) return canTravelerEditBeforeAction(request);
 
       return canDecideRequest(request);
     });
-  }, [requests, isTraveler, canDecideRequest]);
+  }, [requests, isTraveler, canTravelerEditBeforeAction, canDecideRequest]);
 
   const historicalRequests = useMemo(() => {
     return requests.filter((request) => {
@@ -938,7 +953,16 @@ function RequestTable() {
               disabled={isBusy}
               onClick={() => updateStatus(request.id, "approve")}
             >
-              {processingLabel || "Forward"}
+              {processingLabel || "Approve"}
+            </button>
+
+            <button
+              className="edit-btn action-icon-btn"
+              title="Forward to Minister for decision"
+              disabled={isBusy}
+              onClick={() => updateStatus(request.id, "forward_to_minister")}
+            >
+              Forward to Minister
             </button>
 
             <button
@@ -1044,14 +1068,14 @@ function RequestTable() {
             </>
           )}
 
-        {canViewPdf && (
+        {canGenerateSupportLetter(request) && (
           <button
             className="pdf-btn action-icon-btn"
-            title="Open PDF"
+            title="Open PM Office support letter"
             disabled={isBusy}
             onClick={() => openPdf(request.id)}
           >
-            PDF
+            Letter
           </button>
         )}
 
@@ -1338,12 +1362,16 @@ function RequestTable() {
 
                         {canViewPdf && (
                           <td>
-                            <button
-                              className="pdf-btn"
-                              onClick={() => openPdf(request.id)}
-                            >
-                              PDF
-                            </button>
+                            {canGenerateSupportLetter(request) ? (
+                              <button
+                                className="pdf-btn"
+                                onClick={() => openPdf(request.id)}
+                              >
+                                Letter
+                              </button>
+                            ) : (
+                              <span className="request-muted-text">Pending</span>
+                            )}
                           </td>
                         )}
                       </tr>

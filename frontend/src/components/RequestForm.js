@@ -62,6 +62,128 @@ const moaStructureTypes = [
   },
 ];
 
+const fallbackCountries = [
+  "Afghanistan",
+  "Albania",
+  "Algeria",
+  "Angola",
+  "Argentina",
+  "Armenia",
+  "Australia",
+  "Austria",
+  "Azerbaijan",
+  "Bahrain",
+  "Bangladesh",
+  "Belgium",
+  "Benin",
+  "Botswana",
+  "Brazil",
+  "Bulgaria",
+  "Burkina Faso",
+  "Burundi",
+  "Cambodia",
+  "Cameroon",
+  "Canada",
+  "Chad",
+  "Chile",
+  "China",
+  "Colombia",
+  "Congo",
+  "Cote d'Ivoire",
+  "Cuba",
+  "Cyprus",
+  "Czechia",
+  "Democratic Republic of the Congo",
+  "Denmark",
+  "Djibouti",
+  "Egypt",
+  "Eritrea",
+  "Estonia",
+  "Eswatini",
+  "Ethiopia",
+  "Finland",
+  "France",
+  "Gabon",
+  "Gambia",
+  "Georgia",
+  "Germany",
+  "Ghana",
+  "Greece",
+  "Guinea",
+  "Hungary",
+  "India",
+  "Indonesia",
+  "Iran",
+  "Iraq",
+  "Ireland",
+  "Israel",
+  "Italy",
+  "Japan",
+  "Jordan",
+  "Kazakhstan",
+  "Kenya",
+  "Kuwait",
+  "Laos",
+  "Lebanon",
+  "Liberia",
+  "Libya",
+  "Madagascar",
+  "Malawi",
+  "Malaysia",
+  "Mali",
+  "Mauritania",
+  "Mauritius",
+  "Mexico",
+  "Morocco",
+  "Mozambique",
+  "Namibia",
+  "Nepal",
+  "Netherlands",
+  "New Zealand",
+  "Niger",
+  "Nigeria",
+  "Norway",
+  "Oman",
+  "Pakistan",
+  "Philippines",
+  "Poland",
+  "Portugal",
+  "Qatar",
+  "Romania",
+  "Russia",
+  "Rwanda",
+  "Saudi Arabia",
+  "Senegal",
+  "Serbia",
+  "Seychelles",
+  "Sierra Leone",
+  "Singapore",
+  "Somalia",
+  "South Africa",
+  "South Korea",
+  "South Sudan",
+  "Spain",
+  "Sri Lanka",
+  "Sudan",
+  "Sweden",
+  "Switzerland",
+  "Syria",
+  "Tanzania",
+  "Thailand",
+  "Togo",
+  "Tunisia",
+  "Turkey",
+  "Uganda",
+  "Ukraine",
+  "United Arab Emirates",
+  "United Kingdom",
+  "United States",
+  "Vietnam",
+  "Yemen",
+  "Zambia",
+  "Zimbabwe",
+].sort((a, b) => a.localeCompare(b));
+
 const getTripDuration = (startDate, endDate) => {
   if (!startDate || !endDate || endDate < startDate) return null;
 
@@ -539,15 +661,17 @@ export default function RequestForm() {
     setLoading((p) => ({ ...p, countries: true }));
     try {
       const res = await fetch("https://restcountries.com/v3.1/all?fields=name");
+      if (!res.ok) throw new Error("Country service unavailable");
+
       const data = await res.json();
-      setCountries(
-        (data || [])
+      const countryNames = (data || [])
           .map((c) => c?.name?.common)
           .filter(Boolean)
-          .sort((a, b) => a.localeCompare(b))
-      );
+          .sort((a, b) => a.localeCompare(b));
+
+      setCountries(countryNames.length ? countryNames : fallbackCountries);
     } catch {
-      setNotice({ type: "error", message: "Unable to load countries." });
+      setCountries(fallbackCountries);
     } finally {
       setLoading((p) => ({ ...p, countries: false }));
     }
@@ -1156,7 +1280,7 @@ export default function RequestForm() {
                       list="countries-list"
                       className="ministry-input"
                       disabled={loading.countries}
-                      placeholder={loading.countries ? "Loading countries..." : "Type or select a country"}
+                      placeholder={loading.countries ? "Loading countries..." : "Start typing a country"}
                     />
                     <datalist id="countries-list">
                       {countries.map((c) => (

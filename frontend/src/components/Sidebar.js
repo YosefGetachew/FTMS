@@ -23,6 +23,25 @@ const compactCount = (value) => {
   return String(value);
 };
 
+const hasNoApproverAction = (request) =>
+  request.has_workflow_action === false ||
+  request.has_workflow_action === 'false' ||
+  request.has_workflow_action === 0 ||
+  request.has_workflow_action === '0';
+
+const isTravelerSubmittedRequestVisible = (request, userEmail) => {
+  const sameTraveler =
+    String(request.email || '').trim().toLowerCase() ===
+    String(userEmail || '').trim().toLowerCase();
+  const isOpen =
+    request.final_status === 'pending' || request.final_status === 'amended';
+  const isReturnedForCorrection =
+    request.current_stage === 'expert_preparation' &&
+    request.final_status === 'amended';
+
+  return (sameTraveler && isOpen && hasNoApproverAction(request)) || isReturnedForCorrection;
+};
+
 const roleGuidance = {
   admin: 'System administration and workflow control',
   super_admin: 'Full system administration and oversight',
@@ -116,6 +135,10 @@ function Sidebar({ setActivePage }) {
         const requests = requestsResponse.data || [];
 
         const activeSubmittedRequests = requests.filter((request) => {
+          if (isTraveler) {
+            return isTravelerSubmittedRequestVisible(request, userEmail);
+          }
+
           const isPending =
             request.final_status === 'pending' &&
             request.current_stage !== 'completed';

@@ -25,6 +25,25 @@ const stageLabels = {
   completed: 'Completed',
 };
 
+const getStageLabel = (stage, request) => {
+  if (
+    request?.traveler_category === 'affiliate_institution' &&
+    stage === 'office_head_review'
+  ) {
+    return 'Director General';
+  }
+
+  if (stage === 'office_head_final') {
+    return "Head of the Minister's Office";
+  }
+
+  if (stage === 'pm_office_submission') {
+    return 'Protocol Submission to PM Office';
+  }
+
+  return stageLabels[stage] || stage;
+};
+
 const workflowLabels = {
   sector_structure: 'Sector',
   ceo_structure: 'CEO',
@@ -39,7 +58,6 @@ const workflowStages = {
     'state_minister_review',
     'protocol_clearance',
     'office_head_final',
-    'minister_review',
     'pm_office_submission',
     'pm_office_followup',
     'completed',
@@ -50,7 +68,6 @@ const workflowStages = {
     'ceo_review',
     'protocol_clearance',
     'office_head_final',
-    'minister_review',
     'pm_office_submission',
     'pm_office_followup',
     'completed',
@@ -61,16 +78,15 @@ const workflowStages = {
     'office_head_review',
     'protocol_clearance',
     'office_head_final',
-    'minister_review',
     'pm_office_submission',
     'pm_office_followup',
     'completed',
   ],
   affiliate_institution: [
     'expert_preparation',
+    'office_head_review',
     'protocol_clearance',
     'office_head_final',
-    'minister_review',
     'pm_office_submission',
     'pm_office_followup',
     'completed',
@@ -88,6 +104,17 @@ const roleAliases = {
 };
 
 const normalizeText = (value) => String(value || '').toLowerCase();
+
+const shouldShowMinisterStage = (request) => {
+  const stage = normalizeText(request?.current_stage);
+  const status = normalizeText(request?.status);
+
+  return (
+    stage === 'minister_review' ||
+    status.includes('minister approved') ||
+    status.includes('forwarded to minister')
+  );
+};
 
 const formatDate = (date) => {
   if (!date) return '-';
@@ -198,7 +225,14 @@ function TravelStatus() {
       selectedRequest.traveler_category === 'affiliate_institution'
         ? 'affiliate_institution'
         : selectedRequest.workflow_type || 'office_head_structure';
-    const stages = workflowStages[workflowType] || workflowStages.office_head_structure;
+    const baseStages = workflowStages[workflowType] || workflowStages.office_head_structure;
+    const stages = shouldShowMinisterStage(selectedRequest)
+      ? baseStages.flatMap((stage) =>
+          stage === 'pm_office_submission'
+            ? ['minister_review', stage]
+            : [stage]
+        )
+      : baseStages;
     const currentStage = selectedRequest.current_stage;
     const finalStatus = selectedRequest.final_status;
     const currentIndex =
@@ -221,7 +255,7 @@ function TravelStatus() {
 
       return {
         stage,
-        label: stageLabels[stage] || stage,
+        label: getStageLabel(stage, selectedRequest),
         state,
       };
     });
@@ -247,7 +281,8 @@ function TravelStatus() {
       {
         label: 'Completed',
         value: requests.filter((request) =>
-          ['approved', 'rejected'].includes(request.final_status)
+          ['approved', 'rejected'].includes(request.final_status) ||
+          request.current_stage === 'completed'
         ).length,
         helper: 'PM Office status completed',
       },
@@ -377,12 +412,28 @@ function TravelStatus() {
                 </strong>
               </div>
               <div>
-                <span>Structure</span>
-                <strong>{selectedRequest.sector || '-'}</strong>
+                <span>
+                  {selectedRequest.traveler_category === 'affiliate_institution'
+                    ? 'Affiliate Institute'
+                    : 'Structure'}
+                </span>
+                <strong>
+                  {selectedRequest.traveler_category === 'affiliate_institution'
+                    ? selectedRequest.organization_name || selectedRequest.sector || '-'
+                    : selectedRequest.sector || '-'}
+                </strong>
               </div>
               <div>
-                <span>Lead Executive Office</span>
-                <strong>{selectedRequest.department || '-'}</strong>
+                <span>
+                  {selectedRequest.traveler_category === 'affiliate_institution'
+                    ? 'Approver Branch'
+                    : 'Lead Executive Office'}
+                </span>
+                <strong>
+                  {selectedRequest.traveler_category === 'affiliate_institution'
+                    ? 'Director General'
+                    : selectedRequest.department || '-'}
+                </strong>
               </div>
               <div>
                 <span>Final Status</span>
@@ -391,9 +442,7 @@ function TravelStatus() {
               <div>
                 <span>Current Stage</span>
                 <strong>
-                  {stageLabels[selectedRequest.current_stage] ||
-                    selectedRequest.current_stage ||
-                    '-'}
+                  {getStageLabel(selectedRequest.current_stage, selectedRequest) || '-'}
                 </strong>
               </div>
               <div>
