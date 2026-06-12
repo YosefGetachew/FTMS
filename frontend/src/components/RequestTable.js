@@ -21,7 +21,7 @@ function RequestTable() {
     import.meta.env.VITE_API_ORIGIN ||
     (import.meta.env.VITE_API_BASE_URL
       ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, "")
-      : "http://localhost:5000");
+      : window.location.origin);
 
   const getPdfUrl = (id) => `${API_ORIGIN}/api/generate-pdf/${id}`;
   const getUploadUrl = (fileName) => `${API_ORIGIN}/uploads/${fileName}`;
