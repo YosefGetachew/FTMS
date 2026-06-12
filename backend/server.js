@@ -2646,13 +2646,14 @@ app.get('/api/users', async (_req, res) => {
         email,
         phone,
         position,
+        organization_type,
+        organization_name,
         sector,
         department,
         role,
         is_active,
         account_status
        FROM users
-       WHERE role <> 'super_admin'
        ORDER BY id DESC`
     );
 
