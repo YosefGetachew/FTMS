@@ -695,6 +695,8 @@ function UserManagement() {
         </label>
       </div>
 
+      {renderUserSection("All Accounts", users, "No accounts found")}
+
       {renderUserSection(
         "Workflow Approvers",
         filteredWorkflowApprovers,
