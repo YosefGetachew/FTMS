@@ -310,11 +310,11 @@ function RequestTable() {
 
       if (isAmendedForTraveler) return true;
       if (!isPending) return false;
-      if (isTraveler) return canTravelerEditBeforeAction(request);
+      if (isTraveler) return true;
 
       return canDecideRequest(request);
     });
-  }, [requests, isTraveler, canTravelerEditBeforeAction, canDecideRequest]);
+  }, [requests, isTraveler, canDecideRequest]);
 
   const historicalRequests = useMemo(() => {
     return requests.filter((request) => {
