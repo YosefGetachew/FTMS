@@ -17,6 +17,7 @@ function UserManagement() {
 
   const systemRoles = useMemo(
     () => [
+      { value: "super_admin", label: "Super Admin" },
       { value: "admin", label: "Admin" },
       { value: "protocol", label: "Protocol" },
       { value: "pm_office", label: "PM Office" },
@@ -41,6 +42,23 @@ function UserManagement() {
   const officerRoles = useMemo(
     () => [...systemRoles, ...hierarchyRoles],
     [systemRoles, hierarchyRoles]
+  );
+
+  const systemRoleValues = useMemo(
+    () => ["super_admin", "admin", "protocol", "pm_office", "minister"],
+    []
+  );
+
+  const hierarchyRoleValues = useMemo(
+    () => [
+      "state_minister",
+      "lead_executive_officer",
+      "lead_executive",
+      "chief_executive_officer",
+      "ceo",
+      "office_head",
+    ],
+    []
   );
 
   const initialFormData = {
@@ -143,6 +161,7 @@ function UserManagement() {
       expert: "Expert",
       lead_executive: "Lead Executive Officer",
       ceo: "CEO",
+      super_admin: "Super Admin",
       pm_office: "PM Office",
     };
 
@@ -335,7 +354,7 @@ function UserManagement() {
   );
 
   const workflowApprovers = users.filter((user) =>
-    hierarchyRoles.some((role) => role.value === user.role)
+    hierarchyRoleValues.includes(user.role)
   );
 
   const filteredWorkflowApprovers = workflowApprovers.filter((user) => {
@@ -344,8 +363,16 @@ function UserManagement() {
   });
 
   const systemOfficers = users.filter((user) =>
-    systemRoles.some((role) => role.value === user.role)
+    systemRoleValues.includes(user.role)
   );
+
+  const categorizedUserIds = new Set([
+    ...travelers.map((user) => user.id),
+    ...workflowApprovers.map((user) => user.id),
+    ...systemOfficers.map((user) => user.id),
+  ]);
+
+  const otherAccounts = users.filter((user) => !categorizedUserIds.has(user.id));
 
   const accountStats = useMemo(
     () => [
@@ -485,7 +512,9 @@ function UserManagement() {
                 <td>
                   <span className="user-role-pill">{formatRole(user.role)}</span>
                 </td>
-                <td className="user-management-muted">{user.sector || "-"}</td>
+                <td className="user-management-muted">
+                  {user.sector || user.organization_name || user.organization_type || "-"}
+                </td>
                 <td className="user-management-muted">{user.department || "-"}</td>
                 <td>{user.account_status || "-"}</td>
                 <td>
@@ -695,6 +724,13 @@ function UserManagement() {
       )}
 
       {renderUserSection("Travelers", travelers, "No travelers found")}
+
+      {otherAccounts.length > 0 &&
+        renderUserSection(
+          "Other Accounts",
+          otherAccounts,
+          "No other accounts found"
+        )}
 
       {showEditModal && (
         <div className="modal-overlay">
