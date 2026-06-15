@@ -75,7 +75,6 @@ const workflowStages = {
   office_head_structure: [
     'expert_preparation',
     'lead_executive_review',
-    'office_head_review',
     'protocol_clearance',
     'office_head_final',
     'pm_office_submission',

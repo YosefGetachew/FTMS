@@ -26,10 +26,8 @@ const workflowPath = {
   office_head_structure: [
     "Expert",
     "Lead Executive Officer",
-    "Office Head",
     "Protocol for Clearance",
     "Office Head",
-    "Minister",
     "Protocol PM Submission",
     "PM Office",
   ],
@@ -38,7 +36,6 @@ const workflowPath = {
     "Director General",
     "Protocol for Clearance",
     "Office Head",
-    "Minister",
     "Protocol PM Submission",
     "PM Office",
   ],

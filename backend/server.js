@@ -1052,6 +1052,15 @@ const accountEmail = (user, activated) =>
 
     await query(`
       UPDATE requests
+      SET current_stage='protocol_clearance',
+          status='Approved by Lead Executive Officer'
+      WHERE workflow_type='office_head_structure'
+        AND current_stage='office_head_review'
+        AND final_status='pending'
+    `);
+
+    await query(`
+      UPDATE requests
       SET current_stage='pm_office_followup',
           status='Submitted to PM Office'
       WHERE current_stage='foreign_affairs_followup'
@@ -1815,7 +1824,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
         Approval flow:
           - sector_structure: Expert -> Lead Executive Officer -> State Minister -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
           - ceo_structure: Expert -> Lead Executive Officer -> CEO -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
-          - office_head_structure: Expert -> Lead Executive Officer -> Office Head -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
+          - office_head_structure: Expert -> Lead Executive Officer -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
           - affiliate_institution: Expert -> Director General -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
           - At Office Head final stage, the Office Head can approve, reject, or forward to Minister.
       */
@@ -1865,7 +1874,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
               ? STAGES.STATE_MINISTER_REVIEW
               : wf === WORKFLOW.CEO
               ? STAGES.CEO_REVIEW
-              : STAGES.OFFICE_HEAD_REVIEW,
+              : STAGES.PROTOCOL_CLEARANCE,
         },
 
         [STAGES.STATE_MINISTER_REVIEW]: {

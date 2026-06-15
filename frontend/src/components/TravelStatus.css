@@ -269,12 +269,12 @@
 }
 
 .travel-status-step.current {
-  background: #eff6ff;
-  box-shadow: inset 3px 0 0 #2563eb;
+  background: #fffbeb;
+  box-shadow: inset 3px 0 0 #f59e0b;
 }
 
 .travel-status-step.current span {
-  background: #2563eb;
+  background: #f59e0b;
   color: #fff;
 }
 
@@ -299,7 +299,13 @@
 }
 
 .travel-status-step.upcoming {
-  background: transparent;
+  background: #fef2f2;
+  box-shadow: inset 3px 0 0 #fecaca;
+}
+
+.travel-status-step.upcoming span {
+  background: #fecaca;
+  color: #991b1b;
 }
 
 .travel-status-connector {
@@ -316,7 +322,7 @@
 }
 
 .travel-status-connector.current {
-  background: #2563eb;
+  background: #f59e0b;
 }
 
 .travel-status-connector.returned {
@@ -325,6 +331,10 @@
 
 .travel-status-connector.rejected {
   background: #dc2626;
+}
+
+.travel-status-connector.upcoming {
+  background: #fecaca;
 }
 
 .travel-status-detail-card {
