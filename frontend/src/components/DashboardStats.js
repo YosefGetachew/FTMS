@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
   Cell,
+  LabelList,
 } from "recharts";
 
 import API from "../services/api";
@@ -90,6 +91,12 @@ function DashboardStats({ setActivePage }) {
     approvedRequests: 0,
     pendingRequests: 0,
     rejectedRequests: 0,
+    requestTypeCounts: {
+      projectStaff: 0,
+      advisor: 0,
+      leadExecutiveStaff: 0,
+      affiliateInstitute: 0,
+    },
   });
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -120,6 +127,12 @@ function DashboardStats({ setActivePage }) {
         approvedRequests: statsResponse.data.approvedRequests || 0,
         pendingRequests: statsResponse.data.pendingRequests || 0,
         rejectedRequests: statsResponse.data.rejectedRequests || 0,
+        requestTypeCounts: statsResponse.data.requestTypeCounts || {
+          projectStaff: 0,
+          advisor: 0,
+          leadExecutiveStaff: 0,
+          affiliateInstitute: 0,
+        },
       });
 
       setChartData(normalizeSectorData(chartResponse.data || []));
@@ -168,6 +181,12 @@ function DashboardStats({ setActivePage }) {
       topPendingSector,
       pendingSectorTotal,
       concentration,
+      requestTypeCounts: {
+        projectStaff: Number(stats.requestTypeCounts?.projectStaff || 0),
+        advisor: Number(stats.requestTypeCounts?.advisor || 0),
+        leadExecutiveStaff: Number(stats.requestTypeCounts?.leadExecutiveStaff || 0),
+        affiliateInstitute: Number(stats.requestTypeCounts?.affiliateInstitute || 0),
+      },
     };
   }, [chartData, stats]);
 
@@ -204,6 +223,33 @@ function DashboardStats({ setActivePage }) {
       label: "Rejected",
       value: analytics.rejected,
       detail: `${analytics.rejectionRate}% of completed decisions`,
+      tone: "rose",
+    },
+  ];
+
+  const structureCounts = [
+    {
+      label: "Project Staff",
+      value: analytics.requestTypeCounts.projectStaff,
+      detail: "Requests from registered MoA projects",
+      tone: "blue",
+    },
+    {
+      label: "Advisors",
+      value: analytics.requestTypeCounts.advisor,
+      detail: "Advisor requests under MoA structures",
+      tone: "green",
+    },
+    {
+      label: "Staff under Lead Executive",
+      value: analytics.requestTypeCounts.leadExecutiveStaff,
+      detail: "Regular MoA staff requests",
+      tone: "amber",
+    },
+    {
+      label: "Affiliate Institute",
+      value: analytics.requestTypeCounts.affiliateInstitute,
+      detail: "Affiliate organization requests",
       tone: "rose",
     },
   ];
@@ -292,6 +338,25 @@ function DashboardStats({ setActivePage }) {
         ))}
       </div>
 
+      <div className="dashboard-panel" style={{ marginBottom: "24px" }}>
+        <div className="dashboard-panel-header">
+          <div>
+            <h3>Requests by Traveler Structure</h3>
+            <p>Counts by the structure selected during traveler registration and request submission.</p>
+          </div>
+        </div>
+
+        <div className="dashboard-kpi-grid">
+          {structureCounts.map((item) => (
+            <div key={item.label} className={`dashboard-kpi-card ${item.tone}`}>
+              <span>{item.label}</span>
+              <strong>{loading ? "-" : item.value}</strong>
+              <small>{item.detail}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="dashboard-analytics-grid">
         <div className="dashboard-panel dashboard-chart-panel">
           <div className="dashboard-panel-header">
@@ -325,7 +390,7 @@ function DashboardStats({ setActivePage }) {
                   tick={{ fontSize: 12, fill: "#475569" }}
                 />
 
-                <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#475569" }} />
+                <YAxis hide allowDecimals={false} />
 
                 <Tooltip
                   cursor={{ fill: "rgba(29, 78, 216, 0.08)" }}
@@ -347,6 +412,13 @@ function DashboardStats({ setActivePage }) {
                       fill={chartColors[index % chartColors.length]}
                     />
                   ))}
+                  <LabelList
+                    dataKey="pending_count"
+                    position="top"
+                    fill="#0f172a"
+                    fontSize={13}
+                    fontWeight={700}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

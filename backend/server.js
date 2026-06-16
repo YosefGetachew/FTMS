@@ -3455,7 +3455,7 @@ app.get('/api/stats', async (req, res) => {
         : '';
     const scopedStatusAnd = scope ? 'AND' : 'WHERE';
 
-    const [[total], [approved], [pending], [rejected]] = await Promise.all(
+    const [[total], [approved], [pending], [rejected], categoryRows] = await Promise.all(
       [
         query(`SELECT COUNT(*)::int AS count FROM requests ${scope}`),
         query(
@@ -3476,14 +3476,47 @@ app.get('/api/stats', async (req, res) => {
            ${scope}
            ${scopedStatusAnd} final_status='rejected'`
         ),
+        query(
+          `SELECT
+             CASE
+               WHEN traveler_category='project' THEN 'project_staff'
+               WHEN traveler_category='advisor' THEN 'advisor'
+               WHEN traveler_category='affiliate_institution' THEN 'affiliate_institute'
+               ELSE 'lead_executive_staff'
+             END AS category,
+             COUNT(*)::int AS count
+           FROM requests
+           ${scope}
+           GROUP BY category`
+        ),
       ].map((p) => p.then((r) => r.rows))
     );
+
+    const requestTypeCounts = {
+      projectStaff: 0,
+      advisor: 0,
+      leadExecutiveStaff: 0,
+      affiliateInstitute: 0,
+    };
+
+    categoryRows.forEach((row) => {
+      if (row.category === 'project_staff') {
+        requestTypeCounts.projectStaff = row.count;
+      } else if (row.category === 'advisor') {
+        requestTypeCounts.advisor = row.count;
+      } else if (row.category === 'affiliate_institute') {
+        requestTypeCounts.affiliateInstitute = row.count;
+      } else if (row.category === 'lead_executive_staff') {
+        requestTypeCounts.leadExecutiveStaff = row.count;
+      }
+    });
 
     res.json({
       totalRequests: total.count,
       approvedRequests: approved.count,
       pendingRequests: pending.count,
       rejectedRequests: rejected.count,
+      requestTypeCounts,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
