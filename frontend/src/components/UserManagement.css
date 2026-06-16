@@ -182,8 +182,10 @@
 ============================================================ */
 
 .user-management-directory-toolbar {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: minmax(240px, 2fr) repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+  align-items: end;
   margin-bottom: 12px;
 }
 
@@ -191,13 +193,13 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  width: min(420px, 100%);
   color: #475569;
   font-size: 11.5px;
   font-weight: 700;
 }
 
-.user-management-directory-toolbar input {
+.user-management-directory-toolbar input,
+.user-management-directory-toolbar select {
   width: 100%;
   min-height: 38px;
   border: 1px solid #cbd5e1;
@@ -210,16 +212,17 @@
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.user-management-directory-toolbar input:focus {
+.user-management-directory-toolbar input:focus,
+.user-management-directory-toolbar select:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .user-management-filter-row {
   display: grid;
-  grid-template-columns: minmax(220px, 320px);
+  grid-template-columns: repeat(2, minmax(220px, 320px));
   gap: 10px;
-  width: min(320px, 100%);
+  width: min(660px, 100%);
 }
 
 .user-management-filter-row label {
@@ -333,6 +336,25 @@
   border-radius: 999px;
   background: #eff6ff;
   color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.user-role-pill.affiliate {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.user-management-managed-note {
+  display: inline-flex;
+  align-items: center;
+  min-height: 29px;
+  border: 1px solid #bbf7d0;
+  border-radius: 7px;
+  background: #f0fdf4;
+  color: #166534;
+  padding: 5px 8px;
   font-size: 11px;
   font-weight: 650;
 }
@@ -458,17 +480,18 @@
   .user-management-filter-row {
     width: 100%;
   }
+
+  .user-management-directory-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
   .user-management-summary-grid,
   .user-management-grid,
-  .user-management-filter-row {
-    grid-template-columns: 1fr;
-  }
-
+  .user-management-filter-row,
   .user-management-directory-toolbar {
-    justify-content: stretch;
+    grid-template-columns: 1fr;
   }
 
   .user-management-card-header,

@@ -52,6 +52,7 @@ const STAGES = {
 
 const WORKFLOW = {
   CEO: 'ceo_structure',
+  MINISTER: 'minister_structure',
   OFFICE_HEAD: 'office_head_structure',
   SECTOR: 'sector_structure',
 };
@@ -99,6 +100,7 @@ const ROLE_STAGES = {
   expert: [STAGES.EXPERT_PREPARATION],
   chief_executive_officer: [STAGES.CEO_REVIEW],
   ceo: [STAGES.CEO_REVIEW],
+  director_general: [STAGES.OFFICE_HEAD_REVIEW],
   office_head: [STAGES.OFFICE_HEAD_REVIEW, STAGES.OFFICE_HEAD_FINAL],
   lead_executive_officer: [STAGES.LEAD_EXECUTIVE_REVIEW],
   lead_executive: [STAGES.LEAD_EXECUTIVE_REVIEW],
@@ -114,6 +116,7 @@ ROLE_STAGES.super_admin = ADMIN_STAGES;
 
 const APPROVER_ROLES = [
   'state_minister',
+  'director_general',
   'lead_executive_officer',
   'lead_executive',
   'office_head',
@@ -380,7 +383,7 @@ const syncAffiliateDirectorGeneral = async (
        FROM users
        WHERE LOWER(TRIM(email))=$1
           OR (
-            role='office_head'
+            role IN ('office_head','director_general')
             AND $2::text <> ''
             AND LOWER(TRIM(COALESCE(sector,'')))=LOWER(TRIM($2))
           )
@@ -408,21 +411,22 @@ const syncAffiliateDirectorGeneral = async (
        SET full_name=$1,
            email=$2,
            password=COALESCE($3,password),
-           role='office_head',
+           role='director_general',
            phone=COALESCE($4,phone),
            sector=$5,
            department=NULL,
            organization_type='Affiliate',
-           organization_name=$5,
+           organization_name=$6,
            account_status='active',
            is_active=true
-       WHERE id=$6
+       WHERE id=$7
        RETURNING id,full_name,email,role,sector,department`,
       [
         cleanName || cleanEmail,
         cleanEmail,
         hashed,
         normalizePhone(phone),
+        cleanOrganizationName,
         cleanOrganizationName,
         existing.id,
       ]
@@ -445,13 +449,14 @@ const syncAffiliateDirectorGeneral = async (
       account_status,
       is_active
     )
-    VALUES($1,$2,$3,'office_head',$4,$5,NULL,'Affiliate',$5,'active',true)
+    VALUES($1,$2,$3,'director_general',$4,$5,NULL,'Affiliate',$6,'active',true)
     RETURNING id,full_name,email,role,sector,department`,
     [
       cleanName || cleanEmail,
       cleanEmail,
       hashed,
       normalizePhone(phone),
+      cleanOrganizationName,
       cleanOrganizationName,
     ]
   );
@@ -462,6 +467,7 @@ const syncAffiliateDirectorGeneral = async (
 const ROLE_ALIASES = {
   chief_executive_officer: ['chief_executive_officer', 'ceo'],
   ceo: ['chief_executive_officer', 'ceo'],
+  director_general: ['director_general', 'office_head'],
   office_head: ['office_head'],
   lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
   lead_executive: ['lead_executive_officer', 'lead_executive'],
@@ -587,7 +593,11 @@ const getSectorForStage = (stage, request) => {
 };
 
 const getFirstUserForStage = async (stage, request = null) => {
-  const role = STAGE_ROLES[stage];
+  const role =
+    stage === STAGES.OFFICE_HEAD_REVIEW &&
+    request?.traveler_category === 'affiliate_institution'
+      ? 'director_general'
+      : STAGE_ROLES[stage];
   if (!role) return null;
 
   const sector = getSectorForStage(stage, request);
@@ -652,8 +662,22 @@ const getWorkflowStagesForRequest = (request = {}) => {
 
   const stages = [
     STAGES.EXPERT_PREPARATION,
-    STAGES.LEAD_EXECUTIVE_REVIEW,
   ];
+
+  if (workflow === WORKFLOW.MINISTER && request.traveler_category !== 'advisor') {
+    stages.push(
+      STAGES.MINISTER_REVIEW,
+      STAGES.PM_OFFICE_SUBMISSION,
+      STAGES.PM_OFFICE,
+      STAGES.COMPLETED
+    );
+
+    return stages;
+  }
+
+  if (request.traveler_category !== 'advisor') {
+    stages.push(STAGES.LEAD_EXECUTIVE_REVIEW);
+  }
 
   if (workflow === WORKFLOW.SECTOR) {
     stages.push(STAGES.STATE_MINISTER_REVIEW);
@@ -688,6 +712,17 @@ const getInitialReviewStage = (request, actor) => {
   }
 
   const wf = normalizeWorkflow(request?.workflow_type);
+
+  if (request?.traveler_category === 'advisor') {
+    if (wf === WORKFLOW.SECTOR) return STAGES.STATE_MINISTER_REVIEW;
+    if (wf === WORKFLOW.CEO) return STAGES.CEO_REVIEW;
+    if (wf === WORKFLOW.MINISTER) return STAGES.PROTOCOL_CLEARANCE;
+    if (wf === WORKFLOW.OFFICE_HEAD) return STAGES.PROTOCOL_CLEARANCE;
+  }
+
+  if (wf === WORKFLOW.MINISTER) {
+    return STAGES.MINISTER_REVIEW;
+  }
 
   if (
     actor?.role === 'state_minister' &&
@@ -1047,6 +1082,13 @@ const accountEmail = (user, activated) =>
       UPDATE users
       SET account_status='active'
       WHERE account_status IS NULL
+    `);
+
+    await query(`
+      UPDATE users
+      SET role='director_general'
+      WHERE role='office_head'
+        AND LOWER(TRIM(COALESCE(organization_type,''))) LIKE '%affiliate%'
     `);
 
     await query(`
@@ -1574,22 +1616,13 @@ const ROLE_QUERIES = {
     WHERE (
          r.current_stage='office_head_review'
          AND r.final_status='pending'
+         AND r.traveler_category<>'affiliate_institution'
+         AND r.workflow_type='office_head_structure'
          AND EXISTS (
            SELECT 1 FROM users me
            WHERE LOWER(TRIM(me.email))=LOWER(TRIM($1))
              AND me.role='office_head'
-             AND (
-               (
-                 r.traveler_category='affiliate_institution'
-                 AND LOWER(TRIM(COALESCE(me.sector,''))) =
-                     LOWER(TRIM(COALESCE(r.organization_name,r.sector,'')))
-               )
-               OR (
-                 r.traveler_category<>'affiliate_institution'
-                 AND r.workflow_type='office_head_structure'
-                 AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
-               )
-             )
+             AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
          )
        )
        OR (
@@ -1602,6 +1635,30 @@ const ROLE_QUERIES = {
        )
        OR r.final_status IN ('approved','rejected')
     ORDER BY CASE WHEN r.current_stage IN ('office_head_review','office_head_final') AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
+
+  director_general: `${BASE_SELECT}
+    WHERE (
+         r.current_stage='office_head_review'
+         AND r.final_status='pending'
+         AND r.traveler_category='affiliate_institution'
+         AND EXISTS (
+           SELECT 1 FROM users me
+           WHERE LOWER(TRIM(me.email))=LOWER(TRIM($1))
+             AND me.role IN ('director_general','office_head')
+             AND LOWER(TRIM(COALESCE(me.sector,''))) =
+                 LOWER(TRIM(COALESCE(r.organization_name,r.sector,'')))
+         )
+       )
+       OR (
+         r.final_status IN ('approved','rejected')
+         AND EXISTS (
+           SELECT 1 FROM request_audit_trails a
+           WHERE a.request_id=r.id
+             AND a.actor_role IN ('director_general','office_head')
+             AND LOWER(TRIM(COALESCE(a.actor_email,'')))=LOWER(TRIM($1))
+         )
+       )
+    ORDER BY CASE WHEN r.current_stage='office_head_review' AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 
   lead_executive_officer: `${BASE_SELECT}
     WHERE (
@@ -1683,6 +1740,7 @@ const EMAIL_SCOPED_REQUEST_ROLES = [
   'lead_executive_officer',
   'lead_executive',
   'state_minister',
+  'director_general',
   'office_head',
   'protocol',
 ];
@@ -1905,7 +1963,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
         },
 
         [STAGES.OFFICE_HEAD_REVIEW]: {
-          roles: ['office_head', 'admin', 'super_admin'],
+          roles: ['director_general', 'office_head', 'admin', 'super_admin'],
           next: STAGES.PROTOCOL_CLEARANCE,
         },
 
@@ -2809,6 +2867,8 @@ app.post('/api/users', async (req, res) => {
       position,
       sector,
       department,
+      organizationType,
+      organizationName,
     } = req.body;
 
     if (!fullName || !email || !password || !role) {
@@ -2827,6 +2887,18 @@ app.post('/api/users', async (req, res) => {
     }
 
     const hashed = await bcrypt.hash(password, 10);
+    const cleanOrganizationType =
+      organizationType !== undefined
+        ? organizationType
+        : role === 'director_general'
+        ? 'Affiliate'
+        : null;
+    const cleanOrganizationName =
+      organizationName !== undefined
+        ? organizationName
+        : role === 'director_general'
+        ? sector
+        : null;
 
     const r = await query(
       `INSERT INTO users(
@@ -2838,11 +2910,13 @@ app.post('/api/users', async (req, res) => {
         position,
         sector,
         department,
+        organization_type,
+        organization_name,
         account_status,
         is_active
       )
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,'active',true)
-      RETURNING id,full_name,email,role,phone,position,sector,department,account_status`,
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',true)
+      RETURNING id,full_name,email,role,phone,position,sector,department,organization_type,organization_name,account_status`,
       [
         fullName,
         ne,
@@ -2852,6 +2926,8 @@ app.post('/api/users', async (req, res) => {
         position || null,
         sector || null,
         department || null,
+        cleanOrganizationType || null,
+        cleanOrganizationName || null,
       ]
     );
 
@@ -2933,9 +3009,25 @@ app.put('/api/users/:id', async (req, res) => {
       position,
       sector,
       department,
+      organizationType,
+      organizationName,
       accountStatus,
       isActive,
     } = req.body;
+
+    const cleanRole = role || null;
+    const cleanOrganizationType =
+      organizationType !== undefined
+        ? organizationType || null
+        : cleanRole === 'director_general'
+        ? 'Affiliate'
+        : null;
+    const cleanOrganizationName =
+      organizationName !== undefined
+        ? organizationName || null
+        : cleanRole === 'director_general'
+        ? sector || null
+        : null;
 
     const r = await query(
       `UPDATE users SET
@@ -2944,24 +3036,30 @@ app.put('/api/users/:id', async (req, res) => {
         role=COALESCE($3,role),
         phone=COALESCE($4,phone),
         position=COALESCE($5,position),
-        sector=CASE WHEN $10 THEN $6 ELSE sector END,
-        department=CASE WHEN $11 THEN $7 ELSE department END,
+        sector=CASE WHEN $12 THEN $6 ELSE sector END,
+        department=CASE WHEN $13 THEN $7 ELSE department END,
         account_status=COALESCE($8,account_status),
-        is_active=COALESCE($9,is_active)
-       WHERE id=$12
-       RETURNING id,full_name,email,role,phone,position,sector,department,is_active,account_status`,
+        is_active=COALESCE($9,is_active),
+        organization_type=CASE WHEN $14 THEN $10 ELSE organization_type END,
+        organization_name=CASE WHEN $15 THEN $11 ELSE organization_name END
+       WHERE id=$16
+       RETURNING id,full_name,email,role,phone,position,sector,department,organization_type,organization_name,is_active,account_status`,
       [
         fullName || null,
         email ? normalizeEmail(email) : null,
-        role || null,
+        cleanRole,
         normalizePhone(phone),
         position || null,
         sector === undefined ? null : sector || null,
         department === undefined ? null : department || null,
         accountStatus || null,
         typeof isActive === 'boolean' ? isActive : null,
+        cleanOrganizationType,
+        cleanOrganizationName,
         sector !== undefined,
         department !== undefined,
+        organizationType !== undefined || cleanRole === 'director_general',
+        organizationName !== undefined || cleanRole === 'director_general',
         req.params.id,
       ]
     );
@@ -3153,7 +3251,11 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
     const stageMap = {
       chief_executive_officer: `r.current_stage='ceo_review'`,
       ceo: `r.current_stage='ceo_review'`,
-      office_head: `r.current_stage IN ('office_head_review','office_head_final')`,
+      director_general: `r.current_stage='office_head_review' AND r.traveler_category='affiliate_institution'`,
+      office_head: `(
+        (r.current_stage='office_head_review' AND r.traveler_category<>'affiliate_institution')
+        OR r.current_stage='office_head_final'
+      )`,
       lead_executive_officer: `r.current_stage='lead_executive_review'`,
       lead_executive: `r.current_stage='lead_executive_review'`,
       state_minister: `r.current_stage='state_minister_review'`,
@@ -4282,13 +4384,13 @@ app.put('/api/affiliate-institutions/:id', async (req, res) => {
     const requestsUpdate = await client.query(
       `UPDATE requests
        SET organization_name=$1,
-           sector=$1
+           sector=$2
        WHERE traveler_category='affiliate_institution'
          AND (
-           LOWER(TRIM(COALESCE(organization_name,''))) = LOWER(TRIM($2))
-           OR LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($2))
+           LOWER(TRIM(COALESCE(organization_name,''))) = LOWER(TRIM($3))
+           OR LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($3))
          )`,
-      [cleanOrganizationName, existing.organization_name]
+      [cleanOrganizationName, cleanOrganizationName, existing.organization_name]
     );
 
     const directorGeneral = await syncAffiliateDirectorGeneral(client, {
