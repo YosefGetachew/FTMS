@@ -5220,6 +5220,17 @@ app.use((req, res) => {
 
 /* ── Start Server ───────────────────────────────────────── */
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`FTMS backend running on port ${PORT}`);
+});
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(
+      `Port ${PORT} is already in use. If you are running locally, use "npm run dev" so FTMS can stop the old backend process before starting.`
+    );
+    process.exit(1);
+  }
+
+  throw error;
 });
