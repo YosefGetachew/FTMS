@@ -11,6 +11,10 @@ function UserManagement() {
         value: "office_head_structure",
         label: "Head of the Minister's Office",
       },
+      {
+        value: "affiliate_structure",
+        label: "Affiliate Institute",
+      },
     ],
     []
   );
@@ -32,6 +36,10 @@ function UserManagement() {
       { value: "lead_executive_officer", label: "Lead Executive Officer" },
       { value: "chief_executive_officer", label: "CEO" },
       {
+        value: "director_general",
+        label: "Director General",
+      },
+      {
         value: "office_head",
         label: "Head of the Minister's Office",
       },
@@ -52,6 +60,7 @@ function UserManagement() {
   const hierarchyRoleValues = useMemo(
     () => [
       "state_minister",
+      "director_general",
       "lead_executive_officer",
       "lead_executive",
       "chief_executive_officer",
@@ -75,12 +84,20 @@ function UserManagement() {
   const [users, setUsers] = useState([]);
   const [moaSectors, setMoaSectors] = useState([]);
   const [executiveOffices, setExecutiveOffices] = useState([]);
+  const [affiliateInstitutions, setAffiliateInstitutions] = useState([]);
   const [formData, setFormData] = useState(initialFormData);
   const [editingId, setEditingId] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [structureFilter, setStructureFilter] = useState("");
+  const [approverAreaFilter, setApproverAreaFilter] = useState("");
   const [tableSearch, setTableSearch] = useState("");
+  const [directoryFilters, setDirectoryFilters] = useState({
+    roleGroup: "",
+    role: "",
+    structureType: "",
+    status: "",
+  });
   const [notice, setNotice] = useState(null);
 
   const officerRoleValues = officerRoles.map((role) => role.value);
@@ -89,6 +106,7 @@ function UserManagement() {
     fetchUsers();
     fetchMoaSectors();
     fetchExecutiveOffices();
+    fetchAffiliateInstitutions();
   }, []);
 
   const fetchUsers = async () => {
@@ -124,8 +142,29 @@ function UserManagement() {
     }
   };
 
-  const getStructuresForWorkflowType = (workflowType) =>
-    moaSectors.filter((item) => item.workflow_type === workflowType);
+  const fetchAffiliateInstitutions = async () => {
+    try {
+      const response = await API.get("/affiliate-institutions");
+      setAffiliateInstitutions(response.data || []);
+    } catch (error) {
+      console.error(error);
+      setNotice({
+        type: "error",
+        message: "Failed to load affiliate institutes",
+      });
+    }
+  };
+
+  const getStructuresForWorkflowType = (workflowType) => {
+    if (workflowType === "affiliate_structure") {
+      return affiliateInstitutions.map((item) => ({
+        id: `affiliate-${item.id}`,
+        name: item.organization_name,
+      }));
+    }
+
+    return moaSectors.filter((item) => item.workflow_type === workflowType);
+  };
 
   const getLeadExecutiveOfficesForStructure = (structureName) =>
     executiveOffices.filter((office) => office.sector_name === structureName);
@@ -133,11 +172,17 @@ function UserManagement() {
   const isLeadExecutiveRole = (role) =>
     ["lead_executive_officer", "lead_executive"].includes(role);
 
+  const isAffiliateDirectorGeneral = (user) =>
+    user?.role === "director_general" ||
+    (user?.role === "office_head" &&
+      String(user?.organization_type || "").toLowerCase().includes("affiliate"));
+
   const getRolesForStructureType = (workflowType) => {
     const roleMap = {
       sector_structure: ["state_minister", "lead_executive_officer"],
       ceo_structure: ["chief_executive_officer", "lead_executive_officer"],
       office_head_structure: ["office_head", "lead_executive_officer"],
+      affiliate_structure: ["director_general"],
     };
 
     return hierarchyRoles.filter((role) =>
@@ -149,6 +194,7 @@ function UserManagement() {
     if (workflowType === "sector_structure") return "state_minister";
     if (workflowType === "ceo_structure") return "chief_executive_officer";
     if (workflowType === "office_head_structure") return "office_head";
+    if (workflowType === "affiliate_structure") return "director_general";
     return "lead_executive_officer";
   };
 
@@ -163,9 +209,18 @@ function UserManagement() {
       ceo: "CEO",
       super_admin: "Super Admin",
       pm_office: "PM Office",
+      director_general: "Affiliate Institute Director General",
     };
 
     return fallbackRoles[role] || role || "-";
+  };
+
+  const formatAccessRole = (user) => {
+    if (isAffiliateDirectorGeneral(user)) {
+      return "Affiliate Institute Director General";
+    }
+
+    return formatRole(user.role);
   };
 
   const formatWorkflowType = (workflowType) => {
@@ -173,7 +228,27 @@ function UserManagement() {
     return found?.label || workflowType || "-";
   };
 
+  const getRoleGroup = (user) => {
+    if (["admin", "super_admin"].includes(user.role)) return "admin";
+    if (["protocol", "pm_office"].includes(user.role)) return "operations";
+    if (["traveler", "expert"].includes(user.role)) return "traveler";
+    if (isAffiliateDirectorGeneral(user)) return "affiliate";
+    const structureType = getStructureTypeForUser(user);
+    if (structureType === "ceo_structure") return "ceo_area";
+    if (structureType === "office_head_structure") return "office_head_area";
+    if (structureType === "sector_structure") return "sector_area";
+    if (user.role === "minister") return "minister";
+    return "workflow";
+  };
+
   const getStructureTypeForUser = (user) => {
+    if (
+      user.role === "director_general" ||
+      String(user.organization_type || "").toLowerCase().includes("affiliate")
+    ) {
+      return "affiliate_structure";
+    }
+
     const structure = moaSectors.find((item) => item.name === user.sector);
     return structure?.workflow_type || "";
   };
@@ -261,6 +336,7 @@ function UserManagement() {
     if (!validateForm()) return;
 
     const isHierarchy = formData.accountGroup === "hierarchy";
+    const isAffiliateStructure = formData.structureType === "affiliate_structure";
 
     try {
       setLoading(true);
@@ -274,6 +350,8 @@ function UserManagement() {
           isHierarchy && isLeadExecutiveRole(formData.role)
             ? formData.department
             : "",
+        organizationType: isHierarchy && isAffiliateStructure ? "Affiliate" : null,
+        organizationName: isHierarchy && isAffiliateStructure ? formData.sector : null,
       };
 
       if (editingId) {
@@ -309,7 +387,7 @@ function UserManagement() {
       fullName: user.full_name || "",
       email: user.email || "",
       password: "",
-      accountGroup: isHierarchy ? "hierarchy" : "system",
+      accountGroup: isHierarchy || isAffiliateDirectorGeneral(user) ? "hierarchy" : "system",
       structureType,
       sector: user.sector || "",
       department: user.department || "",
@@ -358,13 +436,112 @@ function UserManagement() {
   );
 
   const filteredWorkflowApprovers = workflowApprovers.filter((user) => {
+    const structureType = getStructureTypeForUser(user);
+
+    if (approverAreaFilter && structureType !== approverAreaFilter) {
+      return false;
+    }
+
     if (!structureFilter) return true;
-    return user.sector === structureFilter;
+    return user.sector === structureFilter || user.organization_name === structureFilter;
   });
 
   const systemOfficers = users.filter((user) =>
     systemRoleValues.includes(user.role)
   );
+
+  const sectorAccountSections = moaSectors
+    .filter((item) => item.workflow_type === "sector_structure")
+    .map((sector) => ({
+      title: `${sector.name} Sector`,
+      items: users.filter(
+        (user) =>
+          user.sector === sector.name &&
+          (user.role === "state_minister" || isLeadExecutiveRole(user.role))
+      ),
+      empty: `No State Minister or Lead Executive Officer accounts found for ${sector.name}`,
+    }));
+
+  const unassignedSectorAccounts = users.filter(
+    (user) =>
+      (user.role === "state_minister" ||
+        (isLeadExecutiveRole(user.role) &&
+          getStructureTypeForUser(user) === "sector_structure")) &&
+      !moaSectors.some(
+        (sector) =>
+          sector.workflow_type === "sector_structure" &&
+          sector.name === user.sector
+      )
+  );
+
+  const accountSections = [
+    {
+      title: "Minister",
+      items: users.filter(
+        (user) =>
+          user.role === "minister" ||
+          getStructureTypeForUser(user) === "minister_structure"
+      ),
+      empty: "No minister account found",
+    },
+    {
+      title: "CEO Structures",
+      items: users.filter(
+        (user) =>
+          ["chief_executive_officer", "ceo"].includes(user.role) ||
+          (isLeadExecutiveRole(user.role) &&
+            getStructureTypeForUser(user) === "ceo_structure")
+      ),
+      empty: "No CEO or CEO Lead Executive accounts found",
+    },
+    {
+      title: "Head of the Minister's Office Structure",
+      items: users.filter(
+        (user) =>
+          (user.role === "office_head" && !isAffiliateDirectorGeneral(user)) ||
+          (isLeadExecutiveRole(user.role) &&
+            getStructureTypeForUser(user) === "office_head_structure")
+      ),
+      empty: "No Office Head or Office Head Lead Executive accounts found",
+    },
+    ...sectorAccountSections,
+    ...(unassignedSectorAccounts.length
+      ? [
+          {
+            title: "Unassigned Sector Accounts",
+            items: unassignedSectorAccounts,
+            empty: "No unassigned sector accounts found",
+          },
+        ]
+      : []),
+    {
+      title: "Affiliate Institute General Directors",
+      items: users.filter((user) => isAffiliateDirectorGeneral(user)),
+      empty: "No Affiliate Institute General Directors found",
+    },
+    {
+      title: "Protocol",
+      items: users.filter((user) => user.role === "protocol"),
+      empty: "No Protocol accounts found",
+    },
+    {
+      title: "PM Office",
+      items: users.filter((user) => user.role === "pm_office"),
+      empty: "No PM Office accounts found",
+    },
+    {
+      title: "Administrators",
+      items: users.filter((user) =>
+        ["admin", "super_admin"].includes(user.role)
+      ),
+      empty: "No administrator accounts found",
+    },
+    {
+      title: "Travelers",
+      items: travelers,
+      empty: "No travelers found",
+    },
+  ];
 
   const categorizedUserIds = new Set([
     ...travelers.map((user) => user.id),
@@ -400,24 +577,67 @@ function UserManagement() {
     [users.length, workflowApprovers.length, systemOfficers.length, travelers.length]
   );
 
-  const filterBySearch = (items) => {
+  const roleFilterOptions = useMemo(
+    () =>
+      [...officerRoles, { value: "traveler", label: "Traveler" }, { value: "expert", label: "Expert" }]
+        .filter(
+          (role, index, list) =>
+            list.findIndex((item) => item.value === role.value) === index
+        )
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [officerRoles]
+  );
+
+  const handleDirectoryFilterChange = (name, value) => {
+    setDirectoryFilters((current) => ({
+      ...current,
+      [name]: value,
+    }));
+  };
+
+  const filterAccounts = (items) => {
     const search = tableSearch.trim().toLowerCase();
 
-    if (!search) return items;
+    return items.filter((user) => {
+      const roleGroup = getRoleGroup(user);
+      const structureType = getStructureTypeForUser(user);
+      const status = user.account_status || "";
 
-    return items.filter((user) =>
-      [
+      if (directoryFilters.roleGroup && roleGroup !== directoryFilters.roleGroup) {
+        return false;
+      }
+
+      if (directoryFilters.role && user.role !== directoryFilters.role) {
+        return false;
+      }
+
+      if (
+        directoryFilters.structureType &&
+        structureType !== directoryFilters.structureType
+      ) {
+        return false;
+      }
+
+      if (directoryFilters.status && status !== directoryFilters.status) {
+        return false;
+      }
+
+      if (!search) return true;
+
+      return [
         user.full_name,
         user.email,
         user.role,
         user.sector,
+        user.organization_name,
+        user.organization_type,
         user.department,
         user.account_status,
       ]
         .join(" ")
         .toLowerCase()
-        .includes(search)
-    );
+        .includes(search);
+    });
   };
 
   const renderHierarchyFields = () => (
@@ -510,7 +730,13 @@ function UserManagement() {
                   <span>{user.email || "-"}</span>
                 </td>
                 <td>
-                  <span className="user-role-pill">{formatRole(user.role)}</span>
+                  <span
+                    className={`user-role-pill${
+                      isAffiliateDirectorGeneral(user) ? " affiliate" : ""
+                    }`}
+                  >
+                    {formatAccessRole(user)}
+                  </span>
                 </td>
                 <td className="user-management-muted">
                   {user.sector || user.organization_name || user.organization_type || "-"}
@@ -554,20 +780,31 @@ function UserManagement() {
     </div>
   );
 
-  const renderUserSection = (title, items, emptyMessage, children = null) => (
-    <div
-      className={`user-management-section${title === "Workflow Approvers" ? " user-workflow-approvers" : ""}`}
-    >
-      <div className="user-management-section-header">
-        <div>
-          <h3>{title}</h3>
-          <p>{items.length} account{items.length === 1 ? "" : "s"} in this group</p>
+  const renderUserSection = (title, items, emptyMessage, children = null) => {
+    const visibleItems = filterAccounts(items);
+
+    return (
+      <div
+        className={`user-management-section${
+          title === "Workflow Approvers by Structure"
+            ? " user-workflow-approvers"
+            : ""
+        }`}
+      >
+        <div className="user-management-section-header">
+          <div>
+            <h3>{title}</h3>
+            <p>
+              {visibleItems.length} account
+              {visibleItems.length === 1 ? "" : "s"} in this group
+            </p>
+          </div>
+          {children}
         </div>
-        {children}
+        {renderUserTable(visibleItems, emptyMessage)}
       </div>
-      {renderUserTable(filterBySearch(items), emptyMessage)}
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="page-container user-management-page">
@@ -693,15 +930,99 @@ function UserManagement() {
             onChange={(e) => setTableSearch(e.target.value)}
           />
         </label>
+        <label>
+          Role Group
+          <select
+            value={directoryFilters.roleGroup}
+            onChange={(e) =>
+              handleDirectoryFilterChange("roleGroup", e.target.value)
+            }
+          >
+            <option value="">All groups</option>
+            <option value="minister">Minister</option>
+            <option value="ceo_area">CEO structures</option>
+            <option value="office_head_area">Minister's Office structures</option>
+            <option value="sector_area">Sector structures</option>
+            <option value="affiliate">Affiliate directors</option>
+            <option value="operations">Protocol / PM Office</option>
+            <option value="admin">Administrators</option>
+            <option value="traveler">Travelers</option>
+          </select>
+        </label>
+        <label>
+          Access Role
+          <select
+            value={directoryFilters.role}
+            onChange={(e) => handleDirectoryFilterChange("role", e.target.value)}
+          >
+            <option value="">All roles</option>
+            {roleFilterOptions.map((role) => (
+              <option key={role.value} value={role.value}>
+                {role.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Structure Type
+          <select
+            value={directoryFilters.structureType}
+            onChange={(e) =>
+              handleDirectoryFilterChange("structureType", e.target.value)
+            }
+          >
+            <option value="">All structure types</option>
+            {workflowTypes.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Status
+          <select
+            value={directoryFilters.status}
+            onChange={(e) =>
+              handleDirectoryFilterChange("status", e.target.value)
+            }
+          >
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </label>
       </div>
 
-      {renderUserSection("All Accounts", users, "No accounts found")}
+      <div className="user-management-role-sections">
+        {accountSections.map((section) =>
+          renderUserSection(section.title, section.items, section.empty)
+        )}
+      </div>
 
       {renderUserSection(
-        "Workflow Approvers",
+        "Workflow Approvers by Structure",
         filteredWorkflowApprovers,
         "No workflow approvers found",
         <div className="user-management-filter-row">
+          <label>
+            Approver Area
+            <select
+              value={approverAreaFilter}
+              onChange={(e) => {
+                setApproverAreaFilter(e.target.value);
+                setStructureFilter("");
+              }}
+            >
+              <option value="">All areas</option>
+              {workflowTypes.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             Structure
             <select
@@ -709,23 +1030,31 @@ function UserManagement() {
               onChange={(e) => setStructureFilter(e.target.value)}
             >
               <option value="">All Structures</option>
-              {moaSectors.map((item) => (
-                <option key={item.id} value={item.name}>
-                  {item.name} - {formatWorkflowType(item.workflow_type)}
-                </option>
-              ))}
+              {moaSectors
+                .filter(
+                  (item) =>
+                    !approverAreaFilter ||
+                    item.workflow_type === approverAreaFilter
+                )
+                .map((item) => (
+                  <option key={item.id} value={item.name}>
+                    {item.name} - {formatWorkflowType(item.workflow_type)}
+                  </option>
+                ))}
+              {(!approverAreaFilter ||
+                approverAreaFilter === "affiliate_structure") &&
+                affiliateInstitutions.map((item) => (
+                  <option
+                    key={`affiliate-${item.id}`}
+                    value={item.organization_name}
+                  >
+                    {item.organization_name} - Affiliate Institute
+                  </option>
+                ))}
             </select>
           </label>
         </div>
       )}
-
-      {renderUserSection(
-        "System Officers",
-        systemOfficers,
-        "No system officers found"
-      )}
-
-      {renderUserSection("Travelers", travelers, "No travelers found")}
 
       {otherAccounts.length > 0 &&
         renderUserSection(
@@ -733,6 +1062,8 @@ function UserManagement() {
           otherAccounts,
           "No other accounts found"
         )}
+
+      {renderUserSection("All Accounts", users, "No accounts found")}
 
       {showEditModal && (
         <div className="modal-overlay">
