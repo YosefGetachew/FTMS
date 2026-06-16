@@ -17,6 +17,7 @@ const formatRole = (value) => {
   if (!value) return "User";
 
   const labels = {
+    director_general: "Director General",
     pm_office: "PM Office",
   };
 
@@ -38,6 +39,10 @@ const getDashboardScope = (user) => {
 
   if (role === "minister") {
     return "Final ministerial review and approved travel oversight";
+  }
+
+  if (role === "director_general") {
+    return sector ? `${sector} affiliate institute review workload` : "Affiliate institute review workload";
   }
 
   if (role === "office_head") {
@@ -64,6 +69,12 @@ const getDashboardScope = (user) => {
     return department
       ? `${department} lead executive office workload`
       : "Assigned lead executive office workload";
+  }
+
+  if (role === "project_coordinator") {
+    return department
+      ? `${department} project coordinator workload`
+      : "Assigned project coordinator workload";
   }
 
   return "Your available travel request workspace";

@@ -45,6 +45,15 @@ const workflowPath = {
     "Protocol PM Submission",
     "PM Office",
   ],
+  project: [
+    "Project Staff",
+    "Project Coordinator",
+    "Parent Structure Approver",
+    "Protocol for Clearance",
+    "Office Head",
+    "Protocol PM Submission",
+    "PM Office",
+  ],
 };
 
 const moaStructureTypes = [
@@ -389,6 +398,12 @@ export default function RequestForm() {
       route: "Advisor route",
     },
     {
+      value: "project",
+      label: "Project Staff",
+      description: "Staff under project coordinator",
+      route: "Project route",
+    },
+    {
       value: "expert",
       label: "Expert",
       description: "Technical staff",
@@ -435,6 +450,7 @@ export default function RequestForm() {
   const [organizations, setOrganizations] = useState([]);
   const [moaSectors, setMoaSectors] = useState([]);
   const [leadExecutiveOffices, setLeadExecutiveOffices] = useState([]);
+  const [moaProjects, setMoaProjects] = useState([]);
   const [step, setStep] = useState(1);
   const [touched, setTouched] = useState({});
   const [notice, setNotice] = useState({ type: "", message: "" });
@@ -443,6 +459,7 @@ export default function RequestForm() {
     organizations: false,
     moaSectors: false,
     leadExecutiveOffices: false,
+    moaProjects: false,
     submitting: false,
   });
 
@@ -492,12 +509,44 @@ export default function RequestForm() {
     currentUser?.role === "state_minister" &&
     formData.workflowType === "sector_structure";
   const isAdvisorTraveler = isMoA && formData.travelerType === "advisor";
+  const isProjectTraveler = isMoA && formData.travelerType === "project";
   const isAffiliateDirectorGeneralTraveler =
     ["director_general", "office_head"].includes(currentUser?.role) &&
     isAffiliate &&
     normalizeComparable(currentUser?.sector) ===
       normalizeComparable(formData.organizationName);
-  const displayedWorkflowPath = isAdvisorTraveler
+  const displayedWorkflowPath = isProjectTraveler
+    ? formData.workflowType === "sector_structure"
+      ? [
+          "Project Staff",
+          "Project Coordinator",
+          "State Minister",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : formData.workflowType === "ceo_structure"
+      ? [
+          "Project Staff",
+          "Project Coordinator",
+          "CEO",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : [
+          "Project Staff",
+          "Project Coordinator",
+          "Protocol for Clearance",
+          "Office Head",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+    : isAdvisorTraveler
     ? formData.workflowType === "sector_structure"
       ? [
           "Advisor",
@@ -566,9 +615,23 @@ export default function RequestForm() {
     [assignedLeadExecutiveOffice, formData.sector, leadExecutiveOffices, normalizeComparable]
   );
 
+  const projectOptions = useMemo(
+    () =>
+      moaProjects
+        .filter((project) => project.parent_structure_name === formData.sector)
+        .filter((project) => {
+          if (!assignedLeadExecutiveOffice) return true;
+          return normalizeComparable(project.project_name) === normalizeComparable(assignedLeadExecutiveOffice);
+        }),
+    [assignedLeadExecutiveOffice, formData.sector, moaProjects, normalizeComparable]
+  );
+
   const hasAssignedSectorOption = Boolean(assignedSector && sectorOptions.length === 1);
   const hasAssignedLeadExecutiveOfficeOption = Boolean(
     assignedLeadExecutiveOffice && leadExecutiveOfficeOptions.length === 1
+  );
+  const hasAssignedProjectOption = Boolean(
+    assignedLeadExecutiveOffice && projectOptions.length === 1
   );
 
   const markTouched = (name) => setTouched((p) => ({ ...p, [name]: true }));
@@ -645,7 +708,9 @@ export default function RequestForm() {
       if (!formData.workflowType) e.workflowType = "Select the MoA structure type.";
       if (!formData.sector.trim()) e.sector = "MoA Structure is required.";
       if (!isStateMinisterSectorTraveler && !isAdvisorTraveler && !formData.leadExecutiveOffice.trim()) {
-        e.leadExecutiveOffice = "Lead Executive Office is required.";
+        e.leadExecutiveOffice = isProjectTraveler
+          ? "Project / Coordinator Office is required."
+          : "Lead Executive Office is required.";
       }
     }
 
@@ -683,6 +748,7 @@ export default function RequestForm() {
     isAffiliate,
     isStateMinisterSectorTraveler,
     isAdvisorTraveler,
+    isProjectTraveler,
     isAffiliateDirectorGeneralTraveler,
   ]);
 
@@ -752,6 +818,18 @@ export default function RequestForm() {
     }
   }, []);
 
+  const fetchMoaProjects = useCallback(async () => {
+    setLoading((p) => ({ ...p, moaProjects: true }));
+    try {
+      const res = await API.get("/moa-projects");
+      setMoaProjects(res.data || []);
+    } catch {
+      setNotice({ type: "error", message: "Unable to load MoA projects." });
+    } finally {
+      setLoading((p) => ({ ...p, moaProjects: false }));
+    }
+  }, []);
+
   const fetchCountries = useCallback(async () => {
     setLoading((p) => ({ ...p, countries: true }));
     try {
@@ -777,7 +855,8 @@ export default function RequestForm() {
     fetchCountries();
     fetchMoaSectors();
     fetchLeadExecutiveOffices();
-  }, [fetchOrganizations, fetchCountries, fetchMoaSectors, fetchLeadExecutiveOffices]);
+    fetchMoaProjects();
+  }, [fetchOrganizations, fetchCountries, fetchMoaSectors, fetchLeadExecutiveOffices, fetchMoaProjects]);
 
   useEffect(() => {
     if (!isMoA || !formData.workflowType || !sectorOptions.length) return;
@@ -806,6 +885,25 @@ export default function RequestForm() {
     isMoA,
     normalizeComparable,
     sectorOptions,
+  ]);
+
+  useEffect(() => {
+    if (!isProjectTraveler || !formData.sector || !projectOptions.length) return;
+
+    const nextProject =
+      projectOptions.length === 1 ? projectOptions[0].project_name : "";
+
+    if (nextProject && formData.leadExecutiveOffice !== nextProject) {
+      setFormData((prev) => ({
+        ...prev,
+        leadExecutiveOffice: nextProject,
+      }));
+    }
+  }, [
+    formData.leadExecutiveOffice,
+    formData.sector,
+    isProjectTraveler,
+    projectOptions,
   ]);
 
   useEffect(() => {
@@ -1113,6 +1211,8 @@ export default function RequestForm() {
                       description={
                         isAdvisorTraveler
                           ? "Advisors skip Lead Executive Office selection."
+                          : isProjectTraveler
+                          ? "Select the accountable structure and enter the project coordinator office."
                           : "Select the exact structure and Lead Executive Office for routing."
                       }
                     >
@@ -1168,6 +1268,8 @@ export default function RequestForm() {
                           label={
                             isAdvisorTraveler
                               ? "Advisor Routing"
+                              : isProjectTraveler
+                              ? "Project / Coordinator Office"
                               : isStateMinisterSectorTraveler
                               ? "Approver Level"
                               : "Lead Executive Office"
@@ -1178,6 +1280,8 @@ export default function RequestForm() {
                           hint={
                             isAdvisorTraveler
                               ? advisorRouteHint
+                              : isProjectTraveler
+                              ? `Enter the project or coordinator office accountable to the selected ${selectedStructureTypeLabel} structure.`
                               : isStateMinisterSectorTraveler
                               ? "State Minister travelers are routed directly to the next formal approver."
                               : `Select the Lead Executive Office under the selected ${selectedStructureTypeLabel} structure.`
@@ -1194,6 +1298,32 @@ export default function RequestForm() {
                               disabled
                               readOnly
                             />
+                          ) : isProjectTraveler ? (
+                            <select
+                              name="leadExecutiveOffice"
+                              value={formData.leadExecutiveOffice}
+                              onChange={handleChange}
+                              onBlur={() => markTouched("leadExecutiveOffice")}
+                              className="ministry-input"
+                              disabled={
+                                !formData.sector ||
+                                loading.moaProjects ||
+                                hasAssignedProjectOption
+                              }
+                            >
+                              <option value="">
+                                {!formData.sector
+                                  ? `Select ${selectedStructureTypeLabel} Structure first`
+                                  : loading.moaProjects
+                                  ? "Loading projects..."
+                                  : "Select Project"}
+                              </option>
+                              {projectOptions.map((project) => (
+                                <option key={project.id} value={project.project_name}>
+                                  {project.project_name}
+                                </option>
+                              ))}
+                            </select>
                           ) : isStateMinisterSectorTraveler ? (
                             <input
                               className="ministry-input"
@@ -1581,7 +1711,7 @@ export default function RequestForm() {
                 {isMoA && selectedWorkflow && (
                   <div className="review-route">
                     <span>Approval route</span>
-                    <strong>{selectedWorkflow.route}</strong>
+                    <strong>{displayedWorkflowPath.join(" -> ")}</strong>
                   </div>
                 )}
                 {isAffiliate && (

@@ -41,6 +41,7 @@ const STAGES = {
   CEO_REVIEW: 'ceo_review',
   OFFICE_HEAD_REVIEW: 'office_head_review',
   LEAD_EXECUTIVE_REVIEW: 'lead_executive_review',
+  PROJECT_COORDINATOR_REVIEW: 'project_coordinator_review',
   STATE_MINISTER_REVIEW: 'state_minister_review',
   PROTOCOL_CLEARANCE: 'protocol_clearance',
   OFFICE_HEAD_FINAL: 'office_head_final',
@@ -70,6 +71,7 @@ const STAGE_NAMES = {
   ceo_review: 'CEO Review',
   office_head_review: 'Office Head Review',
   lead_executive_review: 'Lead Executive Officer Review',
+  project_coordinator_review: 'Project Coordinator Review',
   state_minister_review: 'State Minister Review',
   protocol_clearance: 'Protocol Clearance',
   office_head_final: 'Office Head Final Decision',
@@ -86,6 +88,7 @@ const STAGE_ROLES = {
   ceo_review: 'chief_executive_officer',
   office_head_review: 'office_head',
   lead_executive_review: 'lead_executive_officer',
+  project_coordinator_review: 'project_coordinator',
   state_minister_review: 'state_minister',
   protocol_clearance: 'protocol',
   office_head_final: 'office_head',
@@ -104,6 +107,7 @@ const ROLE_STAGES = {
   office_head: [STAGES.OFFICE_HEAD_REVIEW, STAGES.OFFICE_HEAD_FINAL],
   lead_executive_officer: [STAGES.LEAD_EXECUTIVE_REVIEW],
   lead_executive: [STAGES.LEAD_EXECUTIVE_REVIEW],
+  project_coordinator: [STAGES.PROJECT_COORDINATOR_REVIEW],
   state_minister: [STAGES.STATE_MINISTER_REVIEW],
   protocol: [STAGES.PROTOCOL_CLEARANCE, STAGES.PM_OFFICE_SUBMISSION],
   pm_office: [STAGES.PM_OFFICE],
@@ -119,6 +123,7 @@ const APPROVER_ROLES = [
   'director_general',
   'lead_executive_officer',
   'lead_executive',
+  'project_coordinator',
   'office_head',
   'chief_executive_officer',
   'ceo',
@@ -464,6 +469,113 @@ const syncAffiliateDirectorGeneral = async (
   return { user: r.rows[0], created: true };
 };
 
+const syncProjectCoordinator = async (
+  db,
+  {
+    projectName,
+    previousProjectName = '',
+    parentStructureName,
+    coordinatorName,
+    email,
+    phone,
+    password,
+  }
+) => {
+  const cleanProjectName = String(projectName || '').trim();
+  const cleanPreviousProjectName = String(previousProjectName || '').trim();
+  const cleanParentStructureName = String(parentStructureName || '').trim();
+  const cleanEmail = normalizeEmail(email);
+  const cleanName = String(coordinatorName || '').trim();
+
+  if (!cleanProjectName || !cleanParentStructureName || !cleanEmail) return null;
+
+  const existing = (
+    await db.query(
+      `SELECT id,password
+       FROM users
+       WHERE LOWER(TRIM(email))=$1
+          OR (
+            role='project_coordinator'
+            AND $2::text <> ''
+            AND LOWER(TRIM(COALESCE(department,'')))=LOWER(TRIM($2))
+          )
+       ORDER BY CASE WHEN LOWER(TRIM(email))=$1 THEN 0 ELSE 1 END, id ASC
+       LIMIT 1`,
+      [cleanEmail, cleanPreviousProjectName]
+    )
+  ).rows[0];
+
+  const cleanPassword = String(password || '').trim();
+
+  if (!existing && !cleanPassword) {
+    const error = new Error(
+      'Temporary password is required to create the Project Coordinator account.'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const hashed = cleanPassword ? await bcrypt.hash(cleanPassword, 10) : null;
+
+  if (existing) {
+    const r = await db.query(
+      `UPDATE users
+       SET full_name=$1,
+           email=$2,
+           password=COALESCE($3,password),
+           role='project_coordinator',
+           phone=COALESCE($4,phone),
+           sector=$5,
+           department=$6,
+           organization_type='MoA Project',
+           organization_name=$6,
+           account_status='active',
+           is_active=true
+       WHERE id=$7
+       RETURNING id,full_name,email,role,sector,department`,
+      [
+        cleanName || cleanEmail,
+        cleanEmail,
+        hashed,
+        normalizePhone(phone),
+        cleanParentStructureName,
+        cleanProjectName,
+        existing.id,
+      ]
+    );
+
+    return { user: r.rows[0], created: false };
+  }
+
+  const r = await db.query(
+    `INSERT INTO users(
+      full_name,
+      email,
+      password,
+      role,
+      phone,
+      sector,
+      department,
+      organization_type,
+      organization_name,
+      account_status,
+      is_active
+    )
+    VALUES($1,$2,$3,'project_coordinator',$4,$5,$6,'MoA Project',$6,'active',true)
+    RETURNING id,full_name,email,role,sector,department`,
+    [
+      cleanName || cleanEmail,
+      cleanEmail,
+      hashed,
+      normalizePhone(phone),
+      cleanParentStructureName,
+      cleanProjectName,
+    ]
+  );
+
+  return { user: r.rows[0], created: true };
+};
+
 const ROLE_ALIASES = {
   chief_executive_officer: ['chief_executive_officer', 'ceo'],
   ceo: ['chief_executive_officer', 'ceo'],
@@ -471,6 +583,7 @@ const ROLE_ALIASES = {
   office_head: ['office_head'],
   lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
   lead_executive: ['lead_executive_officer', 'lead_executive'],
+  project_coordinator: ['project_coordinator'],
   protocol: ['protocol'],
   pm_office: ['pm_office'],
   minister: ['minister'],
@@ -565,7 +678,13 @@ const getSectorForStage = (stage, request) => {
   const requestSector = request?.sector;
   const affiliateOrganization = request?.organization_name || requestSector;
 
-  if ([STAGES.DIRECTOR_REVIEW, STAGES.LEAD_EXECUTIVE_REVIEW].includes(stage)) {
+  if (
+    [
+      STAGES.DIRECTOR_REVIEW,
+      STAGES.LEAD_EXECUTIVE_REVIEW,
+      STAGES.PROJECT_COORDINATOR_REVIEW,
+    ].includes(stage)
+  ) {
     return requestSector;
   }
 
@@ -602,7 +721,9 @@ const getFirstUserForStage = async (stage, request = null) => {
 
   const sector = getSectorForStage(stage, request);
   const department =
-    stage === STAGES.LEAD_EXECUTIVE_REVIEW ? request?.department : '';
+    [STAGES.LEAD_EXECUTIVE_REVIEW, STAGES.PROJECT_COORDINATOR_REVIEW].includes(stage)
+      ? request?.department
+      : '';
 
   if (sector) {
     const requiresExactSector =
@@ -632,6 +753,12 @@ const getNextStageAfterApproval = (stage, request = {}) => {
     if (wf === WORKFLOW.SECTOR) return STAGES.STATE_MINISTER_REVIEW;
     if (wf === WORKFLOW.CEO) return STAGES.CEO_REVIEW;
     return STAGES.OFFICE_HEAD_REVIEW;
+  }
+
+  if (stage === STAGES.PROJECT_COORDINATOR_REVIEW) {
+    if (wf === WORKFLOW.SECTOR) return STAGES.STATE_MINISTER_REVIEW;
+    if (wf === WORKFLOW.CEO) return STAGES.CEO_REVIEW;
+    return STAGES.PROTOCOL_CLEARANCE;
   }
 
   if (stage === STAGES.STATE_MINISTER_REVIEW) return STAGES.PROTOCOL_CLEARANCE;
@@ -675,7 +802,9 @@ const getWorkflowStagesForRequest = (request = {}) => {
     return stages;
   }
 
-  if (request.traveler_category !== 'advisor') {
+  if (request.traveler_category === 'project') {
+    stages.push(STAGES.PROJECT_COORDINATOR_REVIEW);
+  } else if (request.traveler_category !== 'advisor') {
     stages.push(STAGES.LEAD_EXECUTIVE_REVIEW);
   }
 
@@ -718,6 +847,10 @@ const getInitialReviewStage = (request, actor) => {
     if (wf === WORKFLOW.CEO) return STAGES.CEO_REVIEW;
     if (wf === WORKFLOW.MINISTER) return STAGES.PROTOCOL_CLEARANCE;
     if (wf === WORKFLOW.OFFICE_HEAD) return STAGES.PROTOCOL_CLEARANCE;
+  }
+
+  if (request?.traveler_category === 'project') {
+    return STAGES.PROJECT_COORDINATOR_REVIEW;
   }
 
   if (wf === WORKFLOW.MINISTER) {
@@ -836,6 +969,16 @@ const getScopedDecisionError = async ({
       !sameText(actor.department, request.department)
     ) {
       return 'This request is assigned to another Lead Executive Office.';
+    }
+  }
+
+  if (stage === STAGES.PROJECT_COORDINATOR_REVIEW) {
+    if (
+      actor.role !== 'project_coordinator' ||
+      !sameText(actor.sector, request.sector) ||
+      !sameText(actor.department, request.department)
+    ) {
+      return 'This request is assigned to another Project Coordinator.';
     }
   }
 
@@ -1222,6 +1365,82 @@ const accountEmail = (user, activated) =>
     await query(`
       ALTER TABLE moa_executive_offices
       ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS moa_projects (
+        id SERIAL PRIMARY KEY,
+        parent_structure_id INTEGER REFERENCES moa_sectors(id) ON DELETE CASCADE,
+        project_name VARCHAR(255) NOT NULL,
+        coordinator_name VARCHAR(255),
+        email VARCHAR(255),
+        phone VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS parent_structure_id INTEGER
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS project_name VARCHAR(255)
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS coordinator_name VARCHAR(255)
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS email VARCHAR(255)
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS phone VARCHAR(50)
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+
+    await query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'moa_projects_parent_structure_id_fkey'
+        ) THEN
+          ALTER TABLE moa_projects
+          ADD CONSTRAINT moa_projects_parent_structure_id_fkey
+          FOREIGN KEY (parent_structure_id)
+          REFERENCES moa_sectors(id)
+          ON DELETE CASCADE;
+        END IF;
+      END
+      $$;
+    `);
+
+    await query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'moa_projects_parent_project_name_key'
+        ) THEN
+          ALTER TABLE moa_projects
+          ADD CONSTRAINT moa_projects_parent_project_name_key
+          UNIQUE(parent_structure_id, project_name);
+        END IF;
+      END
+      $$;
     `);
 
     await query(`
@@ -1683,6 +1902,30 @@ const ROLE_QUERIES = {
        )
     ORDER BY CASE WHEN r.current_stage='lead_executive_review' AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 
+  project_coordinator: `${BASE_SELECT}
+    WHERE (
+         r.current_stage='project_coordinator_review'
+         AND r.final_status='pending'
+         AND r.traveler_category='project'
+         AND EXISTS (
+           SELECT 1 FROM users me
+           WHERE LOWER(TRIM(me.email))=LOWER(TRIM($1))
+             AND me.role='project_coordinator'
+             AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
+             AND LOWER(TRIM(COALESCE(me.department,'')))=LOWER(TRIM(COALESCE(r.department,'')))
+         )
+       )
+       OR (
+         r.final_status IN ('approved','rejected')
+         AND EXISTS (
+           SELECT 1 FROM request_audit_trails a
+           WHERE a.request_id=r.id
+             AND a.actor_role='project_coordinator'
+             AND LOWER(TRIM(COALESCE(a.actor_email,'')))=LOWER(TRIM($1))
+         )
+       )
+    ORDER BY CASE WHEN r.current_stage='project_coordinator_review' AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
+
   state_minister: `${BASE_SELECT}
     WHERE (
          r.current_stage='state_minister_review'
@@ -1739,6 +1982,7 @@ const EMAIL_SCOPED_REQUEST_ROLES = [
   'ceo',
   'lead_executive_officer',
   'lead_executive',
+  'project_coordinator',
   'state_minister',
   'director_general',
   'office_head',
@@ -1982,6 +2226,16 @@ app.put('/api/requests/:id/status', async (req, res) => {
               : STAGES.PROTOCOL_CLEARANCE,
         },
 
+        [STAGES.PROJECT_COORDINATOR_REVIEW]: {
+          roles: ['project_coordinator', 'admin', 'super_admin'],
+          next:
+            wf === WORKFLOW.SECTOR
+              ? STAGES.STATE_MINISTER_REVIEW
+              : wf === WORKFLOW.CEO
+              ? STAGES.CEO_REVIEW
+              : STAGES.PROTOCOL_CLEARANCE,
+        },
+
         [STAGES.STATE_MINISTER_REVIEW]: {
           roles: ['state_minister', 'admin', 'super_admin'],
           next: STAGES.PROTOCOL_CLEARANCE,
@@ -2035,6 +2289,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
           STAGES.CEO_REVIEW,
           STAGES.OFFICE_HEAD_REVIEW,
           STAGES.LEAD_EXECUTIVE_REVIEW,
+          STAGES.PROJECT_COORDINATOR_REVIEW,
           STAGES.STATE_MINISTER_REVIEW,
         ].includes(cur)
       ) {
@@ -3258,6 +3513,7 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
       )`,
       lead_executive_officer: `r.current_stage='lead_executive_review'`,
       lead_executive: `r.current_stage='lead_executive_review'`,
+      project_coordinator: `r.current_stage='project_coordinator_review'`,
       state_minister: `r.current_stage='state_minister_review'`,
       protocol: `r.current_stage IN ('protocol_clearance','pm_office_submission')`,
       pm_office: `r.current_stage IN ('pm_office_followup','foreign_affairs_followup')`,
@@ -4242,6 +4498,319 @@ app.delete('/api/moa-executive-offices/:id', async (req, res) => {
 });
 
 /* ── Affiliate Institutions ─────────────────────────────── */
+
+app.get('/api/moa-projects', async (req, res) => {
+  try {
+    const { parentStructureId } = req.query;
+    const params = [];
+
+    let sql = `
+      SELECT
+        p.id,
+        p.parent_structure_id,
+        p.project_name,
+        p.coordinator_name,
+        p.email,
+        p.phone,
+        p.created_at,
+        s.name AS parent_structure_name,
+        s.workflow_type
+      FROM moa_projects p
+      JOIN moa_sectors s ON s.id = p.parent_structure_id
+    `;
+
+    if (parentStructureId) {
+      sql += ` WHERE p.parent_structure_id=$1 `;
+      params.push(parentStructureId);
+    }
+
+    sql += ` ORDER BY s.name ASC, p.project_name ASC`;
+
+    const r = await query(sql, params);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error('FETCH MOA PROJECTS ERROR:', e);
+    res.status(500).json({ error: e.message || 'Failed to fetch projects.' });
+  }
+});
+
+app.post('/api/moa-projects', async (req, res) => {
+  let client;
+  let inTransaction = false;
+
+  try {
+    const { parentStructureId, projectName, coordinatorName, email, phone, password } = req.body;
+    const cleanProjectName = String(projectName || '').trim();
+
+    if (!parentStructureId || !cleanProjectName) {
+      return res.status(400).json({
+        error: 'Parent structure and project name are required.',
+      });
+    }
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const parent = (
+      await client.query(
+        `SELECT id,name,workflow_type
+         FROM moa_sectors
+         WHERE id=$1
+           AND workflow_type IN ('sector_structure','ceo_structure','office_head_structure')`,
+        [parentStructureId]
+      )
+    ).rows[0];
+
+    if (!parent) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(400).json({
+        error: 'Selected parent structure is not valid for projects.',
+      });
+    }
+
+    const r = await client.query(
+      `INSERT INTO moa_projects(parent_structure_id,project_name,coordinator_name,email,phone)
+       VALUES($1,$2,$3,$4,$5)
+       RETURNING *`,
+      [
+        parentStructureId,
+        cleanProjectName,
+        coordinatorName || null,
+        email ? normalizeEmail(email) : null,
+        normalizePhone(phone),
+      ]
+    );
+
+    const coordinator = await syncProjectCoordinator(client, {
+      projectName: cleanProjectName,
+      parentStructureName: parent.name,
+      coordinatorName,
+      email,
+      phone,
+      password,
+    });
+
+    await client.query('COMMIT');
+    inTransaction = false;
+
+    res.status(201).json({
+      ...r.rows[0],
+      parent_structure_name: parent.name,
+      workflow_type: parent.workflow_type,
+      coordinator,
+    });
+  } catch (e) {
+    if (client && inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+
+    console.error('ADD MOA PROJECT ERROR:', e);
+
+    if (e.code === '23505') {
+      return res.status(409).json({
+        error: 'This project already exists under the selected parent structure.',
+      });
+    }
+
+    res.status(e.statusCode || 500).json({
+      error: e.message || 'Failed to add project.',
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+app.put('/api/moa-projects/:id', async (req, res) => {
+  let client;
+  let inTransaction = false;
+
+  try {
+    const { parentStructureId, projectName, coordinatorName, email, phone, password } = req.body;
+    const cleanProjectName = String(projectName || '').trim();
+
+    if (!parentStructureId || !cleanProjectName) {
+      return res.status(400).json({
+        error: 'Parent structure and project name are required.',
+      });
+    }
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const existing = (
+      await client.query(
+        `SELECT p.id,p.project_name,s.name AS parent_structure_name
+         FROM moa_projects p
+         JOIN moa_sectors s ON s.id=p.parent_structure_id
+         WHERE p.id=$1`,
+        [req.params.id]
+      )
+    ).rows[0];
+
+    if (!existing) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(404).json({ error: 'Project not found.' });
+    }
+
+    const parent = (
+      await client.query(
+        `SELECT id,name,workflow_type
+         FROM moa_sectors
+         WHERE id=$1
+           AND workflow_type IN ('sector_structure','ceo_structure','office_head_structure')`,
+        [parentStructureId]
+      )
+    ).rows[0];
+
+    if (!parent) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(400).json({
+        error: 'Selected parent structure is not valid for projects.',
+      });
+    }
+
+    const r = await client.query(
+      `UPDATE moa_projects
+       SET parent_structure_id=$1,
+           project_name=$2,
+           coordinator_name=$3,
+           email=$4,
+           phone=$5
+       WHERE id=$6
+       RETURNING *`,
+      [
+        parentStructureId,
+        cleanProjectName,
+        coordinatorName || null,
+        email ? normalizeEmail(email) : null,
+        normalizePhone(phone),
+        req.params.id,
+      ]
+    );
+
+    const requestsUpdate = await client.query(
+      `UPDATE requests
+       SET sector=$1,
+           department=$2,
+           organization_name='MoA'
+       WHERE traveler_category='project'
+         AND LOWER(TRIM(COALESCE(department,'')))=LOWER(TRIM($3))
+         AND LOWER(TRIM(COALESCE(sector,'')))=LOWER(TRIM($4))`,
+      [parent.name, cleanProjectName, existing.project_name, existing.parent_structure_name]
+    );
+
+    const coordinator = await syncProjectCoordinator(client, {
+      projectName: cleanProjectName,
+      previousProjectName: existing.project_name,
+      parentStructureName: parent.name,
+      coordinatorName,
+      email,
+      phone,
+      password,
+    });
+
+    await client.query('COMMIT');
+    inTransaction = false;
+
+    res.json({
+      message: 'Project updated.',
+      project: {
+        ...r.rows[0],
+        parent_structure_name: parent.name,
+        workflow_type: parent.workflow_type,
+      },
+      coordinator,
+      updatedRequests: requestsUpdate.rowCount,
+    });
+  } catch (e) {
+    if (client && inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+
+    console.error('UPDATE MOA PROJECT ERROR:', e);
+
+    if (e.code === '23505') {
+      return res.status(409).json({
+        error: 'This project already exists under the selected parent structure.',
+      });
+    }
+
+    res.status(e.statusCode || 500).json({
+      error: e.message || 'Failed to update project.',
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+app.delete('/api/moa-projects/:id', async (req, res) => {
+  try {
+    const existing = (
+      await query(
+        `SELECT p.id,p.project_name,s.name AS parent_structure_name
+         FROM moa_projects p
+         JOIN moa_sectors s ON s.id=p.parent_structure_id
+         WHERE p.id=$1`,
+        [req.params.id]
+      )
+    ).rows[0];
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Project not found.' });
+    }
+
+    const userCount = Number(
+      (
+        await query(
+          `SELECT COUNT(*) AS count
+           FROM users
+           WHERE role='project_coordinator'
+             AND LOWER(TRIM(COALESCE(department,'')))=LOWER(TRIM($1))
+             AND LOWER(TRIM(COALESCE(sector,'')))=LOWER(TRIM($2))`,
+          [existing.project_name, existing.parent_structure_name]
+        )
+      ).rows[0].count
+    );
+
+    const requestCount = Number(
+      (
+        await query(
+          `SELECT COUNT(*) AS count
+           FROM requests
+           WHERE traveler_category='project'
+             AND LOWER(TRIM(COALESCE(department,'')))=LOWER(TRIM($1))
+             AND LOWER(TRIM(COALESCE(sector,'')))=LOWER(TRIM($2))`,
+          [existing.project_name, existing.parent_structure_name]
+        )
+      ).rows[0].count
+    );
+
+    if (userCount || requestCount) {
+      return res.status(409).json({
+        error:
+          'This project is used by coordinator accounts or travel requests. Reassign them before deleting it.',
+        linkedUsers: userCount,
+        linkedRequests: requestCount,
+      });
+    }
+
+    await query(`DELETE FROM moa_projects WHERE id=$1`, [req.params.id]);
+
+    res.json({ message: 'Project deleted.' });
+  } catch (e) {
+    console.error('DELETE MOA PROJECT ERROR:', e);
+    res.status(500).json({ error: e.message || 'Failed to delete project.' });
+  }
+});
 
 app.get('/api/affiliate-institutions', async (_req, res) => {
   try {

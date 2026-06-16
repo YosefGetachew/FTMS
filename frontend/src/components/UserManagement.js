@@ -34,6 +34,7 @@ function UserManagement() {
     () => [
       { value: "state_minister", label: "State Minister" },
       { value: "lead_executive_officer", label: "Lead Executive Officer" },
+      { value: "project_coordinator", label: "Project Coordinator" },
       { value: "chief_executive_officer", label: "CEO" },
       {
         value: "director_general",
@@ -63,6 +64,7 @@ function UserManagement() {
       "director_general",
       "lead_executive_officer",
       "lead_executive",
+      "project_coordinator",
       "chief_executive_officer",
       "ceo",
       "office_head",
@@ -84,6 +86,7 @@ function UserManagement() {
   const [users, setUsers] = useState([]);
   const [moaSectors, setMoaSectors] = useState([]);
   const [executiveOffices, setExecutiveOffices] = useState([]);
+  const [moaProjects, setMoaProjects] = useState([]);
   const [affiliateInstitutions, setAffiliateInstitutions] = useState([]);
   const [formData, setFormData] = useState(initialFormData);
   const [editingId, setEditingId] = useState(null);
@@ -106,6 +109,7 @@ function UserManagement() {
     fetchUsers();
     fetchMoaSectors();
     fetchExecutiveOffices();
+    fetchMoaProjects();
     fetchAffiliateInstitutions();
   }, []);
 
@@ -142,6 +146,19 @@ function UserManagement() {
     }
   };
 
+  const fetchMoaProjects = async () => {
+    try {
+      const response = await API.get("/moa-projects");
+      setMoaProjects(response.data || []);
+    } catch (error) {
+      console.error(error);
+      setNotice({
+        type: "error",
+        message: "Failed to load MoA projects",
+      });
+    }
+  };
+
   const fetchAffiliateInstitutions = async () => {
     try {
       const response = await API.get("/affiliate-institutions");
@@ -169,8 +186,13 @@ function UserManagement() {
   const getLeadExecutiveOfficesForStructure = (structureName) =>
     executiveOffices.filter((office) => office.sector_name === structureName);
 
+  const getProjectsForStructure = (structureName) =>
+    moaProjects.filter((project) => project.parent_structure_name === structureName);
+
   const isLeadExecutiveRole = (role) =>
     ["lead_executive_officer", "lead_executive"].includes(role);
+
+  const isProjectCoordinatorRole = (role) => role === "project_coordinator";
 
   const isAffiliateDirectorGeneral = (user) =>
     user?.role === "director_general" ||
@@ -179,9 +201,9 @@ function UserManagement() {
 
   const getRolesForStructureType = (workflowType) => {
     const roleMap = {
-      sector_structure: ["state_minister", "lead_executive_officer"],
-      ceo_structure: ["chief_executive_officer", "lead_executive_officer"],
-      office_head_structure: ["office_head", "lead_executive_officer"],
+      sector_structure: ["state_minister", "lead_executive_officer", "project_coordinator"],
+      ceo_structure: ["chief_executive_officer", "lead_executive_officer", "project_coordinator"],
+      office_head_structure: ["office_head", "lead_executive_officer", "project_coordinator"],
       affiliate_structure: ["director_general"],
     };
 
@@ -206,6 +228,7 @@ function UserManagement() {
       traveler: "Traveler",
       expert: "Expert",
       lead_executive: "Lead Executive Officer",
+      project_coordinator: "Project Coordinator",
       ceo: "CEO",
       super_admin: "Super Admin",
       pm_office: "PM Office",
@@ -329,6 +352,15 @@ function UserManagement() {
       return false;
     }
 
+    if (
+      formData.accountGroup === "hierarchy" &&
+      isProjectCoordinatorRole(formData.role) &&
+      !formData.department.trim()
+    ) {
+      alert("Please enter the Project / Coordinator Office");
+      return false;
+    }
+
     return true;
   };
 
@@ -347,7 +379,9 @@ function UserManagement() {
         role: formData.role,
         sector: isHierarchy ? formData.sector : "",
         department:
-          isHierarchy && isLeadExecutiveRole(formData.role)
+          isHierarchy &&
+          (isLeadExecutiveRole(formData.role) ||
+            isProjectCoordinatorRole(formData.role))
             ? formData.department
             : "",
         organizationType: isHierarchy && isAffiliateStructure ? "Affiliate" : null,
@@ -457,15 +491,19 @@ function UserManagement() {
       items: users.filter(
         (user) =>
           user.sector === sector.name &&
-          (user.role === "state_minister" || isLeadExecutiveRole(user.role))
+          (user.role === "state_minister" ||
+            isLeadExecutiveRole(user.role) ||
+            isProjectCoordinatorRole(user.role))
       ),
-      empty: `No State Minister or Lead Executive Officer accounts found for ${sector.name}`,
+      empty: `No State Minister, Lead Executive Officer, or Project Coordinator accounts found for ${sector.name}`,
     }));
 
   const unassignedSectorAccounts = users.filter(
     (user) =>
       (user.role === "state_minister" ||
         (isLeadExecutiveRole(user.role) &&
+          getStructureTypeForUser(user) === "sector_structure") ||
+        (isProjectCoordinatorRole(user.role) &&
           getStructureTypeForUser(user) === "sector_structure")) &&
       !moaSectors.some(
         (sector) =>
@@ -489,20 +527,22 @@ function UserManagement() {
       items: users.filter(
         (user) =>
           ["chief_executive_officer", "ceo"].includes(user.role) ||
-          (isLeadExecutiveRole(user.role) &&
+          ((isLeadExecutiveRole(user.role) ||
+            isProjectCoordinatorRole(user.role)) &&
             getStructureTypeForUser(user) === "ceo_structure")
       ),
-      empty: "No CEO or CEO Lead Executive accounts found",
+      empty: "No CEO, CEO Lead Executive, or CEO Project Coordinator accounts found",
     },
     {
       title: "Head of the Minister's Office Structure",
       items: users.filter(
         (user) =>
           (user.role === "office_head" && !isAffiliateDirectorGeneral(user)) ||
-          (isLeadExecutiveRole(user.role) &&
+          ((isLeadExecutiveRole(user.role) ||
+            isProjectCoordinatorRole(user.role)) &&
             getStructureTypeForUser(user) === "office_head_structure")
       ),
-      empty: "No Office Head or Office Head Lead Executive accounts found",
+      empty: "No Office Head, Office Head Lead Executive, or Office Head Project Coordinator accounts found",
     },
     ...sectorAccountSections,
     ...(unassignedSectorAccounts.length
@@ -681,7 +721,11 @@ function UserManagement() {
       </div>
 
       <div className="settings-group">
-        <label>Lead Executive Office *</label>
+        <label>
+          {isProjectCoordinatorRole(formData.role)
+            ? "Project / Coordinator Office *"
+            : "Lead Executive Office *"}
+        </label>
         {isLeadExecutiveRole(formData.role) ? (
           <select
             name="department"
@@ -693,6 +737,20 @@ function UserManagement() {
             {getLeadExecutiveOfficesForStructure(formData.sector).map((office) => (
               <option key={office.id} value={office.name}>
                 {office.name}
+              </option>
+            ))}
+          </select>
+        ) : isProjectCoordinatorRole(formData.role) ? (
+          <select
+            name="department"
+            value={formData.department}
+            onChange={handleChange}
+            disabled={!formData.sector}
+          >
+            <option value="">Select Project</option>
+            {getProjectsForStructure(formData.sector).map((project) => (
+              <option key={project.id} value={project.project_name}>
+                {project.project_name}
               </option>
             ))}
           </select>

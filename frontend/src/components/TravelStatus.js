@@ -13,6 +13,7 @@ const getCurrentUser = () => {
 const stageLabels = {
   expert_preparation: 'Expert',
   lead_executive_review: 'Lead Executive Officer',
+  project_coordinator_review: 'Project Coordinator',
   state_minister_review: 'State Minister',
   ceo_review: 'CEO',
   office_head_review: "Head of the Minister's Office",
@@ -63,6 +64,16 @@ const workflowStages = {
     'pm_office_followup',
     'completed',
   ],
+  sector_project: [
+    'expert_preparation',
+    'project_coordinator_review',
+    'state_minister_review',
+    'protocol_clearance',
+    'office_head_final',
+    'pm_office_submission',
+    'pm_office_followup',
+    'completed',
+  ],
   ceo_structure: [
     'expert_preparation',
     'lead_executive_review',
@@ -73,9 +84,28 @@ const workflowStages = {
     'pm_office_followup',
     'completed',
   ],
+  ceo_project: [
+    'expert_preparation',
+    'project_coordinator_review',
+    'ceo_review',
+    'protocol_clearance',
+    'office_head_final',
+    'pm_office_submission',
+    'pm_office_followup',
+    'completed',
+  ],
   office_head_structure: [
     'expert_preparation',
     'lead_executive_review',
+    'protocol_clearance',
+    'office_head_final',
+    'pm_office_submission',
+    'pm_office_followup',
+    'completed',
+  ],
+  office_head_project: [
+    'expert_preparation',
+    'project_coordinator_review',
     'protocol_clearance',
     'office_head_final',
     'pm_office_submission',
@@ -106,6 +136,7 @@ const roleAliases = {
   chief_executive_officer: ['chief_executive_officer', 'ceo'],
   lead_executive: ['lead_executive', 'lead_executive_officer'],
   lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
+  project_coordinator: ['project_coordinator'],
   state_minister: ['state_minister'],
   director_general: ['director_general'],
   office_head: ['office_head'],
@@ -340,16 +371,22 @@ function TravelStatus() {
   const diagramStages = useMemo(() => {
     if (!selectedRequest) return [];
 
-  const workflowType =
+    const workflowType =
       selectedRequest.traveler_category === 'affiliate_institution'
         ? 'affiliate_institution'
         : selectedRequest.workflow_type || 'office_head_structure';
+    const projectWorkflowType =
+      selectedRequest.traveler_category === 'project'
+        ? `${workflowType.replace('_structure', '')}_project`
+        : workflowType;
     const baseStages =
       selectedRequest.traveler_category === 'advisor'
         ? (workflowStages[workflowType] || workflowStages.office_head_structure).filter(
             (stage) => stage !== 'lead_executive_review'
           )
-        : workflowStages[workflowType] || workflowStages.office_head_structure;
+        : workflowStages[projectWorkflowType] ||
+          workflowStages[workflowType] ||
+          workflowStages.office_head_structure;
     const ministerStageActive = shouldShowMinisterStage(selectedRequest);
     const hasMinisterStage = baseStages.includes('minister_review');
     const stages = baseStages.flatMap((stage) =>

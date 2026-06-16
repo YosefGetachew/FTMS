@@ -20,6 +20,7 @@ function Register({ setActiveAuthPage }) {
 
   const [moaSectors, setMoaSectors] = useState([]);
   const [executiveOffices, setExecutiveOffices] = useState([]);
+  const [moaProjects, setMoaProjects] = useState([]);
   const [affiliateInstitutions, setAffiliateInstitutions] = useState([]);
 
   const [loading, setLoading] = useState(false);
@@ -46,6 +47,14 @@ function Register({ setActiveAuthPage }) {
     [formData.sectorId, moaSectors]
   );
   const isMoaAdvisor = formData.organizationType === 'MoA' && formData.moaAssignmentType === 'advisor';
+  const isMoaProject = formData.organizationType === 'MoA' && formData.moaAssignmentType === 'project';
+  const selectedProject = useMemo(
+    () =>
+      moaProjects.find(
+        (project) => project.project_name === formData.department
+      ),
+    [formData.department, moaProjects]
+  );
 
   const structuresByType = workflowTypes.map((type) => ({
     ...type,
@@ -83,6 +92,14 @@ function Register({ setActiveAuthPage }) {
 
       setMoaSectors(sectorResponse.data || []);
       setAffiliateInstitutions(affiliateResponse.data || []);
+
+      try {
+        const projectResponse = await API.get('/moa-projects');
+        setMoaProjects(projectResponse.data || []);
+      } catch (projectError) {
+        console.error(projectError);
+        setMoaProjects([]);
+      }
     } catch (error) {
       console.error(error);
       setError('Failed to load organization lists from settings.');
@@ -154,7 +171,21 @@ function Register({ setActiveAuthPage }) {
       setFormData({
         ...formData,
         moaAssignmentType: value,
+        sectorId: value === 'project' ? '' : formData.sectorId,
+        sector: value === 'project' ? '' : formData.sector,
         department: value === 'advisor' ? 'Advisor' : '',
+      });
+      return;
+    }
+
+    if (name === 'department' && isMoaProject) {
+      const project = moaProjects.find((item) => item.project_name === value);
+
+      setFormData({
+        ...formData,
+        department: value,
+        sectorId: project?.parent_structure_id || '',
+        sector: project?.parent_structure_name || '',
       });
       return;
     }
@@ -181,7 +212,7 @@ function Register({ setActiveAuthPage }) {
       return;
     }
 
-    if (formData.organizationType === 'MoA' && !formData.sectorId) {
+    if (formData.organizationType === 'MoA' && !isMoaProject && !formData.sectorId) {
       setError('Please select your organization structure.');
       return;
     }
@@ -192,7 +223,11 @@ function Register({ setActiveAuthPage }) {
     }
 
     if (formData.organizationType === 'MoA' && !isMoaAdvisor && !formData.department) {
-      setError('Please select your Lead Executive Office.');
+      setError(
+        isMoaProject
+          ? 'Please enter your Project / Coordinator Office.'
+          : 'Please select your Lead Executive Office.'
+      );
       return;
     }
 
@@ -400,48 +435,77 @@ function Register({ setActiveAuthPage }) {
             {formData.organizationType === 'MoA' && (
               <>
                 <div className="form-group">
-                  <label>Assignment Type *</label>
+                  <label>Select Your Structure *</label>
                   <select
                     name="moaAssignmentType"
                     value={formData.moaAssignmentType}
                     onChange={handleChange}
                     className="ministry-select"
                   >
-                    <option value="">Select assignment type</option>
-                    <option value="staff">Staff under Lead Executive Office</option>
-                    <option value="advisor">Advisor to selected structure</option>
+                    <option value="">Select your structure</option>
+                    <option value="project">Project Staff</option>
+                    <option value="advisor">Advisor</option>
+                    <option value="staff">Staff under Lead Executive</option>
                   </select>
                 </div>
 
                 <div className="auth-form-grid">
                   <div className="form-group">
-                    <label>Organization Structure *</label>
-                    <select
-                      name="sectorId"
-                      value={formData.sectorId}
-                      onChange={handleChange}
-                      className="ministry-select"
-                      disabled={loadingLists}
-                    >
-                      <option value="">
-                        {loadingLists
-                          ? 'Loading structures...'
-                          : 'Select organization structure'}
-                      </option>
+                    {isMoaProject ? (
+                      <>
+                        <label>Project *</label>
+                        <select
+                          name="department"
+                          value={formData.department}
+                          onChange={handleChange}
+                          className="ministry-select"
+                          disabled={loadingLists}
+                        >
+                          <option value="">
+                            {loadingLists
+                              ? 'Loading projects...'
+                              : moaProjects.length === 0
+                              ? 'No projects registered'
+                              : 'Select project'}
+                          </option>
+                          {moaProjects.map((project) => (
+                            <option key={project.id} value={project.project_name}>
+                              {project.project_name}
+                            </option>
+                          ))}
+                        </select>
+                      </>
+                    ) : (
+                      <>
+                        <label>Organization Structure *</label>
+                        <select
+                          name="sectorId"
+                          value={formData.sectorId}
+                          onChange={handleChange}
+                          className="ministry-select"
+                          disabled={loadingLists}
+                        >
+                          <option value="">
+                            {loadingLists
+                              ? 'Loading structures...'
+                              : 'Select organization structure'}
+                          </option>
 
-                      {structuresByType.map(
-                        (group) =>
-                          group.structures.length > 0 && (
-                            <optgroup key={group.value} label={group.label}>
-                              {group.structures.map((sector) => (
-                                <option key={sector.id} value={sector.id}>
-                                  {sector.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )
-                      )}
-                    </select>
+                          {structuresByType.map(
+                            (group) =>
+                              group.structures.length > 0 && (
+                                <optgroup key={group.value} label={group.label}>
+                                  {group.structures.map((sector) => (
+                                    <option key={sector.id} value={sector.id}>
+                                      {sector.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )
+                          )}
+                        </select>
+                      </>
+                    )}
                   </div>
 
                   {isMoaAdvisor ? (
@@ -455,6 +519,19 @@ function Register({ setActiveAuthPage }) {
                       />
                       <small>
                         Advisor travel requests go directly to the selected structure owner.
+                      </small>
+                    </div>
+                  ) : isMoaProject ? (
+                    <div className="form-group">
+                      <label>Parent Structure</label>
+                      <input
+                        type="text"
+                        value={selectedProject?.parent_structure_name || 'Linked after project selection'}
+                        disabled
+                        readOnly
+                      />
+                      <small>
+                        Project staff requests first go to the matching Project Coordinator.
                       </small>
                     </div>
                   ) : (
@@ -498,7 +575,20 @@ function Register({ setActiveAuthPage }) {
                       }{' '}
                       {isMoaAdvisor
                         ? 'advisor routing directly to the structure owner.'
+                        : isMoaProject
+                        ? 'project routing through the Project Coordinator.'
                         : 'workflow with Lead Executive Office assignment.'}
+                    </p>
+                  </div>
+                )}
+
+                {isMoaProject && selectedProject && (
+                  <div className="selected-structure-note">
+                    <span>Selected project</span>
+                    <strong>{selectedProject.project_name}</strong>
+                    <p>
+                      Linked to {selectedProject.parent_structure_name} for
+                      Project Coordinator routing.
                     </p>
                   </div>
                 )}

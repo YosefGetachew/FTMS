@@ -40,6 +40,7 @@ const formatStage = (stage) => {
   const labels = {
     expert_preparation: 'Expert Preparation',
     lead_executive_review: 'Lead Executive Review',
+    project_coordinator_review: 'Project Coordinator Review',
     director_review: 'Lead Executive Review',
     state_minister_review: 'State Minister Review',
     ceo_review: 'CEO Review',

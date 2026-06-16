@@ -34,6 +34,7 @@ function RequestTable() {
       chief_executive_officer: ["chief_executive_officer", "ceo"],
       lead_executive: ["lead_executive", "lead_executive_officer"],
       lead_executive_officer: ["lead_executive_officer", "lead_executive"],
+      project_coordinator: ["project_coordinator"],
       state_minister: ["state_minister"],
       director_general: ["director_general"],
       office_head: ["office_head"],
@@ -143,6 +144,7 @@ function RequestTable() {
       ceo_review: "CEO Review",
       office_head_review: "Office Head Review",
       lead_executive_review: "Lead Executive Officer Review",
+      project_coordinator_review: "Project Coordinator Review",
       state_minister_review: "State Minister Review",
       protocol_clearance: "Protocol Clearance",
       office_head_final: "Office Head Final Decision",
@@ -193,6 +195,7 @@ function RequestTable() {
   const isDirectorGeneral = user?.role === "director_general";
   const isOfficeHead = user?.role === "office_head";
   const isLeadExecutive = ["lead_executive_officer", "lead_executive"].includes(user?.role);
+  const isProjectCoordinator = user?.role === "project_coordinator";
   const isStateMinister = user?.role === "state_minister";
   const isProtocol = user?.role === "protocol";
   const isPmOffice = user?.role === "pm_office";
@@ -232,6 +235,7 @@ function RequestTable() {
     "ceo",
     "lead_executive_officer",
     "lead_executive",
+    "project_coordinator",
   ].includes(user?.role);
 
   const canGenerateSupportLetter = useCallback(
@@ -263,6 +267,13 @@ function RequestTable() {
       const workflowType = request.workflow_type;
 
       if (isLeadExecutive && stageMatches(request, ["lead_executive_review", "lead_executive"])) return true;
+      if (
+        isProjectCoordinator &&
+        request.traveler_category === "project" &&
+        stageMatches(request, ["project_coordinator_review", "project_coordinator"])
+      ) {
+        return true;
+      }
       if (
         isDirectorGeneral &&
         request.traveler_category === "affiliate_institution" &&
@@ -300,6 +311,7 @@ function RequestTable() {
       isCEO,
       isDirectorGeneral,
       isLeadExecutive,
+      isProjectCoordinator,
       isMinister,
       isOfficeHead,
       isPmOffice,
@@ -516,6 +528,7 @@ function RequestTable() {
       "ceo_review",
       "office_head_review",
       "lead_executive_review",
+      "project_coordinator_review",
       "state_minister_review",
     ].includes(request.current_stage);
 
