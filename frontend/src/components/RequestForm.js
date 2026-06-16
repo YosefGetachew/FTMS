@@ -31,6 +31,12 @@ const workflowPath = {
     "Protocol PM Submission",
     "PM Office",
   ],
+  minister_structure: [
+    "Expert",
+    "Minister",
+    "Protocol PM Submission",
+    "PM Office",
+  ],
   affiliate_institution: [
     "Expert",
     "Director General",
@@ -56,6 +62,11 @@ const moaStructureTypes = [
     value: "office_head_structure",
     label: "Head of the Minister's Office",
     ownerLabel: "Head of the Minister's Office",
+  },
+  {
+    value: "minister_structure",
+    label: "Minister",
+    ownerLabel: "Minister",
   },
 ];
 
@@ -310,7 +321,10 @@ const FileBox = ({ label, name, file, setFormData, handleFileChange }) => (
 const RadioCards = ({ name, value, onChange, options, cols = 2 }) => (
   <div className={`radio-cards cols-${cols}`}>
     {options.map((opt) => (
-      <label key={opt.value} className={`radio-card ${value === opt.value ? "selected" : ""}`}>
+      <label
+        key={opt.value}
+        className={`radio-card ${opt.route ? "with-route" : ""} ${value === opt.value ? "selected" : ""}`}
+      >
         <input
           type="radio"
           name={name}
@@ -321,6 +335,14 @@ const RadioCards = ({ name, value, onChange, options, cols = 2 }) => (
         />
         <span className="radio-card-title">{opt.label}</span>
         {opt.description && <span className="radio-card-desc">{opt.description}</span>}
+        {opt.route && (
+          <span className="radio-card-flow" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
+        )}
       </label>
     ))}
   </div>
@@ -342,16 +364,42 @@ const SectionHeader = ({ eyebrow, title, subtitle }) => (
   </div>
 );
 
+const ChoicePanel = ({ title, description, children }) => (
+  <div className="choice-panel">
+    <div className="choice-panel-heading">
+      <span>{title}</span>
+      {description && <small>{description}</small>}
+    </div>
+    {children}
+  </div>
+);
+
 export default function RequestForm() {
   const travelerTypeOptions = [
-    { value: "higher_official", label: "Higher Official", description: "Senior leadership and above" },
-    { value: "expert", label: "Expert", description: "Technical / programme staff" },
+    {
+      value: "higher_official",
+      label: "Higher Official",
+      description: "Senior leadership",
+      route: "Leadership route",
+    },
+    {
+      value: "advisor",
+      label: "Advisor",
+      description: "Advisory office",
+      route: "Advisor route",
+    },
+    {
+      value: "expert",
+      label: "Expert",
+      description: "Technical staff",
+      route: "Expert route",
+    },
   ];
 
-  const workflowOptions = [
+  const allWorkflowOptions = [
     ...moaStructureTypes.map((item) => ({
       ...item,
-      description: `${item.ownerLabel} area with Lead Executive Offices`,
+      description: `${item.ownerLabel} route`,
       route: workflowPath[item.value].join(" -> "),
     })),
   ];
@@ -414,11 +462,22 @@ export default function RequestForm() {
     [formData.startDate, formData.endDate]
   );
 
+  const workflowOptions = allWorkflowOptions.filter(
+    (item) => item.value !== "minister_structure" || formData.travelerType === "advisor"
+  );
+
   const selectedWorkflow = workflowOptions.find(
     (item) => item.value === formData.workflowType
   );
   const selectedStructureTypeLabel = selectedWorkflow?.label || "MoA Structure";
   const selectedOwnerLabel = selectedWorkflow?.ownerLabel || "Approver";
+  const advisorRoutesThroughProtocol = [
+    "office_head_structure",
+    "minister_structure",
+  ].includes(formData.workflowType);
+  const advisorRouteHint = advisorRoutesThroughProtocol
+    ? "Advisor travel skips Lead Executive Office and starts at Protocol for Clearance."
+    : `Advisor travel is routed directly to the ${selectedOwnerLabel}.`;
 
   const normalizedPhone = normalizePhonePreview(formData.phone);
 
@@ -432,12 +491,49 @@ export default function RequestForm() {
   const isStateMinisterSectorTraveler =
     currentUser?.role === "state_minister" &&
     formData.workflowType === "sector_structure";
+  const isAdvisorTraveler = isMoA && formData.travelerType === "advisor";
   const isAffiliateDirectorGeneralTraveler =
-    currentUser?.role === "office_head" &&
+    ["director_general", "office_head"].includes(currentUser?.role) &&
     isAffiliate &&
     normalizeComparable(currentUser?.sector) ===
       normalizeComparable(formData.organizationName);
-  const displayedWorkflowPath = isStateMinisterSectorTraveler
+  const displayedWorkflowPath = isAdvisorTraveler
+    ? formData.workflowType === "sector_structure"
+      ? [
+          "Advisor",
+          "State Minister",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : formData.workflowType === "ceo_structure"
+      ? [
+          "Advisor",
+          "CEO",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : formData.workflowType === "minister_structure"
+      ? [
+          "Advisor",
+          "Protocol for Clearance",
+          "Office Head",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : [
+          "Advisor",
+          "Protocol for Clearance",
+          "Office Head",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+    : isStateMinisterSectorTraveler
     ? [
         "State Minister",
         "Protocol for Clearance",
@@ -548,7 +644,7 @@ export default function RequestForm() {
       if (!formData.travelerType) e.travelerType = "Select traveler type.";
       if (!formData.workflowType) e.workflowType = "Select the MoA structure type.";
       if (!formData.sector.trim()) e.sector = "MoA Structure is required.";
-      if (!isStateMinisterSectorTraveler && !formData.leadExecutiveOffice.trim()) {
+      if (!isStateMinisterSectorTraveler && !isAdvisorTraveler && !formData.leadExecutiveOffice.trim()) {
         e.leadExecutiveOffice = "Lead Executive Office is required.";
       }
     }
@@ -586,6 +682,7 @@ export default function RequestForm() {
     isMoA,
     isAffiliate,
     isStateMinisterSectorTraveler,
+    isAdvisorTraveler,
     isAffiliateDirectorGeneralTraveler,
   ]);
 
@@ -605,6 +702,7 @@ export default function RequestForm() {
     if (isAffiliate && ["travelerType", "workflowType", "sector", "leadExecutiveOffice"].includes(k)) return false;
     if (isAffiliateDirectorGeneralTraveler && k === "department") return false;
     if (isStateMinisterSectorTraveler && k === "leadExecutiveOffice") return false;
+    if (isAdvisorTraveler && k === "leadExecutiveOffice") return false;
     if (isMoA && k === "organizationName") return false;
     if (
       !formData.organizationType &&
@@ -750,7 +848,14 @@ export default function RequestForm() {
         "position",
         "department",
         "email",
-        ...(isMoA ? ["travelerType", "workflowType", "sector", "leadExecutiveOffice"] : []),
+        ...(isMoA
+          ? [
+              "travelerType",
+              "workflowType",
+              "sector",
+              ...(isAdvisorTraveler ? [] : ["leadExecutiveOffice"]),
+            ]
+          : []),
         ...(isAffiliate ? ["organizationName"] : []),
       ]);
 
@@ -816,7 +921,9 @@ export default function RequestForm() {
       data.append(
         "department",
         isMoA
-          ? isStateMinisterSectorTraveler
+          ? isAdvisorTraveler
+            ? "Advisor"
+            : isStateMinisterSectorTraveler
             ? "State Minister"
             : formData.leadExecutiveOffice
           : isAffiliateDirectorGeneralTraveler
@@ -932,46 +1039,55 @@ export default function RequestForm() {
                   title="Traveler Information"
                   subtitle="Select the traveler source, then complete the structure and contact details."
                 />
-                <Field name="organizationType" label="Organization Type" required touched={touched} errors={errors}>
-                  <RadioCards
-                    name="organizationType"
-                    value={formData.organizationType}
-                    onChange={handleChange}
-                    cols={2}
-                    options={[
-                      {
-                        value: "moa",
-                        label: "Ministry of Agriculture",
-                        description: "Sector, CEO, or Head of Office structure",
-                      },
-                      {
-                        value: "affiliate",
-                        label: "Affiliate Institute",
-                        description: "Routes first to Protocol for clearance",
-                      },
-                    ]}
-                  />
-                </Field>
+                <ChoicePanel
+                  title="Request Source"
+                  description="Choose where the traveler belongs before selecting the approval path."
+                >
+                  <Field name="organizationType" label="Organization Type" required touched={touched} errors={errors}>
+                    <RadioCards
+                      name="organizationType"
+                      value={formData.organizationType}
+                      onChange={handleChange}
+                      cols={2}
+                      options={[
+                        {
+                          value: "moa",
+                          label: "Ministry of Agriculture",
+                          description: "Sector, CEO, Office Head, or Minister structure",
+                        },
+                        {
+                          value: "affiliate",
+                          label: "Affiliate Institute",
+                          description: "Starts with Director General review",
+                        },
+                      ]}
+                    />
+                  </Field>
+                </ChoicePanel>
               </div>
 
               {isMoA && (
                 <>
-                  <div>
-                    <Divider label="Traveler Type" />
+                  <ChoicePanel
+                    title="Traveler Role"
+                    description="This determines whether Lead Executive Office selection is required."
+                  >
                     <Field name="travelerType" label="Traveler Type" required touched={touched} errors={errors}>
                       <RadioCards
                         name="travelerType"
                         value={formData.travelerType}
                         onChange={handleChange}
-                        cols={2}
+                        cols={3}
                         options={travelerTypeOptions}
                       />
                     </Field>
-                  </div>
+                  </ChoicePanel>
 
                   {formData.travelerType && (
-                    <div>
-                      <Divider label="MoA Structure" />
+                    <ChoicePanel
+                      title="MoA Structure"
+                      description="Select the leadership structure that owns this travel request."
+                    >
                       <Field
                         name="workflowType"
                         label="Structure Category"
@@ -984,15 +1100,22 @@ export default function RequestForm() {
                           name="workflowType"
                           value={formData.workflowType}
                           onChange={handleChange}
-                          cols={3}
+                          cols={4}
                           options={workflowOptions}
                         />
                       </Field>
-                    </div>
+                    </ChoicePanel>
                   )}
 
                   {formData.workflowType && (
-                    <>
+                    <ChoicePanel
+                      title={isAdvisorTraveler ? "Advisor Routing" : "Structure Assignment"}
+                      description={
+                        isAdvisorTraveler
+                          ? "Advisors skip Lead Executive Office selection."
+                          : "Select the exact structure and Lead Executive Office for routing."
+                      }
+                    >
                       <div className="workflow-preview">
                         <span>Approval Workflow</span>
                         <div className="workflow-preview-path">
@@ -1008,7 +1131,6 @@ export default function RequestForm() {
                       </div>
 
                     <div>
-                      <Divider label="Structure and Lead Executive Office" />
                       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                         <Field
                           name="sector"
@@ -1044,20 +1166,35 @@ export default function RequestForm() {
                         <Field
                           name="leadExecutiveOffice"
                           label={
-                            isStateMinisterSectorTraveler
+                            isAdvisorTraveler
+                              ? "Advisor Routing"
+                              : isStateMinisterSectorTraveler
                               ? "Approver Level"
                               : "Lead Executive Office"
                           }
-                          required={!isStateMinisterSectorTraveler}
+                          required={!isStateMinisterSectorTraveler && !isAdvisorTraveler}
                           touched={touched}
                           errors={errors}
                           hint={
-                            isStateMinisterSectorTraveler
+                            isAdvisorTraveler
+                              ? advisorRouteHint
+                              : isStateMinisterSectorTraveler
                               ? "State Minister travelers are routed directly to the next formal approver."
                               : `Select the Lead Executive Office under the selected ${selectedStructureTypeLabel} structure.`
                           }
                         >
-                          {isStateMinisterSectorTraveler ? (
+                          {isAdvisorTraveler ? (
+                            <input
+                              className="ministry-input"
+                              value={
+                                advisorRoutesThroughProtocol
+                                  ? "Advisor via Protocol for Clearance"
+                                  : `Advisor to ${selectedOwnerLabel}`
+                              }
+                              disabled
+                              readOnly
+                            />
+                          ) : isStateMinisterSectorTraveler ? (
                             <input
                               className="ministry-input"
                               value="State Minister"
@@ -1096,14 +1233,16 @@ export default function RequestForm() {
                         </Field>
                       </div>
                     </div>
-                    </>
+                    </ChoicePanel>
                   )}
                 </>
               )}
 
               {isAffiliate && (
-                <div>
-                  <Divider label="Affiliate Institution" />
+                <ChoicePanel
+                  title="Affiliate Institution"
+                  description="The Director General registered for this affiliate is the first approver."
+                >
                   <div className="workflow-preview">
                     <span>Approval Workflow</span>
                     <div className="workflow-preview-path">
@@ -1132,7 +1271,7 @@ export default function RequestForm() {
                       ))}
                     </select>
                   </Field>
-                </div>
+                </ChoicePanel>
               )}
 
               {formData.organizationType && (

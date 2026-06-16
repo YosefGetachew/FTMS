@@ -47,6 +47,7 @@ const getStageLabel = (stage, request) => {
 const workflowLabels = {
   sector_structure: 'Sector',
   ceo_structure: 'CEO',
+  minister_structure: 'Minister',
   office_head_structure: "Head of the Minister's Office",
   affiliate_institution: 'Affiliate Institute',
 };
@@ -81,6 +82,14 @@ const workflowStages = {
     'pm_office_followup',
     'completed',
   ],
+  minister_structure: [
+    'expert_preparation',
+    'protocol_clearance',
+    'office_head_final',
+    'pm_office_submission',
+    'pm_office_followup',
+    'completed',
+  ],
   affiliate_institution: [
     'expert_preparation',
     'office_head_review',
@@ -98,6 +107,7 @@ const roleAliases = {
   lead_executive: ['lead_executive', 'lead_executive_officer'],
   lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
   state_minister: ['state_minister'],
+  director_general: ['director_general'],
   office_head: ['office_head'],
   pm_office: ['pm_office'],
 };
@@ -330,14 +340,20 @@ function TravelStatus() {
   const diagramStages = useMemo(() => {
     if (!selectedRequest) return [];
 
-    const workflowType =
+  const workflowType =
       selectedRequest.traveler_category === 'affiliate_institution'
         ? 'affiliate_institution'
         : selectedRequest.workflow_type || 'office_head_structure';
-    const baseStages = workflowStages[workflowType] || workflowStages.office_head_structure;
+    const baseStages =
+      selectedRequest.traveler_category === 'advisor'
+        ? (workflowStages[workflowType] || workflowStages.office_head_structure).filter(
+            (stage) => stage !== 'lead_executive_review'
+          )
+        : workflowStages[workflowType] || workflowStages.office_head_structure;
     const ministerStageActive = shouldShowMinisterStage(selectedRequest);
+    const hasMinisterStage = baseStages.includes('minister_review');
     const stages = baseStages.flatMap((stage) =>
-      stage === 'pm_office_submission'
+      stage === 'pm_office_submission' && !hasMinisterStage
         ? ['minister_review', stage]
         : [stage]
     );

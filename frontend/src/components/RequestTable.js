@@ -35,6 +35,7 @@ function RequestTable() {
       lead_executive: ["lead_executive", "lead_executive_officer"],
       lead_executive_officer: ["lead_executive_officer", "lead_executive"],
       state_minister: ["state_minister"],
+      director_general: ["director_general"],
       office_head: ["office_head"],
       pm_office: ["pm_office"],
     };
@@ -152,6 +153,7 @@ function RequestTable() {
       completed: "Completed",
 
       state_minister: "State Minister",
+      director_general: "Director General",
       protocol: "Protocol",
       office_head: "Office Head",
       minister: "Minister",
@@ -188,6 +190,7 @@ function RequestTable() {
   const isAdmin = ["admin", "super_admin"].includes(user?.role);
   const isTraveler = ["traveler", "expert"].includes(user?.role);
   const isCEO = ["chief_executive_officer", "ceo"].includes(user?.role);
+  const isDirectorGeneral = user?.role === "director_general";
   const isOfficeHead = user?.role === "office_head";
   const isLeadExecutive = ["lead_executive_officer", "lead_executive"].includes(user?.role);
   const isStateMinister = user?.role === "state_minister";
@@ -221,6 +224,7 @@ function RequestTable() {
     "pm_office",
     "admin",
     "super_admin",
+    "director_general",
     "office_head",
     "minister",
     "state_minister",
@@ -260,6 +264,13 @@ function RequestTable() {
 
       if (isLeadExecutive && stageMatches(request, ["lead_executive_review", "lead_executive"])) return true;
       if (
+        isDirectorGeneral &&
+        request.traveler_category === "affiliate_institution" &&
+        stageMatches(request, ["office_head_review", "director_general"])
+      ) {
+        return true;
+      }
+      if (
         isStateMinister &&
         workflowType === "sector_structure" &&
         stageMatches(request, ["state_minister", "state_minister_review"])
@@ -287,6 +298,7 @@ function RequestTable() {
     [
       isAdmin,
       isCEO,
+      isDirectorGeneral,
       isLeadExecutive,
       isMinister,
       isOfficeHead,

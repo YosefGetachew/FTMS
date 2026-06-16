@@ -10,6 +10,7 @@ function Register({ setActiveAuthPage }) {
     position: '',
     organizationType: '',
     organizationName: '',
+    moaAssignmentType: '',
     sectorId: '',
     sector: '',
     department: '',
@@ -32,6 +33,7 @@ function Register({ setActiveAuthPage }) {
   const workflowTypes = [
     { value: 'sector_structure', label: 'Sector' },
     { value: 'ceo_structure', label: 'CEO' },
+    { value: 'minister_structure', label: 'Minister' },
     {
       value: 'office_head_structure',
       label: "Head of the Minister's Office",
@@ -43,6 +45,7 @@ function Register({ setActiveAuthPage }) {
       moaSectors.find((item) => String(item.id) === String(formData.sectorId)),
     [formData.sectorId, moaSectors]
   );
+  const isMoaAdvisor = formData.organizationType === 'MoA' && formData.moaAssignmentType === 'advisor';
 
   const structuresByType = workflowTypes.map((type) => ({
     ...type,
@@ -121,6 +124,7 @@ function Register({ setActiveAuthPage }) {
         ...formData,
         organizationType: value,
         organizationName: value === 'MoA' ? 'Ministry of Agriculture' : '',
+        moaAssignmentType: '',
         sectorId: '',
         sector: '',
         department: '',
@@ -143,6 +147,15 @@ function Register({ setActiveAuthPage }) {
       });
 
       fetchExecutiveOffices(value);
+      return;
+    }
+
+    if (name === 'moaAssignmentType') {
+      setFormData({
+        ...formData,
+        moaAssignmentType: value,
+        department: value === 'advisor' ? 'Advisor' : '',
+      });
       return;
     }
 
@@ -173,7 +186,12 @@ function Register({ setActiveAuthPage }) {
       return;
     }
 
-    if (formData.organizationType === 'MoA' && !formData.department) {
+    if (formData.organizationType === 'MoA' && !formData.moaAssignmentType) {
+      setError('Please select Staff or Advisor assignment.');
+      return;
+    }
+
+    if (formData.organizationType === 'MoA' && !isMoaAdvisor && !formData.department) {
       setError('Please select your Lead Executive Office.');
       return;
     }
@@ -214,7 +232,9 @@ function Register({ setActiveAuthPage }) {
         sector: formData.organizationType === 'MoA' ? formData.sector : null,
         department:
           formData.organizationType === 'MoA'
-            ? formData.department
+            ? isMoaAdvisor
+              ? 'Advisor'
+              : formData.department
             : formData.department || null,
         password: formData.password,
       });
@@ -230,6 +250,7 @@ function Register({ setActiveAuthPage }) {
         position: '',
         organizationType: '',
         organizationName: '',
+        moaAssignmentType: '',
         sectorId: '',
         sector: '',
         department: '',
@@ -378,6 +399,20 @@ function Register({ setActiveAuthPage }) {
 
             {formData.organizationType === 'MoA' && (
               <>
+                <div className="form-group">
+                  <label>Assignment Type *</label>
+                  <select
+                    name="moaAssignmentType"
+                    value={formData.moaAssignmentType}
+                    onChange={handleChange}
+                    className="ministry-select"
+                  >
+                    <option value="">Select assignment type</option>
+                    <option value="staff">Staff under Lead Executive Office</option>
+                    <option value="advisor">Advisor to selected structure</option>
+                  </select>
+                </div>
+
                 <div className="auth-form-grid">
                   <div className="form-group">
                     <label>Organization Structure *</label>
@@ -409,30 +444,45 @@ function Register({ setActiveAuthPage }) {
                     </select>
                   </div>
 
-                  <div className="form-group">
-                    <label>Lead Executive Office *</label>
-                    <select
-                      name="department"
-                      value={formData.department}
-                      onChange={handleChange}
-                      className="ministry-select"
-                      disabled={!formData.sectorId || loadingExecutiveOffices}
-                    >
-                      <option value="">
-                        {!formData.sectorId
-                          ? 'Select structure first'
-                          : loadingExecutiveOffices
-                          ? 'Loading Lead Executive Offices...'
-                          : 'Select Lead Executive Office'}
-                      </option>
-
-                      {executiveOffices.map((office) => (
-                        <option key={office.id} value={office.name}>
-                          {office.name}
+                  {isMoaAdvisor ? (
+                    <div className="form-group">
+                      <label>Advisor Routing</label>
+                      <input
+                        type="text"
+                        value="Advisor"
+                        disabled
+                        readOnly
+                      />
+                      <small>
+                        Advisor travel requests go directly to the selected structure owner.
+                      </small>
+                    </div>
+                  ) : (
+                    <div className="form-group">
+                      <label>Lead Executive Office *</label>
+                      <select
+                        name="department"
+                        value={formData.department}
+                        onChange={handleChange}
+                        className="ministry-select"
+                        disabled={!formData.sectorId || loadingExecutiveOffices}
+                      >
+                        <option value="">
+                          {!formData.sectorId
+                            ? 'Select structure first'
+                            : loadingExecutiveOffices
+                            ? 'Loading Lead Executive Offices...'
+                            : 'Select Lead Executive Office'}
                         </option>
-                      ))}
-                    </select>
-                  </div>
+
+                        {executiveOffices.map((office) => (
+                          <option key={office.id} value={office.name}>
+                            {office.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 {selectedStructure && (
@@ -446,7 +496,9 @@ function Register({ setActiveAuthPage }) {
                             type.value === selectedStructure.workflow_type
                         )?.label
                       }{' '}
-                      workflow with Lead Executive Office assignment.
+                      {isMoaAdvisor
+                        ? 'advisor routing directly to the structure owner.'
+                        : 'workflow with Lead Executive Office assignment.'}
                     </p>
                   </div>
                 )}
