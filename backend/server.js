@@ -635,6 +635,53 @@ const getNextStageAfterApproval = (stage, request = {}) => {
   return stage;
 };
 
+const getWorkflowStagesForRequest = (request = {}) => {
+  const workflow = normalizeWorkflow(request.workflow_type);
+
+  if (request.traveler_category === 'affiliate_institution') {
+    return [
+      STAGES.EXPERT_PREPARATION,
+      STAGES.OFFICE_HEAD_REVIEW,
+      STAGES.PROTOCOL_CLEARANCE,
+      STAGES.OFFICE_HEAD_FINAL,
+      STAGES.PM_OFFICE_SUBMISSION,
+      STAGES.PM_OFFICE,
+      STAGES.COMPLETED,
+    ];
+  }
+
+  const stages = [
+    STAGES.EXPERT_PREPARATION,
+    STAGES.LEAD_EXECUTIVE_REVIEW,
+  ];
+
+  if (workflow === WORKFLOW.SECTOR) {
+    stages.push(STAGES.STATE_MINISTER_REVIEW);
+  } else if (workflow === WORKFLOW.CEO) {
+    stages.push(STAGES.CEO_REVIEW);
+  }
+
+  stages.push(
+    STAGES.PROTOCOL_CLEARANCE,
+    STAGES.OFFICE_HEAD_FINAL
+  );
+
+  if (
+    request.current_stage === STAGES.MINISTER_REVIEW ||
+    String(request.status || '').toLowerCase().includes('minister')
+  ) {
+    stages.push(STAGES.MINISTER_REVIEW);
+  }
+
+  stages.push(
+    STAGES.PM_OFFICE_SUBMISSION,
+    STAGES.PM_OFFICE,
+    STAGES.COMPLETED
+  );
+
+  return stages;
+};
+
 const getInitialReviewStage = (request, actor) => {
   if (request?.traveler_category === 'affiliate_institution') {
     return STAGES.OFFICE_HEAD_REVIEW;
@@ -2465,6 +2512,7 @@ app.get('/api/audit-trail', async (_req, res) => {
         a.action,
         a.actor_role,
         a.actor_email,
+        actor.full_name AS actor_full_name,
         a.comment,
         a.old_stage,
         a.new_stage,
@@ -2482,6 +2530,8 @@ app.get('/api/audit-trail', async (_req, res) => {
         r.final_status
        FROM request_audit_trails a
        LEFT JOIN requests r ON r.id = a.request_id
+       LEFT JOIN users actor
+         ON LOWER(TRIM(actor.email))=LOWER(TRIM(a.actor_email))
        ORDER BY a.created_at DESC, a.id DESC`
     );
 
@@ -2496,6 +2546,7 @@ app.get('/api/requests/:id/audit-trail', async (req, res) => {
     const r = await query(
       `SELECT
         a.*,
+        actor.full_name AS actor_full_name,
         r.full_name,
         r.email AS traveler_email,
         r.country,
@@ -2507,6 +2558,8 @@ app.get('/api/requests/:id/audit-trail', async (req, res) => {
         r.final_status
        FROM request_audit_trails a
        LEFT JOIN requests r ON r.id = a.request_id
+       LEFT JOIN users actor
+         ON LOWER(TRIM(actor.email))=LOWER(TRIM(a.actor_email))
        WHERE a.request_id=$1
        ORDER BY a.created_at ASC, a.id ASC`,
       [req.params.id]
@@ -2519,6 +2572,51 @@ app.get('/api/requests/:id/audit-trail', async (req, res) => {
 });
 
 /* ── Approvers / Workflow Users ─────────────────────────── */
+
+app.get('/api/requests/:id/workflow-approvers', async (req, res) => {
+  try {
+    const requestResult = await query(
+      `SELECT *
+       FROM requests
+       WHERE id=$1`,
+      [req.params.id]
+    );
+
+    const request = requestResult.rows[0];
+
+    if (!request) {
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+
+    const stages = getWorkflowStagesForRequest(request);
+    const approvers = [];
+
+    for (const stage of stages) {
+      if ([STAGES.EXPERT_PREPARATION, STAGES.COMPLETED].includes(stage)) {
+        approvers.push({
+          stage,
+          full_name: stage === STAGES.EXPERT_PREPARATION ? request.full_name : '',
+          email: stage === STAGES.EXPERT_PREPARATION ? request.email : '',
+          role: stage === STAGES.EXPERT_PREPARATION ? 'traveler' : '',
+        });
+        continue;
+      }
+
+      const approver = await getFirstUserForStage(stage, request);
+
+      approvers.push({
+        stage,
+        full_name: approver?.full_name || '',
+        email: approver?.email || '',
+        role: approver?.role || STAGE_ROLES[stage] || '',
+      });
+    }
+
+    res.json(approvers);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/api/state-ministers', async (_req, res) => {
   try {

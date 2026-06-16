@@ -118,17 +118,50 @@ const shouldShowMinisterStage = (request) => {
 const formatDate = (date) => {
   if (!date) return '-';
 
-  return new Date(date).toLocaleDateString('en-US', {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return '-';
+
+  return parsed.toLocaleDateString('en-US', {
     month: 'short',
     day: '2-digit',
     year: 'numeric',
   });
 };
 
+const getDayCount = (date) => {
+  if (!date) return null;
+
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const diff = Date.now() - parsed.getTime();
+  return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+};
+
+const formatPendingDays = (days) => {
+  if (days === null || days === undefined) return 'Pending date unavailable';
+  if (days === 0) return 'Pending today';
+  if (days === 1) return 'Pending for 1 day';
+  return `Pending for ${days} days`;
+};
+
+const formatTimelineDate = (date) => {
+  const formatted = formatDate(date);
+  return formatted === '-' ? 'Date unavailable' : formatted;
+};
+
+const getApproverName = (entry) =>
+  entry?.actor_full_name ||
+  entry?.actor_email ||
+  (entry?.actor_role ? getStageLabel(entry.actor_role) : '');
+
 function TravelStatus() {
   const user = useMemo(() => getCurrentUser(), []);
   const [requests, setRequests] = useState([]);
   const [selectedRequestId, setSelectedRequestId] = useState('');
+  const [auditTrail, setAuditTrail] = useState([]);
+  const [workflowApprovers, setWorkflowApprovers] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -187,6 +220,48 @@ function TravelStatus() {
     fetchRequests();
   }, [fetchRequests]);
 
+  useEffect(() => {
+    if (!selectedRequestId) {
+      setAuditTrail([]);
+      setWorkflowApprovers([]);
+      return;
+    }
+
+    let active = true;
+
+    const fetchAuditTrail = async () => {
+      try {
+        setAuditLoading(true);
+        const [auditResponse, approverResponse] = await Promise.all([
+          API.get(`/requests/${selectedRequestId}/audit-trail`),
+          API.get(`/requests/${selectedRequestId}/workflow-approvers`),
+        ]);
+
+        if (active) {
+          setAuditTrail(auditResponse.data || []);
+          setWorkflowApprovers(approverResponse.data || []);
+        }
+      } catch (error) {
+        console.error(error);
+
+        if (active) {
+          setAuditTrail([]);
+          setWorkflowApprovers([]);
+        }
+      } finally {
+        if (active) {
+          setAuditLoading(false);
+        }
+      }
+    };
+
+    fetchAuditTrail();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedRequestId]);
+
   const filteredRequests = useMemo(() => {
     const keyword = normalizeText(search);
 
@@ -217,6 +292,41 @@ function TravelStatus() {
     [requests, selectedRequestId, filteredRequests]
   );
 
+  const stageTimeline = useMemo(() => {
+    const byEnteredStage = new Map();
+    const byApprovedStage = new Map();
+    const byApproverStage = new Map();
+
+    auditTrail.forEach((entry) => {
+      if (entry.new_stage) {
+        byEnteredStage.set(entry.new_stage, entry.created_at);
+      }
+
+      if (entry.old_stage) {
+        byApprovedStage.set(entry.old_stage, entry.created_at);
+        byApproverStage.set(entry.old_stage, getApproverName(entry));
+      }
+    });
+
+    return {
+      entered: byEnteredStage,
+      approved: byApprovedStage,
+      approver: byApproverStage,
+    };
+  }, [auditTrail]);
+
+  const approversByStage = useMemo(() => {
+    const next = new Map();
+
+    workflowApprovers.forEach((item) => {
+      if (item.stage) {
+        next.set(item.stage, item.full_name || item.email || item.role || '');
+      }
+    });
+
+    return next;
+  }, [workflowApprovers]);
+
   const diagramStages = useMemo(() => {
     if (!selectedRequest) return [];
 
@@ -225,13 +335,12 @@ function TravelStatus() {
         ? 'affiliate_institution'
         : selectedRequest.workflow_type || 'office_head_structure';
     const baseStages = workflowStages[workflowType] || workflowStages.office_head_structure;
-    const stages = shouldShowMinisterStage(selectedRequest)
-      ? baseStages.flatMap((stage) =>
-          stage === 'pm_office_submission'
-            ? ['minister_review', stage]
-            : [stage]
-        )
-      : baseStages;
+    const ministerStageActive = shouldShowMinisterStage(selectedRequest);
+    const stages = baseStages.flatMap((stage) =>
+      stage === 'pm_office_submission'
+        ? ['minister_review', stage]
+        : [stage]
+    );
     const currentStage = selectedRequest.current_stage;
     const finalStatus = selectedRequest.final_status;
     const currentIndex =
@@ -241,6 +350,24 @@ function TravelStatus() {
 
     return stages.map((stage, index) => {
       let state = 'upcoming';
+      const isOptionalMinisterStage =
+        stage === 'minister_review' && !ministerStageActive;
+      const enteredAt =
+        stageTimeline.entered.get(stage) ||
+        (stage === currentStage
+          ? selectedRequest.last_decision_at ||
+            selectedRequest.updated_at ||
+            selectedRequest.created_at
+          : null) ||
+        (stage === 'expert_preparation' ? selectedRequest.created_at : null);
+      const approvedAt =
+        stageTimeline.approved.get(stage) ||
+        (finalStatus === 'approved' && stage === 'completed'
+          ? selectedRequest.last_decision_at || stageTimeline.entered.get(stage)
+          : null);
+      const approvedBy = stageTimeline.approver.get(stage);
+      const expectedApprover = approversByStage.get(stage);
+      const pendingDays = stage === currentStage ? getDayCount(enteredAt) : null;
 
       if (finalStatus === 'rejected') {
         state = index <= currentIndex ? 'rejected' : 'upcoming';
@@ -252,13 +379,23 @@ function TravelStatus() {
         state = 'current';
       }
 
+      if (isOptionalMinisterStage) {
+        state = 'optional';
+      }
+
       return {
         stage,
         label: getStageLabel(stage, selectedRequest),
         state,
+        optional: isOptionalMinisterStage,
+        enteredAt,
+        approvedAt,
+        approvedBy,
+        expectedApprover,
+        pendingDays,
       };
     });
-  }, [selectedRequest]);
+  }, [approversByStage, selectedRequest, stageTimeline]);
 
   const summary = useMemo(
     () => [
@@ -375,12 +512,63 @@ function TravelStatus() {
             </div>
 
             <div className="travel-status-diagram">
+              {auditLoading && (
+                <div className="travel-status-audit-loading">
+                  Loading approval dates...
+                </div>
+              )}
+
               {diagramStages.map((item, index) => (
                 <div className="travel-status-step-wrap" key={item.stage}>
                   <div className={`travel-status-step ${item.state}`}>
                     <span>{index + 1}</span>
-                    <strong>{item.label}</strong>
-                    <small>{item.state.replace('_', ' ')}</small>
+                    <div className="travel-status-step-copy">
+                      <strong>{item.label}</strong>
+
+                      {(item.state !== 'upcoming' || item.expectedApprover) && (
+                        <div className="travel-status-step-meta">
+                          {item.state === 'complete' && (
+  <em>
+    {item.stage === 'expert_preparation'
+      ? item.approvedBy
+        ? `Submitted by ${item.approvedBy} on `
+        : 'Submitted on '
+      : item.approvedBy
+      ? `Approved by ${item.approvedBy} on `
+      : 'Approved on '}
+    {formatTimelineDate(item.approvedAt || item.enteredAt)}
+  </em>
+)}
+
+                          {item.state === 'current' && (
+                            <>
+                              {item.expectedApprover && (
+                                <em>Current approver: {item.expectedApprover}</em>
+                              )}
+                              <em>Reached on {formatTimelineDate(item.enteredAt)}</em>
+                              <b>{formatPendingDays(item.pendingDays)}</b>
+                            </>
+                          )}
+
+                          {['returned', 'rejected'].includes(item.state) && (
+                            <em>
+                              {item.approvedBy ? `Decision by ${item.approvedBy} on ` : 'Decision on '}
+                              {formatTimelineDate(item.approvedAt)}
+                            </em>
+                          )}
+                          {item.state === 'upcoming' && item.expectedApprover && (
+                            <em>Upcoming: {item.expectedApprover}</em>
+                          )}
+
+                          {item.state === 'optional' && (
+                            <em>
+                              Optional: Office Head may forward to Minister
+                              {item.expectedApprover ? ` (${item.expectedApprover})` : ''}
+                            </em>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {index < diagramStages.length - 1 && (

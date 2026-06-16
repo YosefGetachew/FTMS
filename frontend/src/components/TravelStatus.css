@@ -199,8 +199,19 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 20px 18px;
+  padding: 22px 20px;
   overflow-x: visible;
+}
+
+.travel-status-audit-loading {
+  margin-bottom: 12px;
+  padding: 9px 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .travel-status-step-wrap {
@@ -214,53 +225,87 @@
 .travel-status-step {
   position: relative;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  grid-template-areas:
-    "badge title"
-    "badge note";
-  column-gap: 12px;
-  row-gap: 3px;
-  width: min(100%, 520px);
+  grid-template-columns: 42px minmax(0, 1fr);
+  column-gap: 14px;
+  width: min(100%, 620px);
   min-height: auto;
-  padding: 7px 8px;
+  padding: 10px 12px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 10px;
   background: transparent;
 }
 
 .travel-status-step span {
-  grid-area: badge;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
   background: #e2e8f0;
   color: #475569;
   font-size: 12px;
   font-weight: 760;
-  box-shadow: 0 0 0 4px #fff;
+  box-shadow: 0 0 0 5px #fff;
   z-index: 1;
 }
 
+.travel-status-step-copy {
+  min-width: 0;
+}
+
 .travel-status-step strong {
-  grid-area: title;
+  display: block;
   color: #0f172a;
-  font-size: 13px;
-  font-weight: 720;
+  font-size: 14px;
+  font-weight: 780;
   line-height: 1.25;
 }
 
 .travel-status-step small {
-  grid-area: note;
+  display: inline-flex;
+  margin-top: 3px;
   color: #64748b;
   font-size: 11px;
+  font-weight: 700;
   line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.travel-status-step-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.travel-status-step-meta em,
+.travel-status-step-meta b {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.travel-status-step-meta em {
+  border: 1px solid #dbe4ef;
+  background: #fff;
+  color: #475569;
+}
+
+.travel-status-step-meta b {
+  border: 1px solid #fde68a;
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .travel-status-step.complete {
-  background: #f0fdf4;
+  background: linear-gradient(90deg, #f0fdf4 0%, #ffffff 100%);
 }
 
 .travel-status-step.complete span {
@@ -269,7 +314,7 @@
 }
 
 .travel-status-step.current {
-  background: #fffbeb;
+  background: linear-gradient(90deg, #fffbeb 0%, #ffffff 100%);
   box-shadow: inset 3px 0 0 #f59e0b;
 }
 
@@ -279,7 +324,7 @@
 }
 
 .travel-status-step.returned {
-  background: #fff7ed;
+  background: linear-gradient(90deg, #fff7ed 0%, #ffffff 100%);
   box-shadow: inset 3px 0 0 #ea580c;
 }
 
@@ -289,7 +334,7 @@
 }
 
 .travel-status-step.rejected {
-  background: #fef2f2;
+  background: linear-gradient(90deg, #fef2f2 0%, #ffffff 100%);
   box-shadow: inset 3px 0 0 #dc2626;
 }
 
@@ -299,7 +344,7 @@
 }
 
 .travel-status-step.upcoming {
-  background: #fef2f2;
+  background: linear-gradient(90deg, #fef2f2 0%, #ffffff 100%);
   box-shadow: inset 3px 0 0 #fecaca;
 }
 
@@ -308,10 +353,27 @@
   color: #991b1b;
 }
 
+.travel-status-step.optional {
+  border: 1px dashed #94a3b8;
+  background: linear-gradient(90deg, #f8fafc 0%, #ffffff 100%);
+  box-shadow: inset 3px 0 0 #94a3b8;
+}
+
+.travel-status-step.optional span {
+  border: 2px dashed #64748b;
+  background: #fff;
+  color: #475569;
+}
+
+.travel-status-step.optional strong {
+  color: #334155;
+}
+
 .travel-status-connector {
-  width: 2px;
-  height: 28px;
-  margin: 0 0 0 23px;
+  width: 3px;
+  height: 30px;
+  margin: -2px 0 -2px 28px;
+  border-radius: 999px;
   background: #cbd5e1;
   flex-shrink: 0;
   align-self: flex-start;
@@ -335,6 +397,12 @@
 
 .travel-status-connector.upcoming {
   background: #fecaca;
+}
+
+.travel-status-connector.optional {
+  width: 0;
+  border-left: 3px dotted #94a3b8;
+  background: transparent;
 }
 
 .travel-status-detail-card {
