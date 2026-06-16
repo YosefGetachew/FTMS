@@ -352,11 +352,28 @@ const EMAIL_FROM = process.env.EMAIL_USER
   ? `"MoA-Foreign Travel" <${process.env.EMAIL_USER}>`
   : '"MoA-Foreign Travel"';
 
+const AUTO_EMAIL_NOTICE = `
+  <div style="margin-top:24px;padding-top:14px;border-top:1px solid #e5e7eb;color:#64748b;font-size:12px;line-height:1.5">
+    This is an auto-generated email from FTMS. Please do not reply to this email.
+  </div>`;
+
+const appendAutoEmailNotice = (html) => {
+  if (!html || typeof html !== 'string') return html;
+  if (html.includes('auto-generated email from FTMS')) return html;
+
+  return html.includes('</div>')
+    ? html.replace(/<\/div>\s*$/i, `${AUTO_EMAIL_NOTICE}</div>`)
+    : `${html}${AUTO_EMAIL_NOTICE}`;
+};
+
 const sendEmailSafe = async (opts, label = 'EMAIL ERROR') => {
   if (!opts?.to) return;
 
   try {
-    await transporter.sendMail(opts);
+    await transporter.sendMail({
+      ...opts,
+      html: appendAutoEmailNotice(opts.html),
+    });
   } catch (e) {
     console.error(label, e);
   }
@@ -595,6 +612,31 @@ const getRolesForLookup = (role) => ROLE_ALIASES[role] || [role];
 const getFirstUserByRole = async (role) => {
   const roles = getRolesForLookup(role);
 
+  if (role === 'office_head') {
+    const officeHead = await query(
+      `SELECT u.id, u.full_name, u.email, u.role, u.sector, u.department
+       FROM users u
+       LEFT JOIN moa_sectors s
+         ON LOWER(TRIM(s.name))=LOWER(TRIM(COALESCE(u.sector,'')))
+       WHERE u.role='office_head'
+         AND COALESCE(u.account_status,'active')='active'
+         AND COALESCE(u.is_active,true)=true
+         AND LOWER(TRIM(COALESCE(u.organization_type,''))) NOT LIKE '%affiliate%'
+         AND LOWER(TRIM(COALESCE(u.organization_type,''))) <> 'moa project'
+       ORDER BY
+         CASE WHEN s.workflow_type='office_head_structure' THEN 0 ELSE 1 END,
+         CASE
+           WHEN LOWER(TRIM(COALESCE(u.sector,''))) LIKE '%minister%office%' THEN 0
+           WHEN LOWER(TRIM(COALESCE(u.sector,''))) LIKE '%office head%' THEN 1
+           ELSE 2
+         END,
+         u.id ASC
+       LIMIT 1`
+    );
+
+    return officeHead.rows[0] || null;
+  }
+
   const r = await query(
     `SELECT id, full_name, email, role, sector
      FROM users
@@ -619,6 +661,8 @@ const getFirstUserByRoleAndSector = async (
   const cleanSector = String(sector || '').trim();
   const cleanDepartment = String(department || '').trim();
   const allowFallback = options.allowFallback !== false;
+  const excludeAffiliateOfficeHead =
+    role === 'office_head' || roles.includes('office_head');
 
   if (!cleanSector) return allowFallback ? getFirstUserByRole(role) : null;
 
@@ -629,11 +673,18 @@ const getFirstUserByRoleAndSector = async (
        WHERE role = ANY($1)
          AND COALESCE(account_status,'active')='active'
          AND COALESCE(is_active,true)=true
+         AND (
+           $4::boolean=false
+           OR (
+             LOWER(TRIM(COALESCE(organization_type,''))) NOT LIKE '%affiliate%'
+             AND LOWER(TRIM(COALESCE(organization_type,''))) <> 'moa project'
+           )
+         )
          AND LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($2))
          AND LOWER(TRIM(COALESCE(department,''))) = LOWER(TRIM($3))
        ORDER BY id ASC
        LIMIT 1`,
-      [roles, cleanSector, cleanDepartment]
+      [roles, cleanSector, cleanDepartment, excludeAffiliateOfficeHead]
     );
 
     if (officeMatch.rows[0]) return officeMatch.rows[0];
@@ -645,10 +696,17 @@ const getFirstUserByRoleAndSector = async (
      WHERE role = ANY($1)
        AND COALESCE(account_status,'active')='active'
        AND COALESCE(is_active,true)=true
+       AND (
+         $3::boolean=false
+         OR (
+           LOWER(TRIM(COALESCE(organization_type,''))) NOT LIKE '%affiliate%'
+           AND LOWER(TRIM(COALESCE(organization_type,''))) <> 'moa project'
+         )
+       )
        AND LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($2))
      ORDER BY id ASC
      LIMIT 1`,
-    [roles, cleanSector]
+    [roles, cleanSector, excludeAffiliateOfficeHead]
   );
 
   if (exact.rows[0]) return exact.rows[0];
@@ -662,12 +720,19 @@ const getFirstUserByRoleAndSector = async (
        AND COALESCE(account_status,'active')='active'
        AND COALESCE(is_active,true)=true
        AND (
+         $3::boolean=false
+         OR (
+           LOWER(TRIM(COALESCE(organization_type,''))) NOT LIKE '%affiliate%'
+           AND LOWER(TRIM(COALESCE(organization_type,''))) <> 'moa project'
+         )
+       )
+       AND (
          LOWER(TRIM(COALESCE(sector,''))) LIKE '%' || LOWER(TRIM($2)) || '%'
          OR LOWER(TRIM($2)) LIKE '%' || LOWER(TRIM(COALESCE(sector,''))) || '%'
        )
      ORDER BY id ASC
      LIMIT 1`,
-    [roles, cleanSector]
+    [roles, cleanSector, excludeAffiliateOfficeHead]
   );
 
   return partial.rows[0] || getFirstUserByRole(role);
@@ -850,6 +915,17 @@ const getInitialReviewStage = (request, actor) => {
   }
 
   if (request?.traveler_category === 'project') {
+    if (
+      actor?.role === 'project_coordinator' &&
+      sameText(actor.sector, request?.sector) &&
+      sameText(actor.department, request?.department)
+    ) {
+      return getNextStageAfterApproval(
+        STAGES.PROJECT_COORDINATOR_REVIEW,
+        request
+      );
+    }
+
     return STAGES.PROJECT_COORDINATOR_REVIEW;
   }
 
@@ -1232,6 +1308,19 @@ const accountEmail = (user, activated) =>
       SET role='director_general'
       WHERE role='office_head'
         AND LOWER(TRIM(COALESCE(organization_type,''))) LIKE '%affiliate%'
+    `);
+
+    await query(`
+      UPDATE users u
+      SET role='director_general',
+          organization_type='Affiliate',
+          organization_name=COALESCE(NULLIF(TRIM(u.organization_name),''), u.sector)
+      WHERE u.role='office_head'
+        AND EXISTS (
+          SELECT 1
+          FROM affiliate_institutions a
+          WHERE LOWER(TRIM(a.organization_name))=LOWER(TRIM(COALESCE(u.sector,'')))
+        )
     `);
 
     await query(`
@@ -1868,6 +1957,7 @@ const ROLE_QUERIES = {
                  LOWER(TRIM(COALESCE(r.organization_name,r.sector,'')))
          )
        )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (

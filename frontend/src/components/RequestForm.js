@@ -510,13 +510,48 @@ export default function RequestForm() {
     formData.workflowType === "sector_structure";
   const isAdvisorTraveler = isMoA && formData.travelerType === "advisor";
   const isProjectTraveler = isMoA && formData.travelerType === "project";
+  const isProjectCoordinatorOwnProject =
+    currentUser?.role === "project_coordinator" &&
+    isProjectTraveler &&
+    normalizeComparable(currentUser?.sector) ===
+      normalizeComparable(formData.sector) &&
+    normalizeComparable(currentUser?.department) ===
+      normalizeComparable(formData.leadExecutiveOffice);
   const isAffiliateDirectorGeneralTraveler =
     ["director_general", "office_head"].includes(currentUser?.role) &&
     isAffiliate &&
     normalizeComparable(currentUser?.sector) ===
       normalizeComparable(formData.organizationName);
   const displayedWorkflowPath = isProjectTraveler
-    ? formData.workflowType === "sector_structure"
+    ? isProjectCoordinatorOwnProject && formData.workflowType === "sector_structure"
+      ? [
+          "Project Coordinator",
+          "State Minister",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : isProjectCoordinatorOwnProject && formData.workflowType === "ceo_structure"
+      ? [
+          "Project Coordinator",
+          "CEO",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : isProjectCoordinatorOwnProject
+      ? [
+          "Project Coordinator",
+          "Protocol for Clearance",
+          "Office Head",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : formData.workflowType === "sector_structure"
       ? [
           "Project Staff",
           "Project Coordinator",

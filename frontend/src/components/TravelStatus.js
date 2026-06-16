@@ -136,7 +136,7 @@ const roleAliases = {
   chief_executive_officer: ['chief_executive_officer', 'ceo'],
   lead_executive: ['lead_executive', 'lead_executive_officer'],
   lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
-  project_coordinator: ['project_coordinator'],
+  project_coordinator: ['project_coordinator', 'traveler'],
   state_minister: ['state_minister'],
   director_general: ['director_general'],
   office_head: ['office_head'],
