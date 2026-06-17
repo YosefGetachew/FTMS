@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import API from "../services/api";
 import "./request-form.css";
 
@@ -454,6 +454,8 @@ export default function RequestForm() {
   const [step, setStep] = useState(1);
   const [touched, setTouched] = useState({});
   const [notice, setNotice] = useState({ type: "", message: "" });
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false);
+  const submitInFlightRef = useRef(false);
   const [loading, setLoading] = useState({
     countries: false,
     organizations: false,
@@ -1020,6 +1022,10 @@ export default function RequestForm() {
   };
 
   const submitRequest = async () => {
+    if (submitInFlightRef.current || loading.submitting) {
+      return;
+    }
+
     setNotice({ type: "", message: "" });
     touchMany([
       "organizationType",
@@ -1044,6 +1050,7 @@ export default function RequestForm() {
       return;
     }
 
+    submitInFlightRef.current = true;
     setLoading((p) => ({ ...p, submitting: true }));
     try {
       const data = new FormData();
@@ -1102,6 +1109,7 @@ export default function RequestForm() {
         type: "success",
         message: "Travel request submitted and routed to the next approver.",
       });
+      setSuccessDialogOpen(true);
       resetForm({ keepNotice: true });
     } catch (error) {
       const msg =
@@ -1111,6 +1119,7 @@ export default function RequestForm() {
         "Error submitting request.";
       setNotice({ type: "error", message: typeof msg === "string" ? msg : "Error submitting request." });
     } finally {
+      submitInFlightRef.current = false;
       setLoading((p) => ({ ...p, submitting: false }));
     }
   };
@@ -1137,6 +1146,26 @@ export default function RequestForm() {
         {notice.message && (
           <div className={`mb-6 ${notice.type === "success" ? "notice-success" : "notice-error"}`}>
             {notice.message}
+          </div>
+        )}
+
+        {successDialogOpen && (
+          <div className="modal-overlay">
+            <div className="modal-content request-success-modal">
+              <h2>Travel Request Submitted</h2>
+              <p>
+                Your travel request has been routed to the next approver.
+              </p>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => setSuccessDialogOpen(false)}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

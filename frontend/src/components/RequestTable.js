@@ -1288,9 +1288,23 @@ function RequestTable() {
                 </tr>
               ) : (
                 filteredSubmittedRequests.map((request) => (
-                  <tr key={request.id}>
+                  <tr
+                    key={request.id}
+                    className="request-clickable-row"
+                    tabIndex={0}
+                    onClick={() => setViewingRequest(request)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setViewingRequest(request);
+                      }
+                    }}
+                  >
                     {showBulkActions && (
-                      <td className="request-select-col">
+                      <td
+                        className="request-select-col"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         {isBulkActionable(request) ? (
                           <input
                             type="checkbox"
@@ -1320,7 +1334,9 @@ function RequestTable() {
 
                     {renderCommentCell(request)}
 
-                    <td>{renderRequestActions(request)}</td>
+                    <td onClick={(event) => event.stopPropagation()}>
+                      {renderRequestActions(request)}
+                    </td>
                   </tr>
                 ))
               )}
@@ -1374,7 +1390,18 @@ function RequestTable() {
                     </tr>
                   ) : (
                     historicalRequests.map((request) => (
-                      <tr key={request.id}>
+                      <tr
+                        key={request.id}
+                        className="request-clickable-row"
+                        tabIndex={0}
+                        onClick={() => setViewingRequest(request)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setViewingRequest(request);
+                          }
+                        }}
+                      >
                         {renderTravelerCell(request)}
 
                         {renderSectorDepartment(request)}
@@ -1390,7 +1417,7 @@ function RequestTable() {
                         <td>{renderStage(request)}</td>
 
                         {canViewPdf && (
-                          <td>
+                          <td onClick={(event) => event.stopPropagation()}>
                             {canGenerateSupportLetter(request) ? (
                               <button
                                 className="pdf-btn"

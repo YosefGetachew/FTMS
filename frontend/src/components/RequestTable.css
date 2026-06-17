@@ -226,6 +226,20 @@
   overflow-wrap: anywhere;
 }
 
+.request-clickable-row {
+  cursor: pointer;
+}
+
+.request-clickable-row:hover td,
+.request-clickable-row:focus td {
+  background: #f8fafc;
+}
+
+.request-clickable-row:focus {
+  outline: 2px solid #99f6e4;
+  outline-offset: -2px;
+}
+
 .request-traveler-cell {
   min-width: 0;
 }

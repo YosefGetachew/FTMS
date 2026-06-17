@@ -869,6 +869,24 @@ select.ministry-input {
   color: #991b1b;
 }
 
+.request-success-modal {
+  width: min(420px, 92vw);
+  border-radius: 10px;
+}
+
+.request-success-modal h2 {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.request-success-modal p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.5;
+}
+
 /* ============================================================
    SUMMARY / REVIEW BLOCKS
 ============================================================ */
