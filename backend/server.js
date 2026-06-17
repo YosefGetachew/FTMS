@@ -957,6 +957,14 @@ const getInitialReviewStage = (request, actor) => {
     return STAGES.OFFICE_HEAD_REVIEW;
   }
 
+  if (
+    ['lead_executive_officer', 'lead_executive'].includes(actor?.role) &&
+    sameText(actor.sector, request?.sector) &&
+    sameText(actor.department, request?.department)
+  ) {
+    return getNextStageAfterApproval(STAGES.LEAD_EXECUTIVE_REVIEW, request);
+  }
+
   return STAGES.LEAD_EXECUTIVE_REVIEW;
 };
 
@@ -1909,6 +1917,7 @@ const ROLE_QUERIES = {
              AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
          )
        )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (
@@ -1981,6 +1990,7 @@ const ROLE_QUERIES = {
              AND LOWER(TRIM(COALESCE(me.department,'')))=LOWER(TRIM(COALESCE(r.department,'')))
          )
        )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (
@@ -2005,6 +2015,7 @@ const ROLE_QUERIES = {
              AND LOWER(TRIM(COALESCE(me.department,'')))=LOWER(TRIM(COALESCE(r.department,'')))
          )
        )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (
@@ -2028,6 +2039,7 @@ const ROLE_QUERIES = {
              AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
          )
        )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (

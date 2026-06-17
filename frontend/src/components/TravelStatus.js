@@ -132,15 +132,17 @@ const workflowStages = {
 };
 
 const roleAliases = {
-  ceo: ['ceo', 'chief_executive_officer'],
-  chief_executive_officer: ['chief_executive_officer', 'ceo'],
-  lead_executive: ['lead_executive', 'lead_executive_officer'],
-  lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
+  ceo: ['ceo', 'chief_executive_officer', 'traveler'],
+  chief_executive_officer: ['chief_executive_officer', 'ceo', 'traveler'],
+  lead_executive: ['lead_executive', 'lead_executive_officer', 'traveler'],
+  lead_executive_officer: ['lead_executive_officer', 'lead_executive', 'traveler'],
   project_coordinator: ['project_coordinator', 'traveler'],
-  state_minister: ['state_minister'],
-  director_general: ['director_general'],
-  office_head: ['office_head'],
-  pm_office: ['pm_office'],
+  state_minister: ['state_minister', 'traveler'],
+  director_general: ['director_general', 'traveler'],
+  office_head: ['office_head', 'traveler'],
+  minister: ['minister', 'traveler'],
+  protocol: ['protocol', 'traveler'],
+  pm_office: ['pm_office', 'traveler'],
 };
 
 const normalizeText = (value) => String(value || '').toLowerCase();
