@@ -245,6 +245,35 @@
   font-weight: 650;
 }
 
+.request-status-cell .status-badge {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #1e293b;
+  font-weight: 400;
+}
+
+.request-status-cell .status-badge.pending {
+  background: transparent;
+  color: #92400e;
+}
+
+.request-status-cell .status-badge.approved {
+  background: transparent;
+  color: #166534;
+}
+
+.request-status-cell .status-badge.rejected {
+  background: transparent;
+  color: #991b1b;
+}
+
+.request-status-cell .status-badge.amended {
+  background: transparent;
+  color: #9a3412;
+}
+
 .request-action-group {
   max-width: 230px;
   gap: 6px;
