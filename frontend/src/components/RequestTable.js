@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import API from "../services/api";
 import "./RequestTable.css";
 
+const normalizeText = (value) => String(value || "").toLowerCase();
+
 function RequestTable() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   const [requests, setRequests] = useState([]);
   const [activeSearch, setActiveSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
+  const [dashboardFilter, setDashboardFilter] = useState(null);
   const [search, setSearch] = useState("");
   const [showHistorical, setShowHistorical] = useState(false);
   const [viewingRequest, setViewingRequest] = useState(null);
@@ -100,6 +103,24 @@ function RequestTable() {
     fetchRequests();
   }, [fetchRequests]);
 
+  useEffect(() => {
+    const rawFilter = sessionStorage.getItem("ftmsRequestViewFilter");
+    if (!rawFilter) return;
+
+    try {
+      const parsedFilter = JSON.parse(rawFilter);
+      setDashboardFilter(parsedFilter);
+      setActiveFilter("all");
+      setActiveSearch("");
+      setSearch("");
+      setShowHistorical(parsedFilter.scope !== "active");
+    } catch (_error) {
+      setDashboardFilter(null);
+    } finally {
+      sessionStorage.removeItem("ftmsRequestViewFilter");
+    }
+  }, []);
+
   const formatDate = (date) => {
     if (!date) return "-";
 
@@ -127,7 +148,11 @@ function RequestTable() {
     return days > 0 ? days : "-";
   };
 
-  const normalizeText = (value) => String(value || "").toLowerCase();
+  const clearDashboardFilter = () => {
+    setDashboardFilter(null);
+    setActiveSearch("");
+    setSearch("");
+  };
 
   const formatWorkflowType = (workflowType) => {
     const workflows = {
@@ -183,10 +208,20 @@ function RequestTable() {
     request.foreign_affairs_comment ||
     "-";
 
+  const requiresPmOffice = (request) => request.pm_approval_required !== false;
+
   const getPrimaryActionLabel = (request) => {
     if (request.current_stage === "protocol_clearance") return "Clear";
-    if (request.current_stage === "office_head_final") return "Approve and send to Protocol for PM Office";
-    if (request.current_stage === "minister_review") return "Approve and send to Protocol";
+    if (request.current_stage === "office_head_final") {
+      return requiresPmOffice(request)
+        ? "Approve and send to Protocol for PM Office"
+        : "Approve and complete request";
+    }
+    if (request.current_stage === "minister_review") {
+      return requiresPmOffice(request)
+        ? "Approve and send to Protocol"
+        : "Approve and complete request";
+    }
     if (request.current_stage === "pm_office_submission") return "Submit to PM Office";
     return "Approve";
   };
@@ -204,9 +239,9 @@ function RequestTable() {
   const isMinister = user?.role === "minister";
   const canSeeHistorical = !isPmOffice;
 
-  const canTravelerEditBeforeAction = useCallback(
+  const isOwnEditableDraft = useCallback(
     (request) => {
-      if (!request || !isTraveler) return false;
+      if (!request) return false;
 
       const sameTraveler =
         normalizeText(request.email).trim() === normalizeText(user.email).trim();
@@ -220,7 +255,24 @@ function RequestTable() {
 
       return sameTraveler && isOpen && noApproverAction;
     },
-    [isTraveler, user.email]
+    [user.email]
+  );
+
+  const canTravelerEditBeforeAction = isOwnEditableDraft;
+
+  const isSavedDraftRequest = useCallback((request) => {
+    return (
+      normalizeText(request?.final_status) === "pending" &&
+      normalizeText(request?.current_stage) === "expert_preparation" &&
+      normalizeText(request?.status).includes("draft")
+    );
+  }, []);
+
+  const canCompleteSavedDraft = useCallback(
+    (request) => {
+      return isSavedDraftRequest(request) && (isOwnEditableDraft(request) || isAdmin);
+    },
+    [isAdmin, isOwnEditableDraft, isSavedDraftRequest]
   );
 
   const canDelete = isAdmin;
@@ -255,6 +307,13 @@ function RequestTable() {
     [canViewPdf]
   );
 
+  const showActiveSection = dashboardFilter?.scope !== "historical";
+  const showHistoricalSection =
+    canSeeHistorical &&
+    (showHistorical ||
+      dashboardFilter?.scope === "historical" ||
+      dashboardFilter?.scope === "all");
+
   const stageMatches = useCallback((request, stages) => {
     const currentStage = normalizeText(request.current_stage);
     const status = normalizeText(request.status);
@@ -264,6 +323,7 @@ function RequestTable() {
 
   const canDecideRequest = useCallback(
     (request) => {
+      if (isSavedDraftRequest(request)) return false;
       if (isAdmin) return true;
 
       const workflowType = request.workflow_type;
@@ -319,6 +379,7 @@ function RequestTable() {
       isPmOffice,
       isProtocol,
       isStateMinister,
+      isSavedDraftRequest,
       stageMatches,
     ]
   );
@@ -335,28 +396,80 @@ function RequestTable() {
         isTraveler &&
         currentStage === "expert_preparation" &&
         finalStatus === "amended";
+      const isEditableOwnerDraft = isOwnEditableDraft(request);
 
-      if (isAmendedForTraveler) return true;
+      if (isAmendedForTraveler || isEditableOwnerDraft) return true;
       if (!isPending) return false;
       if (isTraveler) return true;
 
       return canDecideRequest(request);
     });
-  }, [requests, isTraveler, canDecideRequest]);
+  }, [requests, isTraveler, isOwnEditableDraft, canDecideRequest]);
 
-  const historicalRequests = useMemo(() => {
+  const allHistoricalRequests = useMemo(() => {
     return requests.filter((request) => {
-      const isHistorical =
+      return (
         request.final_status === "approved" ||
         request.final_status === "rejected" ||
-        request.current_stage === "completed";
+        request.current_stage === "completed"
+      );
+    });
+  }, [requests]);
 
-      if (!isHistorical) return false;
+  const matchesDashboardFilter = useCallback(
+    (request) => {
+      if (!dashboardFilter) return true;
 
-      const keyword = normalizeText(search);
+      const finalStatus = normalizeText(request.final_status);
+      const currentStage = normalizeText(request.current_stage);
+      const travelerCategory = normalizeText(request.traveler_category);
 
-      if (!keyword) return true;
+      if (dashboardFilter.status === "pending") {
+        const isPending =
+          !["approved", "rejected"].includes(finalStatus) &&
+          currentStage !== "completed";
 
+        if (!isPending) return false;
+      }
+
+      if (
+        dashboardFilter.status === "approved" &&
+        finalStatus !== "approved" &&
+        currentStage !== "completed"
+      ) {
+        return false;
+      }
+
+      if (dashboardFilter.status === "rejected" && finalStatus !== "rejected") {
+        return false;
+      }
+
+      if (dashboardFilter.travelerCategory === "lead_executive_staff") {
+        return !["project", "advisor", "affiliate_institution"].includes(
+          travelerCategory
+        );
+      }
+
+      if (
+        dashboardFilter.travelerCategory &&
+        travelerCategory !== dashboardFilter.travelerCategory
+      ) {
+        return false;
+      }
+
+      return true;
+    },
+    [dashboardFilter]
+  );
+
+  const historicalRequests = useMemo(() => {
+    const keyword = normalizeText(search);
+
+    const filteredHistorical = allHistoricalRequests.filter(matchesDashboardFilter);
+
+    if (!keyword) return filteredHistorical;
+
+    return filteredHistorical.filter((request) => {
       return (
         normalizeText(request.full_name).includes(keyword) ||
         normalizeText(request.workflow_type).includes(keyword) ||
@@ -370,7 +483,7 @@ function RequestTable() {
         normalizeText(request.current_stage).includes(keyword)
       );
     });
-  }, [requests, search]);
+  }, [allHistoricalRequests, search, matchesDashboardFilter]);
 
   const filteredSubmittedRequests = useMemo(() => {
     const keyword = normalizeText(activeSearch);
@@ -379,6 +492,7 @@ function RequestTable() {
       const finalStatus = normalizeText(request.final_status);
       const currentStage = normalizeText(request.current_stage);
 
+      if (!matchesDashboardFilter(request)) return false;
       if (activeFilter === "action" && !canDecideRequest(request)) return false;
       if (activeFilter === "amended" && finalStatus !== "amended") return false;
       if (activeFilter === "protocol" && !currentStage.includes("protocol")) return false;
@@ -399,7 +513,7 @@ function RequestTable() {
         normalizeText(request.current_stage).includes(keyword)
       );
     });
-  }, [activeFilter, activeSearch, submittedRequests, canDecideRequest]);
+  }, [activeFilter, activeSearch, submittedRequests, canDecideRequest, matchesDashboardFilter]);
 
   const isBulkActionable = useCallback(
     (request) =>
@@ -492,7 +606,7 @@ function RequestTable() {
     ];
   }, [submittedRequests, canDecideRequest, isPmOffice]);
 
-  const updateStatus = async (id, action, comment = "") => {
+  const updateStatus = async (id, action, comment = "", options = {}) => {
     if (updatingId) return;
 
     try {
@@ -504,6 +618,7 @@ function RequestTable() {
         actorEmail: user.email,
         actorId: user.id || null,
         comment,
+        ...options,
       });
 
       await fetchRequests();
@@ -600,41 +715,51 @@ function RequestTable() {
     }
   };
 
+  const buildEditingRequestPayload = () => {
+    const data = new FormData();
+
+    data.append("travelerCategory", editingRequest.traveler_category || "");
+    data.append("workflowType", editingRequest.workflow_type || "");
+    data.append("organizationName", editingRequest.organization_name || "");
+    data.append("fullName", editingRequest.full_name || "");
+    data.append("position", editingRequest.position || "");
+    data.append("department", editingRequest.department || "");
+    data.append("sector", editingRequest.sector || "");
+    data.append("email", editingRequest.email || "");
+    data.append("phone", editingRequest.phone || "");
+    data.append("country", editingRequest.country || "");
+    data.append("startDate", getInputDate(editingRequest.start_date));
+    data.append("endDate", getInputDate(editingRequest.end_date));
+    data.append("purpose", editingRequest.purpose || "");
+    data.append("fundingSourceType", editingRequest.funding_source_type || "");
+    data.append(
+      "sponsor",
+      editingRequest.funding_source_type === "government"
+        ? "Government"
+        : editingRequest.sponsor || ""
+    );
+    data.append("passportNumber", editingRequest.passport_number || "");
+
+    if (editingRequest.passportFile) {
+      data.append("passportFile", editingRequest.passportFile);
+    }
+
+    if (editingRequest.invitationLetter) {
+      data.append("invitationLetter", editingRequest.invitationLetter);
+    }
+
+    if (editingRequest.torFile) {
+      data.append("torFile", editingRequest.torFile);
+    }
+
+    return data;
+  };
+
   const updateRequest = async () => {
     if (!editingRequest) return;
 
     try {
-      const data = new FormData();
-
-      data.append("travelerCategory", editingRequest.traveler_category || "");
-      data.append("workflowType", editingRequest.workflow_type || "");
-      data.append("organizationName", editingRequest.organization_name || "");
-      data.append("fullName", editingRequest.full_name || "");
-      data.append("position", editingRequest.position || "");
-      data.append("department", editingRequest.department || "");
-      data.append("sector", editingRequest.sector || "");
-      data.append("email", editingRequest.email || "");
-      data.append("phone", editingRequest.phone || "");
-      data.append("country", editingRequest.country || "");
-      data.append("startDate", getInputDate(editingRequest.start_date));
-      data.append("endDate", getInputDate(editingRequest.end_date));
-      data.append("purpose", editingRequest.purpose || "");
-      data.append("sponsor", editingRequest.sponsor || "");
-      data.append("passportNumber", editingRequest.passport_number || "");
-
-      if (editingRequest.passportFile) {
-        data.append("passportFile", editingRequest.passportFile);
-      }
-
-      if (editingRequest.invitationLetter) {
-        data.append("invitationLetter", editingRequest.invitationLetter);
-      }
-
-      if (editingRequest.torFile) {
-        data.append("torFile", editingRequest.torFile);
-      }
-
-      await API.put(`/requests/${editingRequest.id}`, data);
+      await API.put(`/requests/${editingRequest.id}`, buildEditingRequestPayload());
 
       setNotice({
         type: "success",
@@ -648,6 +773,39 @@ function RequestTable() {
         type: "error",
         message: error.response?.data?.error || "Failed to update request",
       });
+    }
+  };
+
+  const saveAndSubmitDraft = async () => {
+    if (!editingRequest || updatingId) return;
+
+    try {
+      setUpdatingId(editingRequest.id);
+
+      await API.put(`/requests/${editingRequest.id}`, buildEditingRequestPayload());
+      await API.put(`/requests/${editingRequest.id}/status`, {
+        action: "submit",
+        role: user.role,
+        actorEmail: user.email,
+        actorId: user.id || null,
+        comment: "Draft completed and submitted by traveler.",
+      });
+
+      setNotice({
+        type: "success",
+        message: "Draft completed and submitted for approval.",
+      });
+      setEditingRequest(null);
+      await fetchRequests();
+    } catch (error) {
+      console.error(error);
+      setNotice({
+        type: "error",
+        message:
+          error.response?.data?.error || "Failed to submit saved draft",
+      });
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -806,8 +964,8 @@ function RequestTable() {
     window.open(getPdfUrl(id), "_blank");
   };
 
-  const renderSectorDepartment = (request) => (
-    <td className="request-structure-cell">
+  const renderSectorDepartment = (request, label = "Structure") => (
+    <td className="request-structure-cell" data-label={label}>
       <strong>
         {request.traveler_category === "affiliate_institution"
           ? "Affiliate Institute"
@@ -822,8 +980,8 @@ function RequestTable() {
     </td>
   );
 
-  const renderTripDate = (request) => (
-    <td className="request-date-cell">
+  const renderTripDate = (request, label = "Travel Date") => (
+    <td className="request-date-cell" data-label={label}>
       <div>{formatDate(request.start_date)}</div>
       <span>to</span>
       <div>{formatDate(request.end_date)}</div>
@@ -855,9 +1013,10 @@ function RequestTable() {
     </span>
   );
 
-  const renderWrappedText = (value, maxWidth = "220px") => (
+  const renderWrappedText = (value, maxWidth = "220px", label = "Details") => (
     <td
       className="request-wrap-cell"
+      data-label={label}
       style={{
         maxWidth,
       }}
@@ -866,18 +1025,19 @@ function RequestTable() {
     </td>
   );
 
-  const renderTravelerCell = (request) => (
-    <td className="request-traveler-cell">
+  const renderTravelerCell = (request, label = "Traveler") => (
+    <td className="request-traveler-cell" data-label={label}>
       <strong>{request.full_name || "-"}</strong>
       <small>{request.position || "-"}</small>
     </td>
   );
 
-  const renderCommentCell = (request) => (
+  const renderCommentCell = (request, label = "Comment") => (
     <td
       className={`request-comment-cell ${
         request.final_status === "amended" ? "amended" : ""
       }`}
+      data-label={label}
     >
       {getComment(request)}
     </td>
@@ -900,7 +1060,7 @@ function RequestTable() {
   };
 
   const canActAtStage = (request) => {
-    return canDecideRequest(request);
+    return !isSavedDraftRequest(request) && canDecideRequest(request);
   };
 
   const renderRequestActions = (request) => {
@@ -922,6 +1082,17 @@ function RequestTable() {
         >
           {processingLabel || "View"}
         </button>
+
+        {canCompleteSavedDraft(request) && (
+          <button
+            className="edit-btn action-icon-btn action-wide-btn"
+            title="Complete saved draft"
+            disabled={isBusy}
+            onClick={() => setEditingRequest(request)}
+          >
+            Complete Draft
+          </button>
+        )}
 
         {!isCompleted &&
           canActAtStage(request) &&
@@ -953,25 +1124,44 @@ function RequestTable() {
           )}
 
         {!isCompleted && canActAtStage(request) && stage === "protocol_clearance" && (
-          <>
+          <div className="protocol-decision-panel">
             <button
-              className="approve-btn action-icon-btn"
-              title="Clear protocol review"
+              className="protocol-decision-card need-pm"
+              title="Clear protocol review and require PM Office approval"
               disabled={isBusy}
-              onClick={() => updateStatus(request.id, "clear")}
+              onClick={() =>
+                updateStatus(request.id, "clear", "", {
+                  pmApprovalRequired: true,
+                })
+              }
             >
-              {processingLabel || "Clear"}
+              <span>{processingLabel || "PM Required"}</span>
+              <small>Use when the request needs PM Office authorization.</small>
             </button>
 
             <button
-              className="edit-btn action-icon-btn"
+              className="protocol-decision-card no-pm"
+              title="Clear protocol review without PM Office approval"
+              disabled={isBusy}
+              onClick={() =>
+                updateStatus(request.id, "clear", "", {
+                  pmApprovalRequired: false,
+                })
+              }
+            >
+              <span>{processingLabel || "No PM Needed"}</span>
+              <small>Use when Office Head or Minister can finalize.</small>
+            </button>
+
+            <button
+              className="edit-btn action-icon-btn protocol-amend-btn"
               title="Request amendment"
               disabled={isBusy}
               onClick={() => amendRequest(request.id)}
             >
               Amend
             </button>
-          </>
+          </div>
         )}
 
         {!isCompleted && canActAtStage(request) && stage === "office_head_final" && (
@@ -1073,7 +1263,7 @@ function RequestTable() {
             </>
           )}
 
-        {isTraveler &&
+        {canTravelerEditBeforeAction(request) &&
           request.current_stage === "expert_preparation" &&
           request.final_status === "amended" && (
             <>
@@ -1150,9 +1340,7 @@ function RequestTable() {
               onClick={() => setShowHistorical((prev) => !prev)}
             >
               {showHistorical ? "Hide Historical" : "Show Historical"}
-              {historicalRequests.length > 0
-                ? ` (${historicalRequests.length})`
-                : ""}
+              {` (${allHistoricalRequests.length})`}
             </button>
           )}
         </div>
@@ -1177,181 +1365,204 @@ function RequestTable() {
         </div>
       )}
 
-      <div className="request-table-controls">
-        <input
-          type="text"
-          placeholder="Search active requests..."
-          className="search-input"
-          value={activeSearch}
-          onChange={(e) => setActiveSearch(e.target.value)}
-        />
-
-        <select
-          className="search-input request-filter-select"
-          value={activeFilter}
-          onChange={(e) => setActiveFilter(e.target.value)}
-        >
-          <option value="all">All active requests</option>
-          <option value="action">Needs my action</option>
-          <option value="amended">Returned / amended</option>
-          <option value="protocol">Protocol clearance</option>
-          <option value="pm_office">PM Office</option>
-        </select>
-      </div>
-
-      <div className="request-section-card">
-        <div className="request-section-header">
+      {dashboardFilter && (
+        <div className="request-dashboard-filter">
           <div>
-            <h3>Active Request Queue</h3>
-            <p>{filteredSubmittedRequests.length} request{filteredSubmittedRequests.length === 1 ? "" : "s"} in this view</p>
+            <span>Opened from dashboard</span>
+            <strong>{dashboardFilter.label || "Filtered requests"}</strong>
           </div>
 
-          {showBulkActions && (
-            <div className="request-bulk-actions">
-              <label className="request-bulk-select">
-                <input
-                  type="checkbox"
-                  checked={allVisibleActionsSelected}
-                  onChange={toggleAllVisibleActions}
-                />
-                Select actionable requests
-              </label>
-
-              <button
-                type="button"
-                className="approve-btn action-icon-btn request-bulk-submit"
-                disabled={
-                  updatingId === "bulk-approve" ||
-                  selectedVisibleActionIds.length === 0
-                }
-                onClick={() => runBulkWorkflowAction("approve")}
-              >
-                {updatingId === "bulk-approve"
-                  ? "Updating..."
-                  : `Accept (${selectedVisibleActionIds.length})`}
-              </button>
-
-              <button
-                type="button"
-                className="reject-btn action-icon-btn request-bulk-submit"
-                disabled={
-                  updatingId === "bulk-reject" ||
-                  selectedVisibleActionIds.length === 0
-                }
-                onClick={() => runBulkWorkflowAction("reject")}
-              >
-                {updatingId === "bulk-reject"
-                  ? "Updating..."
-                  : `Reject (${selectedVisibleActionIds.length})`}
-              </button>
-            </div>
-          )}
+          <button type="button" onClick={clearDashboardFilter}>
+            Clear filter
+          </button>
         </div>
+      )}
 
-        <div className="request-table-scroll">
-          <table>
-            <thead>
-              <tr>
-                {showBulkActions && <th className="request-select-col">Select</th>}
-                <th>Name</th>
-                <th>Sector / Lead Executive Office</th>
-                <th>Destination</th>
-                <th>Purpose</th>
-                <th>Travel Date</th>
-                <th>Status</th>
-                <th>Current Stage</th>
-                <th>Comment</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
+      {showActiveSection && (
+        <>
+          <div className="request-table-controls">
+            <input
+              type="text"
+              placeholder="Search active requests..."
+              className="search-input"
+              value={activeSearch}
+              onChange={(e) => setActiveSearch(e.target.value)}
+            />
 
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td
-                    className="request-empty-cell"
-                    colSpan={showBulkActions ? "10" : "9"}
+            <select
+              className="search-input request-filter-select"
+              value={activeFilter}
+              onChange={(e) => setActiveFilter(e.target.value)}
+            >
+              <option value="all">All active requests</option>
+              <option value="action">Needs my action</option>
+              <option value="amended">Returned / amended</option>
+              <option value="protocol">Protocol clearance</option>
+              <option value="pm_office">PM Office</option>
+            </select>
+          </div>
+
+          <div className="request-section-card">
+            <div className="request-section-header">
+              <div>
+                <h3>Active Request Queue</h3>
+                <p>{filteredSubmittedRequests.length} request{filteredSubmittedRequests.length === 1 ? "" : "s"} in this view</p>
+              </div>
+
+              {showBulkActions && (
+                <div className="request-bulk-actions">
+                  <label className="request-bulk-select">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleActionsSelected}
+                      onChange={toggleAllVisibleActions}
+                    />
+                    Select actionable requests
+                  </label>
+
+                  <button
+                    type="button"
+                    className="approve-btn action-icon-btn request-bulk-submit"
+                    disabled={
+                      updatingId === "bulk-approve" ||
+                      selectedVisibleActionIds.length === 0
+                    }
+                    onClick={() => runBulkWorkflowAction("approve")}
                   >
-                    <strong>Loading submitted requests...</strong>
-                    <span>Please wait while the request queue refreshes.</span>
-                  </td>
-                </tr>
-              ) : filteredSubmittedRequests.length === 0 ? (
-                <tr>
-                  <td
-                    className="request-empty-cell"
-                    colSpan={showBulkActions ? "10" : "9"}
+                    {updatingId === "bulk-approve"
+                      ? "Updating..."
+                      : `Accept (${selectedVisibleActionIds.length})`}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="reject-btn action-icon-btn request-bulk-submit"
+                    disabled={
+                      updatingId === "bulk-reject" ||
+                      selectedVisibleActionIds.length === 0
+                    }
+                    onClick={() => runBulkWorkflowAction("reject")}
                   >
-                    <strong>No submitted requests found</strong>
-                    <span>Try changing the search text or active request filter.</span>
-                  </td>
-                </tr>
-              ) : (
-                filteredSubmittedRequests.map((request) => (
-                  <tr
-                    key={request.id}
-                    className="request-clickable-row"
-                    tabIndex={0}
-                    onClick={() => setViewingRequest(request)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setViewingRequest(request);
-                      }
-                    }}
-                  >
-                    {showBulkActions && (
-                      <td
-                        className="request-select-col"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {isBulkActionable(request) ? (
-                          <input
-                            type="checkbox"
-                            checked={selectedActionIds.includes(request.id)}
-                            onChange={() => toggleActionSelection(request.id)}
-                            aria-label={`Select ${request.full_name || "request"} for bulk action`}
-                          />
-                        ) : (
-                          <span className="request-select-placeholder">-</span>
-                        )}
-                      </td>
-                    )}
-
-                    {renderTravelerCell(request)}
-
-                    {renderSectorDepartment(request)}
-
-                    {renderWrappedText(request.country, "110px")}
-
-                    {renderWrappedText(request.purpose, "240px")}
-
-                    {renderTripDate(request)}
-
-                    <td className="request-status-cell">{renderStatus(request)}</td>
-
-                    <td>{renderStage(request)}</td>
-
-                    {renderCommentCell(request)}
-
-                    <td onClick={(event) => event.stopPropagation()}>
-                      {renderRequestActions(request)}
-                    </td>
-                  </tr>
-                ))
+                    {updatingId === "bulk-reject"
+                      ? "Updating..."
+                      : `Reject (${selectedVisibleActionIds.length})`}
+                  </button>
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </div>
 
-      {canSeeHistorical && showHistorical && (
+            <div className="request-table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    {showBulkActions && <th className="request-select-col">Select</th>}
+                    <th>Name</th>
+                    <th>Sector / Lead Executive Office</th>
+                    <th>Destination</th>
+                    <th>Purpose</th>
+                    <th>Travel Date</th>
+                    <th>Status</th>
+                    <th>Current Stage</th>
+                    <th>Comment</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td
+                        className="request-empty-cell"
+                        colSpan={showBulkActions ? "10" : "9"}
+                      >
+                        <strong>Loading submitted requests...</strong>
+                        <span>Please wait while the request queue refreshes.</span>
+                      </td>
+                    </tr>
+                  ) : filteredSubmittedRequests.length === 0 ? (
+                    <tr>
+                      <td
+                        className="request-empty-cell"
+                        colSpan={showBulkActions ? "10" : "9"}
+                      >
+                        <strong>No submitted requests found</strong>
+                        <span>Try changing the search text or active request filter.</span>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSubmittedRequests.map((request) => (
+                      <tr
+                        key={request.id}
+                        className="request-clickable-row"
+                        tabIndex={0}
+                        onClick={() => setViewingRequest(request)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setViewingRequest(request);
+                          }
+                        }}
+                      >
+                        {showBulkActions && (
+                          <td
+                            className="request-select-col"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {isBulkActionable(request) ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedActionIds.includes(request.id)}
+                                onChange={() => toggleActionSelection(request.id)}
+                                aria-label={`Select ${request.full_name || "request"} for bulk action`}
+                              />
+                            ) : (
+                              <span className="request-select-placeholder">-</span>
+                            )}
+                          </td>
+                        )}
+
+                        {renderTravelerCell(request)}
+
+                        {renderSectorDepartment(request, "Structure")}
+
+                        {renderWrappedText(request.country, "110px", "Destination")}
+
+                        {renderWrappedText(request.purpose, "240px", "Purpose")}
+
+                        {renderTripDate(request, "Travel Date")}
+
+                        <td className="request-status-cell" data-label="Status">{renderStatus(request)}</td>
+
+                        <td data-label="Current Stage">{renderStage(request)}</td>
+
+                        {renderCommentCell(request, "Comment")}
+
+                        <td data-label="Actions" onClick={(event) => event.stopPropagation()}>
+                          {renderRequestActions(request)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showHistoricalSection && (
         <>
           <div
             className="table-header request-history-header"
           >
             <div>
-              <h2>Historical Travel</h2>
+              <h2>
+                Historical Travel
+                <span className="request-history-count">
+                  {historicalRequests.length}
+                  {search ? ` of ${allHistoricalRequests.length}` : ""} total
+                </span>
+              </h2>
               <p>Approved, rejected, and completed requests visible to your role.</p>
             </div>
 
@@ -1404,20 +1615,20 @@ function RequestTable() {
                       >
                         {renderTravelerCell(request)}
 
-                        {renderSectorDepartment(request)}
+                        {renderSectorDepartment(request, "Structure")}
 
-                        {renderWrappedText(request.country, "110px")}
+                        {renderWrappedText(request.country, "110px", "Destination")}
 
-                        {renderWrappedText(request.purpose, "260px")}
+                        {renderWrappedText(request.purpose, "260px", "Purpose")}
 
-                        {renderTripDate(request)}
+                        {renderTripDate(request, "Travel Date")}
 
-                        <td className="request-status-cell">{renderFinalStatus(request)}</td>
+                        <td className="request-status-cell" data-label="Final Status">{renderFinalStatus(request)}</td>
 
-                        <td>{renderStage(request)}</td>
+                        <td data-label="Current Stage">{renderStage(request)}</td>
 
                         {canViewPdf && (
-                          <td onClick={(event) => event.stopPropagation()}>
+                          <td data-label="Letter" onClick={(event) => event.stopPropagation()}>
                             {canGenerateSupportLetter(request) ? (
                               <button
                                 className="pdf-btn"
@@ -1522,7 +1733,18 @@ function RequestTable() {
               </div>
 
               <div>
-                <strong>Sponsor</strong>
+                <strong>Funding Source</strong>
+                <p>
+                  {viewingRequest.funding_source_type === "government"
+                    ? "Government"
+                    : viewingRequest.funding_source_type === "non_government"
+                    ? "Non-government"
+                    : "-"}
+                </p>
+              </div>
+
+              <div>
+                <strong>Source of Fund</strong>
                 <p>{viewingRequest.sponsor || "-"}</p>
               </div>
 
@@ -1544,6 +1766,17 @@ function RequestTable() {
               <div>
                 <strong>PM Office Status</strong>
                 <p>{viewingRequest.foreign_affairs_status || "-"}</p>
+              </div>
+
+              <div>
+                <strong>Protocol PM Decision</strong>
+                <p>
+                  {viewingRequest.pm_approval_required === true
+                    ? "PM Office approval required"
+                    : viewingRequest.pm_approval_required === false
+                    ? "No PM Office approval required"
+                    : "Not decided yet"}
+                </p>
               </div>
 
               <div className="detail-full">
@@ -1626,7 +1859,22 @@ function RequestTable() {
                     setViewingRequest(null);
                   }}
                 >
-                  Edit Request
+                  {canCompleteSavedDraft(viewingRequest)
+                    ? "Complete Draft"
+                    : "Edit Request"}
+                </button>
+              )}
+
+              {canCompleteSavedDraft(viewingRequest) && (
+                <button
+                  className="approve-btn"
+                  disabled={updatingId === viewingRequest.id}
+                  onClick={async () => {
+                    await updateStatus(viewingRequest.id, "submit");
+                    setViewingRequest(null);
+                  }}
+                >
+                  {updatingId === viewingRequest.id ? "Submitting..." : "Submit Draft"}
                 </button>
               )}
 
@@ -1843,18 +2091,42 @@ function RequestTable() {
               </div>
 
               <div>
-                <strong>Sponsor</strong>
-                <input
+                <strong>Funding Source</strong>
+                <select
                   className="ministry-input"
-                  value={editingRequest.sponsor || ""}
+                  value={editingRequest.funding_source_type || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
-                      sponsor: e.target.value,
+                      funding_source_type: e.target.value,
+                      sponsor:
+                        e.target.value === "government"
+                          ? ""
+                          : editingRequest.sponsor || "",
                     })
                   }
-                />
+                >
+                  <option value="">Select funding source</option>
+                  <option value="government">Government</option>
+                  <option value="non_government">Non-government</option>
+                </select>
               </div>
+
+              {editingRequest.funding_source_type === "non_government" && (
+                <div>
+                  <strong>Source of Fund</strong>
+                  <input
+                    className="ministry-input"
+                    value={editingRequest.sponsor || ""}
+                    onChange={(e) =>
+                      setEditingRequest({
+                        ...editingRequest,
+                        sponsor: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              )}
 
               <div>
                 <strong>Passport Number</strong>
@@ -1946,6 +2218,18 @@ function RequestTable() {
               >
                 Save Changes
               </button>
+
+              {canCompleteSavedDraft(editingRequest) && (
+                <button
+                  className="approve-btn"
+                  disabled={updatingId === editingRequest.id}
+                  onClick={saveAndSubmitDraft}
+                >
+                  {updatingId === editingRequest.id
+                    ? "Submitting..."
+                    : "Save and Submit Draft"}
+                </button>
+              )}
 
               {editingRequest.final_status === "amended" && (
                 <button

@@ -1,4 +1,6 @@
 
+import ministryLogo from '../assets/ministry-logo.png';
+
 function Topbar({ handleLogout }) {
 
   const user =
@@ -20,6 +22,8 @@ function Topbar({ handleLogout }) {
       protocol: 'Protocol',
 
       pm_office: 'PM Office',
+
+      director_general: 'Director General',
 
       office_head:
         'Office Head',
@@ -52,14 +56,29 @@ function Topbar({ handleLogout }) {
 
       <div className="topbar-left">
 
-        <div className="system-title">
-          MoA Foreign Travel Management System
+        <div className="topbar-logo-tile" aria-hidden="true">
+          <img src={ministryLogo} alt="" />
         </div>
 
-        <div className="system-subtitle">
-          Ministry of Agriculture Foreign Travel Registration Platform
+        <div className="topbar-title-block">
+
+          <div className="system-title">
+            MoA Foreign Travel Management System
+          </div>
+
+          <div className="system-subtitle">
+            Ministry of Agriculture Foreign Travel Registration Platform
+          </div>
+
         </div>
 
+      </div>
+
+      <div className="ethiopia-flag-float" aria-label="Ethiopia">
+        <span className="flag-band green"></span>
+        <span className="flag-band yellow"></span>
+        <span className="flag-band red"></span>
+        <span className="flag-star">★</span>
       </div>
 
       <div className="topbar-right">

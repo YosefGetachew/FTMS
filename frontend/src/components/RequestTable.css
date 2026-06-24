@@ -108,6 +108,47 @@
   font-size: 12.5px;
 }
 
+.request-dashboard-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.request-dashboard-filter span {
+  display: block;
+  margin-bottom: 2px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.request-dashboard-filter strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.request-dashboard-filter button {
+  border: 1px solid #93c5fd;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.request-dashboard-filter button:hover {
+  background: #dbeafe;
+}
+
 .request-section-card {
   margin-top: 12px;
   border: 1px solid #e2e8f0;
@@ -329,12 +370,85 @@
   transform: translateY(-1px);
 }
 
+.protocol-decision-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  gap: 7px;
+  min-width: 260px;
+}
+
+.protocol-decision-card {
+  min-height: 58px;
+  padding: 8px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+
+.protocol-decision-card span {
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.protocol-decision-card small {
+  color: #475569;
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+
+.protocol-decision-card.no-pm {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.protocol-decision-card.need-pm {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.protocol-decision-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.protocol-amend-btn {
+  grid-column: 1 / -1;
+  min-height: 34px;
+}
+
 .request-empty-cell {
   border-bottom: 0 !important;
 }
 
 .request-history-header {
   padding: 14px 0 0;
+}
+
+.request-history-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.request-history-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 760;
 }
 
 .request-history-header .search-input {
@@ -382,5 +496,88 @@
 
   .request-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .request-table-scroll {
+    overflow: visible;
+  }
+
+  .request-table-page table,
+  .request-table-page thead,
+  .request-table-page tbody,
+  .request-table-page tr,
+  .request-table-page td {
+    display: block;
+    width: 100%;
+  }
+
+  .request-table-page thead {
+    display: none;
+  }
+
+  .request-table-page tbody {
+    display: grid;
+    gap: 12px;
+    padding: 10px;
+  }
+
+  .request-table-page tr {
+    border: 1px solid #dbe7ef;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+    overflow: hidden;
+  }
+
+  .request-table-page table td {
+    display: grid;
+    grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    padding: 9px 12px;
+    border-bottom: 1px solid #edf2f7;
+    font-size: 12.5px;
+  }
+
+  .request-table-page table td::before {
+    content: attr(data-label);
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .request-table-page table td:last-child {
+    border-bottom: 0;
+  }
+
+  .request-select-col {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .request-action-group {
+    max-width: none;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .protocol-decision-panel {
+    min-width: 0;
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .request-action-group .action-icon-btn,
+  .request-action-group .action-wide-btn {
+    min-height: 38px;
+    width: 100%;
+  }
+
+  .request-traveler-cell strong,
+  .request-structure-cell strong {
+    max-width: none;
   }
 }

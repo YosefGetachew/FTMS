@@ -200,30 +200,69 @@ function DashboardStats({ setActivePage }) {
     [role, user]
   );
 
+  const goToSubmittedRequests = (filter = null) => {
+    if (!setActivePage) return;
+
+    if (filter) {
+      sessionStorage.setItem("ftmsRequestViewFilter", JSON.stringify(filter));
+    } else {
+      sessionStorage.removeItem("ftmsRequestViewFilter");
+    }
+
+    setActivePage("submitted-requests");
+  };
+
+  const canOpenQueue = Boolean(setActivePage);
+
+  const handleMetricKeyDown = (event, onClick) => {
+    if (!onClick) return;
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onClick();
+    }
+  };
+
   const kpis = [
     {
       label: "Total Requests",
       value: analytics.total,
       detail: "All travel requests recorded",
       tone: "blue",
+      meter: 100,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "all", label: "Total Requests" })
+        : null,
     },
     {
       label: "Approved",
       value: analytics.approved,
       detail: `${analytics.approvalRate}% of completed decisions`,
       tone: "green",
+      meter: analytics.approvalRate,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "historical", status: "approved", label: "Approved Requests" })
+        : null,
     },
     {
       label: "Pending",
       value: analytics.pending,
       detail: `${analytics.pendingShare}% of total requests`,
       tone: "amber",
+      meter: analytics.pendingShare,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "active", status: "pending", label: "Pending Requests" })
+        : null,
     },
     {
       label: "Rejected",
       value: analytics.rejected,
       detail: `${analytics.rejectionRate}% of completed decisions`,
       tone: "rose",
+      meter: analytics.rejectionRate,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "historical", status: "rejected", label: "Rejected Requests" })
+        : null,
     },
   ];
 
@@ -233,32 +272,50 @@ function DashboardStats({ setActivePage }) {
       value: analytics.requestTypeCounts.projectStaff,
       detail: "Requests from registered MoA projects",
       tone: "blue",
+      meter: analytics.total
+        ? Math.round((analytics.requestTypeCounts.projectStaff / analytics.total) * 100)
+        : 0,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "all", travelerCategory: "project", label: "Project Staff Requests" })
+        : null,
     },
     {
       label: "Advisors",
       value: analytics.requestTypeCounts.advisor,
       detail: "Advisor requests under MoA structures",
       tone: "green",
+      meter: analytics.total
+        ? Math.round((analytics.requestTypeCounts.advisor / analytics.total) * 100)
+        : 0,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "all", travelerCategory: "advisor", label: "Advisor Requests" })
+        : null,
     },
     {
       label: "Staff under Lead Executive",
       value: analytics.requestTypeCounts.leadExecutiveStaff,
       detail: "Regular MoA staff requests",
       tone: "amber",
+      meter: analytics.total
+        ? Math.round((analytics.requestTypeCounts.leadExecutiveStaff / analytics.total) * 100)
+        : 0,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "all", travelerCategory: "lead_executive_staff", label: "Staff under Lead Executive Requests" })
+        : null,
     },
     {
       label: "Affiliate Institute",
       value: analytics.requestTypeCounts.affiliateInstitute,
       detail: "Affiliate organization requests",
       tone: "rose",
+      meter: analytics.total
+        ? Math.round((analytics.requestTypeCounts.affiliateInstitute / analytics.total) * 100)
+        : 0,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "all", travelerCategory: "affiliate_institution", label: "Affiliate Institute Requests" })
+        : null,
     },
   ];
-
-  const goToSubmittedRequests = () => {
-    if (role !== "traveler" && setActivePage) {
-      setActivePage("submitted-requests");
-    }
-  };
 
   const actionCards = [
     {
@@ -285,6 +342,33 @@ function DashboardStats({ setActivePage }) {
   ].filter((item) => item.show);
 
   const chartColors = ["#1d4ed8", "#15803d", "#b45309", "#7c3aed", "#0369a1"];
+
+  const renderMetricCard = (item) => {
+    const clickable = Boolean(item.onClick);
+    const meterValue = Math.max(0, Math.min(100, Number(item.meter || 0)));
+
+    return (
+      <div
+        key={item.label}
+        className={`dashboard-kpi-card ${item.tone} ${clickable ? "interactive" : ""}`}
+        role={clickable ? "button" : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        onClick={clickable ? item.onClick : undefined}
+        onKeyDown={(event) => handleMetricKeyDown(event, item.onClick)}
+      title={clickable ? "Open related view" : undefined}
+      >
+        <div className="dashboard-kpi-topline">
+          <span>{item.label}</span>
+          {clickable && <em>Open</em>}
+        </div>
+        <strong>{loading ? "-" : item.value}</strong>
+        <small>{item.detail}</small>
+        <div className="dashboard-kpi-meter" aria-hidden="true">
+          <i style={{ width: `${meterValue}%` }} />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="dashboard-page">
@@ -328,14 +412,25 @@ function DashboardStats({ setActivePage }) {
         </div>
       </div>
 
-      <div className="dashboard-kpi-grid">
-        {kpis.map((item) => (
-          <div key={item.label} className={`dashboard-kpi-card ${item.tone}`}>
-            <span>{item.label}</span>
-            <strong>{loading ? "-" : item.value}</strong>
-            <small>{item.detail}</small>
+      {actionCards.length > 0 && (
+        <div className="dashboard-next-actions">
+          <div>
+            <span>Next Actions</span>
+            <strong>Jump directly to your daily work</strong>
           </div>
-        ))}
+
+          <div className="dashboard-next-action-buttons">
+            {actionCards.map((item) => (
+              <button type="button" key={item.title} onClick={item.onClick}>
+                {item.action}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="dashboard-kpi-grid">
+        {kpis.map(renderMetricCard)}
       </div>
 
       <div className="dashboard-panel" style={{ marginBottom: "24px" }}>
@@ -347,13 +442,7 @@ function DashboardStats({ setActivePage }) {
         </div>
 
         <div className="dashboard-kpi-grid">
-          {structureCounts.map((item) => (
-            <div key={item.label} className={`dashboard-kpi-card ${item.tone}`}>
-              <span>{item.label}</span>
-              <strong>{loading ? "-" : item.value}</strong>
-              <small>{item.detail}</small>
-            </div>
-          ))}
+          {structureCounts.map(renderMetricCard)}
         </div>
       </div>
 

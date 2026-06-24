@@ -90,6 +90,26 @@ textarea {
 
 .main-content {
   background: transparent;
+  position: relative;
+  isolation: isolate;
+}
+
+.main-content::before {
+  content: "";
+  position: fixed;
+  inset: 70px 0 0 286px;
+  background-image: url("./assets/ministry-logo.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: min(54vw, 700px);
+  opacity: 0.065;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.main-content > * {
+  position: relative;
+  z-index: 1;
 }
 
 .form-container,
@@ -151,6 +171,37 @@ a:hover {
     linear-gradient(90deg, var(--brand-900), var(--brand-700));
   border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 8px 22px rgba(6, 63, 53, 0.16);
+  gap: 16px;
+  overflow: hidden;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.topbar-logo-tile {
+  width: 46px;
+  height: 46px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.16);
+  flex: 0 0 auto;
+}
+
+.topbar-logo-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.topbar-title-block {
+  min-width: 0;
 }
 
 .system-title {
@@ -161,6 +212,64 @@ a:hover {
 .system-subtitle {
   color: rgba(255, 255, 255, 0.78);
   font-size: 0.78rem;
+}
+
+.ethiopia-flag-float {
+  position: absolute;
+  left: min(720px, 50%);
+  top: 50%;
+  width: 74px;
+  height: 42px;
+  transform: translate(-50%, -50%) rotate(-2deg);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 7px;
+  box-shadow: 0 14px 24px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+}
+
+.ethiopia-flag-float::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(120deg, rgba(255,255,255,0.32), transparent 42%),
+    radial-gradient(circle at 78% 10%, rgba(255,255,255,0.32), transparent 32%);
+}
+
+.flag-band {
+  display: block;
+  height: 33.333%;
+}
+
+.flag-band.green {
+  background: #078930;
+}
+
+.flag-band.yellow {
+  background: #fcd116;
+}
+
+.flag-band.red {
+  background: #da121a;
+}
+
+.flag-star {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #0f47af;
+  color: #fcd116;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  line-height: 1;
+  z-index: 1;
 }
 
 .user-avatar {
@@ -512,15 +621,54 @@ table tbody tr:hover {
 ============================================================ */
 
 .login-page {
+  position: relative;
+  isolation: isolate;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(245, 247, 251, 0.98)),
     var(--canvas);
+  overflow: hidden;
+}
+
+.login-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: url("./assets/ministry-logo.png");
+  background-repeat: no-repeat;
+  background-position: 72% 50%;
+  background-size: min(44vw, 640px);
+  opacity: 0.07;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .login-left {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   background:
     linear-gradient(145deg, rgba(6, 63, 53, 0.96), rgba(15, 118, 110, 0.93)),
     radial-gradient(circle at top right, rgba(255, 255, 255, 0.14), transparent 34%);
+}
+
+.login-left::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("./assets/ministry-logo.png");
+  background-repeat: no-repeat;
+  background-position: 54% 54%;
+  background-size: min(44vw, 620px);
+  filter: grayscale(1) brightness(0) invert(1);
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.login-left > *,
+.login-right {
+  position: relative;
+  z-index: 1;
 }
 
 .ministry-brand h1,
@@ -619,6 +767,10 @@ table tbody tr:hover {
   .sidebar {
     width: 270px;
   }
+
+  .main-content::before {
+    left: 270px;
+  }
 }
 
 @media (max-width: 900px) {
@@ -637,12 +789,35 @@ table tbody tr:hover {
 
   .topbar {
     position: relative;
+    flex-wrap: wrap;
+  }
+
+  .ethiopia-flag-float {
+    display: none;
   }
 
   .sidebar {
     width: 100%;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .main-content::before {
+    inset: 72px 0 0 0;
+    background-size: min(78vw, 520px);
+    opacity: 0.05;
+  }
+
+  .login-page::before {
+    background-position: center 58%;
+    background-size: min(76vw, 520px);
+    opacity: 0.055;
+  }
+
+  .login-left::before {
+    background-position: center;
+    background-size: min(82vw, 500px);
+    opacity: 0.07;
   }
 }
 
@@ -666,6 +841,11 @@ table tbody tr:hover {
 
   .topbar {
     padding: 12px;
+  }
+
+  .topbar-logo-tile {
+    width: 40px;
+    height: 40px;
   }
 
   .topbar-right,
