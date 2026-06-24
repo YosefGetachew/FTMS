@@ -21,7 +21,9 @@ function Notifications() {
     setLoading(true);
     setError('');
     try {
-      const response = await API.get(`/notifications/${user.email}`);
+      const response = await API.get('/notifications', {
+        params: { email: user.email },
+      });
       setNotifications(response.data || []);
     } catch (error) {
       console.error('Notification Error:', error);

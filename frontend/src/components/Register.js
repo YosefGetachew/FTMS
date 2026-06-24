@@ -2,6 +2,23 @@ import { useEffect, useMemo, useState } from 'react';
 import API from '../services/api';
 import './Login.css';
 
+const existingAccountResetMessage =
+  'This email is already registered in FTMS. Please use the secure password reset link instead of creating a new account.';
+
+const getRegistrationErrorMessage = (err) => {
+  const serverCode = err.response?.data?.code;
+  const serverMessage = err.response?.data?.error || err.response?.data?.message;
+
+  if (
+    serverCode === 'ACCOUNT_ALREADY_EXISTS' ||
+    /already registered/i.test(serverMessage || '')
+  ) {
+    return existingAccountResetMessage;
+  }
+
+  return serverMessage || 'Registration failed. Please try again.';
+};
+
 function Register({ setActiveAuthPage }) {
   const [formData, setFormData] = useState({
     fullName: '',
@@ -28,6 +45,8 @@ function Register({ setActiveAuthPage }) {
   const [loadingExecutiveOffices, setLoadingExecutiveOffices] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [passwordResetPrompt, setPasswordResetPrompt] = useState(null);
+  const [sendingResetRequest, setSendingResetRequest] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -296,16 +315,83 @@ function Register({ setActiveAuthPage }) {
       setExecutiveOffices([]);
     } catch (err) {
       console.error(err);
-      setError(
-        err.response?.data?.error || 'Registration failed. Please try again.'
-      );
+      const serverCode = err.response?.data?.code;
+      const serverMessage = err.response?.data?.error || err.response?.data?.message;
+
+      if (
+        serverCode === 'ACCOUNT_ALREADY_EXISTS' ||
+        /already registered/i.test(serverMessage || '')
+      ) {
+        setError('');
+        setPasswordResetPrompt({
+          email: formData.email.trim(),
+          message: getRegistrationErrorMessage(err),
+        });
+      } else {
+        setError(getRegistrationErrorMessage(err));
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  const sendPasswordResetRequest = async () => {
+    if (!passwordResetPrompt?.email || sendingResetRequest) return;
+
+    try {
+      setSendingResetRequest(true);
+      const response = await API.post('/password-reset-request', {
+        email: passwordResetPrompt.email,
+      });
+
+      setMessage(
+        response.data?.message ||
+          'If an active FTMS account exists for this email, a password reset link has been sent.'
+      );
+      setPasswordResetPrompt(null);
+    } catch (err) {
+      console.error(err);
+      setError(
+        err.response?.data?.error ||
+          'Unable to send password reset link. Please try again.'
+      );
+      setPasswordResetPrompt(null);
+    } finally {
+      setSendingResetRequest(false);
+    }
+  };
+
   return (
     <div className="login-page register-page">
+      {passwordResetPrompt && (
+        <div className="auth-modal-overlay" role="dialog" aria-modal="true">
+          <div className="auth-modal-card">
+            <span className="auth-modal-kicker">Account already exists</span>
+            <h2>Password reset required</h2>
+            <p>{passwordResetPrompt.message}</p>
+            <div className="auth-modal-email">{passwordResetPrompt.email}</div>
+            <div className="auth-modal-actions">
+              <button
+                type="button"
+                className="auth-modal-secondary"
+                onClick={() => setPasswordResetPrompt(null)}
+                disabled={sendingResetRequest}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="auth-modal-primary"
+                onClick={sendPasswordResetRequest}
+                disabled={sendingResetRequest}
+              >
+                {sendingResetRequest ? 'Sending...' : 'Send Password Reset Link'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="login-left">
         <div className="ministry-brand">
           <img

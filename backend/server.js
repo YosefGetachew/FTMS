@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const upload = require('./middleware/upload');
 const transporter = require('./config/email');
@@ -135,6 +136,8 @@ const APPROVER_ROLES = [
 /* ── Helpers ─────────────────────────────────────────────── */
 
 const normalizeEmail = (e) => String(e || '').trim().toLowerCase();
+const hashResetToken = (token) =>
+  crypto.createHash('sha256').update(String(token || '')).digest('hex');
 
 const authenticateUser = (req, res, next) => {
   const header = req.headers.authorization || '';
@@ -830,8 +833,16 @@ const getNextStageAfterApproval = (stage, request = {}) => {
   if (stage === STAGES.CEO_REVIEW) return STAGES.PROTOCOL_CLEARANCE;
   if (stage === STAGES.OFFICE_HEAD_REVIEW) return STAGES.PROTOCOL_CLEARANCE;
   if (stage === STAGES.PROTOCOL_CLEARANCE) return STAGES.OFFICE_HEAD_FINAL;
-  if (stage === STAGES.OFFICE_HEAD_FINAL) return STAGES.MINISTER_REVIEW;
-  if (stage === STAGES.MINISTER_REVIEW) return STAGES.PM_OFFICE_SUBMISSION;
+  if (stage === STAGES.OFFICE_HEAD_FINAL) {
+    return request.pm_approval_required === false
+      ? STAGES.COMPLETED
+      : STAGES.PM_OFFICE_SUBMISSION;
+  }
+  if (stage === STAGES.MINISTER_REVIEW) {
+    return request.pm_approval_required === false
+      ? STAGES.COMPLETED
+      : STAGES.PM_OFFICE_SUBMISSION;
+  }
   if (stage === STAGES.PM_OFFICE_SUBMISSION) return STAGES.PM_OFFICE;
 
   return stage;
@@ -839,17 +850,28 @@ const getNextStageAfterApproval = (stage, request = {}) => {
 
 const getWorkflowStagesForRequest = (request = {}) => {
   const workflow = normalizeWorkflow(request.workflow_type);
+  const showPmOfficeStages =
+    request.pm_approval_required !== false ||
+    [STAGES.PM_OFFICE_SUBMISSION, STAGES.PM_OFFICE].includes(
+      request.current_stage
+    ) ||
+    String(request.status || '').toLowerCase().includes('pm office');
 
   if (request.traveler_category === 'affiliate_institution') {
-    return [
+    const stages = [
       STAGES.EXPERT_PREPARATION,
       STAGES.OFFICE_HEAD_REVIEW,
       STAGES.PROTOCOL_CLEARANCE,
       STAGES.OFFICE_HEAD_FINAL,
-      STAGES.PM_OFFICE_SUBMISSION,
-      STAGES.PM_OFFICE,
-      STAGES.COMPLETED,
     ];
+
+    if (showPmOfficeStages) {
+      stages.push(STAGES.PM_OFFICE_SUBMISSION, STAGES.PM_OFFICE);
+    }
+
+    stages.push(STAGES.COMPLETED);
+
+    return stages;
   }
 
   const stages = [
@@ -857,12 +879,13 @@ const getWorkflowStagesForRequest = (request = {}) => {
   ];
 
   if (workflow === WORKFLOW.MINISTER && request.traveler_category !== 'advisor') {
-    stages.push(
-      STAGES.MINISTER_REVIEW,
-      STAGES.PM_OFFICE_SUBMISSION,
-      STAGES.PM_OFFICE,
-      STAGES.COMPLETED
-    );
+    stages.push(STAGES.MINISTER_REVIEW);
+
+    if (showPmOfficeStages) {
+      stages.push(STAGES.PM_OFFICE_SUBMISSION, STAGES.PM_OFFICE);
+    }
+
+    stages.push(STAGES.COMPLETED);
 
     return stages;
   }
@@ -891,11 +914,11 @@ const getWorkflowStagesForRequest = (request = {}) => {
     stages.push(STAGES.MINISTER_REVIEW);
   }
 
-  stages.push(
-    STAGES.PM_OFFICE_SUBMISSION,
-    STAGES.PM_OFFICE,
-    STAGES.COMPLETED
-  );
+  if (showPmOfficeStages) {
+    stages.push(STAGES.PM_OFFICE_SUBMISSION, STAGES.PM_OFFICE);
+  }
+
+  stages.push(STAGES.COMPLETED);
 
   return stages;
 };
@@ -1334,6 +1357,8 @@ const accountEmail = (user, activated) =>
     await query(`
       ALTER TABLE requests
         ADD COLUMN IF NOT EXISTS sector VARCHAR(150),
+        ADD COLUMN IF NOT EXISTS pm_approval_required BOOLEAN,
+        ADD COLUMN IF NOT EXISTS funding_source_type VARCHAR(50),
         ADD COLUMN IF NOT EXISTS amendment_comment TEXT,
         ADD COLUMN IF NOT EXISTS amended_by VARCHAR(100),
         ADD COLUMN IF NOT EXISTS workflow_type VARCHAR(50) DEFAULT 'office_head_structure',
@@ -1410,6 +1435,27 @@ const accountEmail = (user, activated) =>
         new_status VARCHAR(80),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        token_hash VARCHAR(128) NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id
+      ON password_reset_tokens(user_id)
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires_at
+      ON password_reset_tokens(expires_at)
     `);
 
     await query(`
@@ -1646,12 +1692,16 @@ app.post('/api/register', async (req, res) => {
     const ne = normalizeEmail(email);
 
     const existing = await query(
-      `SELECT id FROM users WHERE LOWER(TRIM(email))=$1`,
+      `SELECT id, role, account_status FROM users WHERE LOWER(TRIM(email))=$1`,
       [ne]
     );
 
     if (existing.rows.length) {
-      return res.status(400).json({ error: 'Email already registered.' });
+      return res.status(409).json({
+        code: 'ACCOUNT_ALREADY_EXISTS',
+        error:
+          'This email is already registered in FTMS. Please request a password reset from the system administrator instead of creating a new account.',
+      });
     }
 
     const hashed = await bcrypt.hash(password, 10);
@@ -1692,6 +1742,189 @@ app.post('/api/register', async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/password-reset-request', async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email || '');
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required.' });
+    }
+
+    const genericMessage =
+      'If an active FTMS account exists for this email, a password reset link has been sent.';
+
+    const account = (
+      await query(
+        `SELECT id, full_name, email, role, account_status, is_active
+         FROM users
+         WHERE LOWER(TRIM(email))=$1`,
+        [email]
+      )
+    ).rows[0];
+
+    if (
+      !account ||
+      account.is_active === false ||
+      account.account_status === 'rejected'
+    ) {
+      return res.json({ message: genericMessage });
+    }
+
+    await query(
+      `UPDATE password_reset_tokens
+       SET used_at=CURRENT_TIMESTAMP
+       WHERE user_id=$1 AND used_at IS NULL`,
+      [account.id]
+    );
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashResetToken(resetToken);
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
+
+    await query(
+      `INSERT INTO password_reset_tokens(user_id, token_hash, expires_at)
+       VALUES($1,$2,$3)`,
+      [account.id, tokenHash, expiresAt]
+    );
+
+    const resetBaseUrl = req.get('origin') || FRONTEND_URL;
+    const resetUrl = `${resetBaseUrl.replace(/\/$/, '')}/?resetToken=${resetToken}`;
+
+    await sendEmailSafe(
+      {
+        from: EMAIL_FROM,
+        to: account.email,
+        subject: 'FTMS password reset',
+        html: `
+          <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+            <h2 style="margin:0 0 12px;color:#0f766e">Reset your FTMS password</h2>
+            <p>Hello ${account.full_name || 'FTMS user'},</p>
+            <p>We received a request to reset your FTMS password. Use the secure link below to choose a new password. The link expires in 30 minutes.</p>
+            <p style="margin:22px 0">
+              <a href="${resetUrl}" style="display:inline-block;background:#0f766e;color:#ffffff;text-decoration:none;padding:11px 16px;border-radius:8px;font-weight:700">
+                Reset Password
+              </a>
+            </p>
+            <p>If the button does not work, copy and paste this link into your browser:</p>
+            <p style="word-break:break-all;color:#1d4ed8">${resetUrl}</p>
+            <p>If you did not request this reset, you can ignore this email.</p>
+          </div>
+        `,
+      },
+      'PASSWORD RESET EMAIL ERROR'
+    );
+
+    res.json({ message: genericMessage });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/password-reset/validate', async (req, res) => {
+  try {
+    const token = String(req.query?.token || '');
+
+    if (!token) {
+      return res.status(400).json({ error: 'Reset token is required.' });
+    }
+
+    const tokenHash = hashResetToken(token);
+    const r = await query(
+      `SELECT prt.id, prt.expires_at, prt.used_at, u.email
+       FROM password_reset_tokens prt
+       JOIN users u ON u.id=prt.user_id
+       WHERE prt.token_hash=$1
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    const record = r.rows[0];
+
+    if (
+      !record ||
+      record.used_at ||
+      new Date(record.expires_at).getTime() < Date.now()
+    ) {
+      return res.status(400).json({
+        error: 'This password reset link is invalid or has expired.',
+      });
+    }
+
+    res.json({ email: record.email });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/password-reset/confirm', async (req, res) => {
+  let client;
+
+  try {
+    const token = String(req.body?.token || '');
+    const newPassword = String(req.body?.newPassword || '');
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        error: 'Reset token and new password are required.',
+      });
+    }
+
+    const passwordError = validatePasswordStrength(newPassword);
+
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
+    }
+
+    const tokenHash = hashResetToken(token);
+    const r = await query(
+      `SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at
+       FROM password_reset_tokens prt
+       WHERE prt.token_hash=$1
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    const record = r.rows[0];
+
+    if (
+      !record ||
+      record.used_at ||
+      new Date(record.expires_at).getTime() < Date.now()
+    ) {
+      return res.status(400).json({
+        error: 'This password reset link is invalid or has expired.',
+      });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+    await client.query(`UPDATE users SET password=$1 WHERE id=$2`, [
+      hashed,
+      record.user_id,
+    ]);
+    await client.query(
+      `UPDATE password_reset_tokens
+       SET used_at=CURRENT_TIMESTAMP
+       WHERE user_id=$1 AND used_at IS NULL`,
+      [record.user_id]
+    );
+    await client.query('COMMIT');
+
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (e) {
+    if (client) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+    res.status(500).json({ error: e.message });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
@@ -1783,6 +2016,7 @@ app.post('/api/requests', uploadFields, async (req, res) => {
       startDate,
       endDate,
       purpose,
+      fundingSourceType,
       sponsor,
       passportNumber,
       email,
@@ -1826,6 +2060,7 @@ app.post('/api/requests', uploadFields, async (req, res) => {
         start_date,
         end_date,
         purpose,
+        funding_source_type,
         sponsor,
         passport_number,
         email,
@@ -1836,7 +2071,7 @@ app.post('/api/requests', uploadFields, async (req, res) => {
         status,
         foreign_affairs_status
       )
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
       RETURNING *`,
       [
         cleanTravelerCategory,
@@ -1852,7 +2087,8 @@ app.post('/api/requests', uploadFields, async (req, res) => {
         startDate,
         endDate,
         purpose || null,
-        sponsor || null,
+        fundingSourceType || null,
+        fundingSourceType === 'government' ? sponsor || 'Government' : sponsor || null,
         passportNumber || null,
         ne,
         normalizePhone(phone),
@@ -1950,6 +2186,7 @@ const ROLE_QUERIES = {
            OR r.traveler_category='affiliate_institution'
          )
        )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR r.final_status IN ('approved','rejected')
     ORDER BY CASE WHEN r.current_stage IN ('office_head_review','office_head_final') AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 
@@ -2053,6 +2290,7 @@ const ROLE_QUERIES = {
 
   protocol: `${BASE_SELECT}
     WHERE (r.current_stage IN ('protocol_clearance','pm_office_submission') AND r.final_status='pending')
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (
@@ -2066,10 +2304,12 @@ const ROLE_QUERIES = {
 
   pm_office: `${BASE_SELECT}
     WHERE (r.current_stage IN ('pm_office_followup','foreign_affairs_followup') AND r.final_status='pending')
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
     ORDER BY CASE WHEN r.current_stage IN ('pm_office_followup','foreign_affairs_followup') AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 
   minister: `${BASE_SELECT}
     WHERE (r.current_stage='minister_review' AND r.final_status='pending')
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR r.final_status IN ('approved','rejected')
     ORDER BY CASE WHEN r.current_stage='minister_review' AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 };
@@ -2089,6 +2329,8 @@ const EMAIL_SCOPED_REQUEST_ROLES = [
   'director_general',
   'office_head',
   'protocol',
+  'pm_office',
+  'minister',
 ];
 
 app.get('/api/requests', async (req, res) => {
@@ -2127,6 +2369,7 @@ app.put('/api/requests/:id', uploadFields, async (req, res) => {
       startDate,
       endDate,
       purpose,
+      fundingSourceType,
       sponsor,
       passportNumber,
     } = req.body;
@@ -2146,12 +2389,13 @@ app.put('/api/requests/:id', uploadFields, async (req, res) => {
         start_date=COALESCE($11,start_date),
         end_date=COALESCE($12,end_date),
         purpose=COALESCE($13,purpose),
-        sponsor=COALESCE($14,sponsor),
-        passport_number=COALESCE($15,passport_number),
-        passport_file=COALESCE($16,passport_file),
-        invitation_letter=COALESCE($17,invitation_letter),
-        tor_file=COALESCE($18,tor_file)
-       WHERE id=$19
+        funding_source_type=COALESCE($14,funding_source_type),
+        sponsor=COALESCE($15,sponsor),
+        passport_number=COALESCE($16,passport_number),
+        passport_file=COALESCE($17,passport_file),
+        invitation_letter=COALESCE($18,invitation_letter),
+        tor_file=COALESCE($19,tor_file)
+       WHERE id=$20
        RETURNING *`,
       [
         travelerCategory || null,
@@ -2167,7 +2411,8 @@ app.put('/api/requests/:id', uploadFields, async (req, res) => {
         startDate || null,
         endDate || null,
         purpose || null,
-        sponsor || null,
+        fundingSourceType || null,
+        fundingSourceType === 'government' ? sponsor || 'Government' : sponsor || null,
         passportNumber || null,
         req.files?.passportFile?.[0]?.filename || null,
         req.files?.invitationLetter?.[0]?.filename || null,
@@ -2198,6 +2443,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
       actorEmail,
       actorId,
       foreignAffairsComment,
+      pmApprovalRequired,
     } = req.body;
 
     const act = String(action || status || '').trim();
@@ -2255,6 +2501,10 @@ app.put('/api/requests/:id/status', async (req, res) => {
     let faStatus = existing.foreign_affairs_status || 'pending';
     let faUpdated = existing.foreign_affairs_updated_at || null;
     let faComment = existing.foreign_affairs_comment || null;
+    let pmRequired =
+      typeof existing.pm_approval_required === 'boolean'
+        ? existing.pm_approval_required
+        : existing.pm_approval_required;
 
     const cur = existing.current_stage;
 
@@ -2345,12 +2595,18 @@ app.put('/api/requests/:id/status', async (req, res) => {
 
         [STAGES.OFFICE_HEAD_FINAL]: {
           roles: ['office_head', 'admin', 'super_admin'],
-          next: STAGES.PM_OFFICE_SUBMISSION,
+          next:
+            existing.pm_approval_required === false
+              ? STAGES.COMPLETED
+              : STAGES.PM_OFFICE_SUBMISSION,
         },
 
         [STAGES.MINISTER_REVIEW]: {
           roles: ['minister', 'admin', 'super_admin'],
-          next: STAGES.PM_OFFICE_SUBMISSION,
+          next:
+            existing.pm_approval_required === false
+              ? STAGES.COMPLETED
+              : STAGES.PM_OFFICE_SUBMISSION,
         },
       };
 
@@ -2373,15 +2629,24 @@ app.put('/api/requests/:id/status', async (req, res) => {
         existing,
         actor
       );
-      finalStatus = STATUS.PENDING;
-      displayStatus =
-        nextStage === STAGES.PM_OFFICE_SUBMISSION
-          ? cur === STAGES.OFFICE_HEAD_FINAL
+      finalStatus =
+        nextStage === STAGES.COMPLETED ? STATUS.APPROVED : STATUS.PENDING;
+
+      if (nextStage === STAGES.PM_OFFICE_SUBMISSION) {
+        displayStatus =
+          cur === STAGES.OFFICE_HEAD_FINAL
             ? 'Office Head Approved - Sent to Protocol for PM Office Submission'
-            : 'Minister Approved - Sent to Protocol for PM Office Submission'
-          : `Approved by ${role
-              .replace(/_/g, ' ')
-              .replace(/\b\w/g, (c) => c.toUpperCase())}`;
+            : 'Minister Approved - Sent to Protocol for PM Office Submission';
+      } else if (nextStage === STAGES.COMPLETED) {
+        displayStatus =
+          cur === STAGES.OFFICE_HEAD_FINAL
+            ? 'Approved by Office Head'
+            : 'Approved by Minister';
+      } else {
+        displayStatus = `Approved by ${role
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase())}`;
+      }
     }
 
     else if (act === 'reject') {
@@ -2426,9 +2691,18 @@ app.put('/api/requests/:id/status', async (req, res) => {
         });
       }
 
+      if (typeof pmApprovalRequired !== 'boolean') {
+        return res.status(400).json({
+          error: 'Protocol must choose whether PM Office approval is required.',
+        });
+      }
+
       nextStage = STAGES.OFFICE_HEAD_FINAL;
       finalStatus = STATUS.PENDING;
-      displayStatus = 'Cleared by Protocol';
+      pmRequired = pmApprovalRequired;
+      displayStatus = pmApprovalRequired
+        ? 'Cleared by Protocol - PM Approval Required'
+        : 'Cleared by Protocol - No PM Approval Required';
     }
 
     else if (act === 'amend') {
@@ -2558,8 +2832,9 @@ app.put('/api/requests/:id/status', async (req, res) => {
         last_decision_at=NOW(),
         foreign_affairs_status=$8,
         foreign_affairs_comment=COALESCE($9,foreign_affairs_comment),
-        foreign_affairs_updated_at=COALESCE($10,foreign_affairs_updated_at)
-       WHERE id=$11
+        foreign_affairs_updated_at=COALESCE($10,foreign_affairs_updated_at),
+        pm_approval_required=COALESCE($11,pm_approval_required)
+       WHERE id=$12
        RETURNING *`,
       [
         displayStatus,
@@ -2572,6 +2847,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
         faStatus,
         faComment,
         faUpdated,
+        typeof pmRequired === 'boolean' ? pmRequired : null,
         id,
       ]
     );
@@ -3750,6 +4026,29 @@ app.get('/api/reports/stage-summary', async (_req, res) => {
       FROM requests
       GROUP BY 1
       ORDER BY 1
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/reports/funding-summary', async (_req, res) => {
+  try {
+    const r = await query(`
+      SELECT
+        CASE
+          WHEN funding_source_type='government' THEN 'Government'
+          WHEN funding_source_type='non_government' THEN 'Non-government'
+          WHEN LOWER(COALESCE(sponsor,'')) LIKE '%government%' THEN 'Government'
+          WHEN COALESCE(sponsor,'') <> '' THEN 'Non-government'
+          ELSE 'Not specified'
+        END AS name,
+        COUNT(*)::int AS count
+      FROM requests
+      GROUP BY 1
+      ORDER BY count DESC, name
     `);
 
     res.json(r.rows);

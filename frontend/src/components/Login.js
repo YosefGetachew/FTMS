@@ -1,16 +1,55 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import API from '../services/api';
 import './Login.css';
 
 function Login({ setIsLoggedIn, setActiveAuthPage }) {
+  const resetToken = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('resetToken') || '';
+  }, []);
+
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
 
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetForm, setResetForm] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+
+  useEffect(() => {
+    if (!resetToken) return;
+
+    const validateResetToken = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const response = await API.get('/password-reset/validate', {
+          params: { token: resetToken },
+        });
+        setResetEmail(response.data?.email || '');
+      } catch (err) {
+        console.error(err);
+        setError(
+          err.response?.data?.error ||
+            'This password reset link is invalid or has expired.'
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    validateResetToken();
+  }, [resetToken]);
 
   const handleChange = (e) => {
     setFormData({
@@ -19,6 +58,77 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
     });
 
     setError('');
+    setMessage('');
+  };
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!forgotEmail.trim()) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+      setMessage('');
+
+      const response = await API.post('/password-reset-request', {
+        email: forgotEmail.trim(),
+      });
+
+      setMessage(
+        response.data?.message ||
+          'If an active FTMS account exists for this email, a password reset link has been sent.'
+      );
+      setForgotEmail('');
+    } catch (err) {
+      console.error(err);
+      setError(
+        err.response?.data?.error ||
+          'Unable to send password reset link. Please try again.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!resetForm.newPassword || !resetForm.confirmPassword) {
+      setError('Please enter and confirm your new password.');
+      return;
+    }
+
+    if (resetForm.newPassword !== resetForm.confirmPassword) {
+      setError('New password and confirmation do not match.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+      setMessage('');
+
+      const response = await API.post('/password-reset/confirm', {
+        token: resetToken,
+        newPassword: resetForm.newPassword,
+      });
+
+      setMessage(response.data?.message || 'Password reset successfully.');
+      setResetForm({ newPassword: '', confirmPassword: '' });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (err) {
+      console.error(err);
+      setError(
+        err.response?.data?.error ||
+          'Unable to reset password. Please request a new reset link.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -125,7 +235,16 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
       </div>
 
       <div className="login-right">
-        <form className="login-card" onSubmit={handleSubmit}>
+        <form
+          className="login-card"
+          onSubmit={
+            resetToken
+              ? handleResetSubmit
+              : forgotMode
+              ? handleForgotSubmit
+              : handleSubmit
+          }
+        >
           <div className="login-card-header">
             <img
               src="/ministry-logo.png"
@@ -133,58 +252,181 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
               className="login-card-logo"
             />
 
-            <h2>Welcome Back</h2>
-            <p>Please sign in to continue to FTMS</p>
+            <h2>
+              {resetToken
+                ? 'Set New Password'
+                : forgotMode
+                ? 'Reset Password'
+                : 'Welcome Back'}
+            </h2>
+            <p>
+              {resetToken
+                ? resetEmail || 'Verify your reset link and choose a new password'
+                : forgotMode
+                ? 'Enter your email to receive a secure reset link'
+                : 'Please sign in to continue to FTMS'}
+            </p>
           </div>
 
           {error && <div className="login-error">{error}</div>}
+          {message && <div className="login-success">{message}</div>}
 
-          <div className="form-group">
-            <label>Email Address</label>
-            <input
-              type="email"
-              name="email"
-              placeholder="Enter your email"
-              value={formData.email}
-              onChange={handleChange}
-              autoComplete="email"
-            />
-          </div>
+          {resetToken ? (
+            <>
+              <div className="form-group">
+                <label>New Password</label>
+                <div className="password-field">
+                  <input
+                    type={showResetPassword ? 'text' : 'password'}
+                    name="newPassword"
+                    placeholder="Enter new password"
+                    value={resetForm.newPassword}
+                    onChange={(e) =>
+                      setResetForm((prev) => ({
+                        ...prev,
+                        newPassword: e.target.value,
+                      }))
+                    }
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword((current) => !current)}
+                  >
+                    {showResetPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
 
-          <div className="form-group">
-            <label>Password</label>
-            <div className="password-field">
+              <div className="form-group">
+                <label>Confirm New Password</label>
+                <input
+                  type={showResetPassword ? 'text' : 'password'}
+                  name="confirmPassword"
+                  placeholder="Confirm new password"
+                  value={resetForm.confirmPassword}
+                  onChange={(e) =>
+                    setResetForm((prev) => ({
+                      ...prev,
+                      confirmPassword: e.target.value,
+                    }))
+                  }
+                  autoComplete="new-password"
+                />
+              </div>
+            </>
+          ) : forgotMode ? (
+            <div className="form-group">
+              <label>Email Address</label>
               <input
-                type={showPassword ? 'text' : 'password'}
-                name="password"
-                placeholder="Enter your password"
-                value={formData.password}
-                onChange={handleChange}
-                autoComplete="current-password"
+                type="email"
+                name="forgotEmail"
+                placeholder="Enter your registered email"
+                value={forgotEmail}
+                onChange={(e) => {
+                  setForgotEmail(e.target.value);
+                  setError('');
+                  setMessage('');
+                }}
+                autoComplete="email"
               />
+            </div>
+          ) : (
+            <>
+              <div className="form-group">
+                <label>Email Address</label>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="Enter your email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  autoComplete="email"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Password</label>
+                <div className="password-field">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    placeholder="Enter your password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setShowPassword((current) => !current)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="forgot-password-link"
+                onClick={() => {
+                  setForgotMode(true);
+                  setError('');
+                  setMessage('');
+                  setForgotEmail(formData.email);
+                }}
               >
-                {showPassword ? 'Hide' : 'Show'}
+                Forgot password?
               </button>
-            </div>
-          </div>
+            </>
+          )}
 
           <button type="submit" className="login-button" disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
+            {loading
+              ? resetToken
+                ? 'Resetting...'
+                : forgotMode
+                ? 'Sending...'
+                : 'Logging in...'
+              : resetToken
+              ? 'Reset Password'
+              : forgotMode
+              ? 'Send Reset Link'
+              : 'Login'}
           </button>
 
-          <div className="register-link">
-            <p>Do not have an account?</p>
-            <button
-              type="button"
-              onClick={() => setActiveAuthPage('register')}
-            >
-              Create Traveler Account
-            </button>
-          </div>
+          {!resetToken && forgotMode ? (
+            <div className="register-link">
+              <p>Remembered your password?</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotMode(false);
+                  setError('');
+                  setMessage('');
+                }}
+              >
+                Back to Login
+              </button>
+            </div>
+          ) : !resetToken ? (
+            <div className="register-link">
+              <p>Do not have an account?</p>
+              <button
+                type="button"
+                onClick={() => setActiveAuthPage('register')}
+              >
+                Create Traveler Account
+              </button>
+            </div>
+          ) : (
+            <div className="register-link">
+              <p>After resetting your password, return to login.</p>
+              <button type="button" onClick={() => window.location.assign('/')}>
+                Back to Login
+              </button>
+            </div>
+          )}
 
           <div className="login-footer">
             <p>Ministry of Agriculture</p>
