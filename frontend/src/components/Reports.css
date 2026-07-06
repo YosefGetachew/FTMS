@@ -188,6 +188,104 @@
   font-size: 11.5px;
 }
 
+.reports-currently-abroad {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.5fr) minmax(0, 1.25fr) minmax(0, 1.25fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.reports-abroad-summary {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 100%);
+  padding: 18px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+}
+
+.reports-abroad-summary::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: #0f766e;
+}
+
+.reports-abroad-summary span {
+  display: block;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.reports-abroad-summary strong {
+  display: block;
+  margin-top: 12px;
+  color: #0f172a;
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.reports-abroad-summary small {
+  display: block;
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.reports-abroad-table-card {
+  margin-bottom: 18px;
+}
+
+.reports-table-wrap {
+  overflow-x: auto;
+}
+
+.reports-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+}
+
+.reports-data-table th,
+.reports-data-table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 11px 12px;
+  text-align: left;
+  vertical-align: top;
+  font-size: 12.5px;
+  color: #334155;
+}
+
+.reports-data-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.reports-data-table td strong,
+.reports-data-table td span {
+  display: block;
+}
+
+.reports-data-table td strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.reports-data-table td span {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 11.5px;
+}
+
 /* ============================================================
    REPORT GRID
 ============================================================ */
@@ -309,6 +407,10 @@
   }
 
   .reports-chart-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-currently-abroad {
     grid-template-columns: 1fr;
   }
 }

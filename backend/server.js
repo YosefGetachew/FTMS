@@ -4109,6 +4109,98 @@ app.get('/api/reports/office-minister-summary', async (_req, res) => {
   }
 });
 
+app.get('/api/reports/currently-abroad', async (_req, res) => {
+  try {
+    const activeTravelWhere = `
+      r.final_status='approved'
+      AND r.start_date IS NOT NULL
+      AND r.end_date IS NOT NULL
+      AND CURRENT_DATE BETWEEN r.start_date::date AND r.end_date::date
+    `;
+
+    const sectorExpression = `
+      COALESCE(
+        NULLIF(TRIM(r.organization_name),''),
+        CASE
+          WHEN r.traveler_category='affiliate_institution' THEN NULLIF(TRIM(u.organization_name),'')
+          ELSE NULL
+        END,
+        NULLIF(TRIM(r.sector),''),
+        NULLIF(TRIM(u.sector),''),
+        'Unassigned'
+      )
+    `;
+
+    const departmentExpression = `
+      COALESCE(
+        NULLIF(TRIM(r.department),''),
+        NULLIF(TRIM(u.department),''),
+        CASE
+          WHEN r.traveler_category='affiliate_institution' THEN 'Affiliate Institute'
+          WHEN r.traveler_category='project_staff' THEN 'Project'
+          WHEN r.traveler_category='advisor' THEN 'Advisor'
+          ELSE 'Unassigned'
+        END,
+        'Unassigned'
+      )
+    `;
+
+    const travelers = await query(`
+      SELECT
+        r.id,
+        COALESCE(NULLIF(TRIM(r.full_name),''), 'Unknown Traveler') AS full_name,
+        COALESCE(NULLIF(TRIM(r.position),''), NULLIF(TRIM(u.position),''), '-') AS position,
+        COALESCE(NULLIF(TRIM(r.country),''), '-') AS country,
+        r.start_date,
+        r.end_date,
+        ${sectorExpression} AS sector,
+        ${departmentExpression} AS department,
+        COALESCE(NULLIF(TRIM(r.traveler_category),''), 'staff_under_lead_executive') AS traveler_category,
+        GREATEST((r.end_date::date - CURRENT_DATE), 0)::int AS days_remaining,
+        GREATEST((CURRENT_DATE - r.start_date::date), 0)::int AS days_abroad
+      FROM requests r
+      LEFT JOIN users u
+        ON LOWER(TRIM(r.email))=LOWER(TRIM(u.email))
+      WHERE ${activeTravelWhere}
+      ORDER BY sector ASC, department ASC, r.end_date ASC, full_name ASC
+    `);
+
+    const bySector = await query(`
+      SELECT
+        ${sectorExpression} AS sector,
+        COUNT(*)::int AS count
+      FROM requests r
+      LEFT JOIN users u
+        ON LOWER(TRIM(r.email))=LOWER(TRIM(u.email))
+      WHERE ${activeTravelWhere}
+      GROUP BY 1
+      ORDER BY count DESC, sector ASC
+    `);
+
+    const byDepartment = await query(`
+      SELECT
+        ${sectorExpression} AS sector,
+        ${departmentExpression} AS department,
+        COUNT(*)::int AS count
+      FROM requests r
+      LEFT JOIN users u
+        ON LOWER(TRIM(r.email))=LOWER(TRIM(u.email))
+      WHERE ${activeTravelWhere}
+      GROUP BY 1, 2
+      ORDER BY sector ASC, count DESC, department ASC
+    `);
+
+    res.json({
+      total: travelers.rows.length,
+      bySector: bySector.rows,
+      byDepartment: byDepartment.rows,
+      travelers: travelers.rows,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 /* ── PDF Generation ─────────────────────────────────────── */
 
 app.get('/api/generate-pdf/:id', async (req, res) => {

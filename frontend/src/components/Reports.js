@@ -69,6 +69,20 @@ const formatMonth = (date) =>
     year: 'numeric',
   });
 
+const formatReportDate = (value) => {
+  if (!value) return '-';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return '-';
+
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  });
+};
+
 const buildMonthlyForecast = (monthlyRequests) => {
   const actual = (monthlyRequests || []).map((item) => ({
     month: item.month,
@@ -105,6 +119,13 @@ function Reports() {
   const [sectorStatus, setSectorStatus] = useState([]);
   const [monthlyRequests, setMonthlyRequests] = useState([]);
   const [stageSummary, setStageSummary] = useState([]);
+  const [fundingSummary, setFundingSummary] = useState([]);
+  const [currentlyAbroad, setCurrentlyAbroad] = useState({
+    total: 0,
+    bySector: [],
+    byDepartment: [],
+    travelers: [],
+  });
 
   const [moaVsAffiliateData, setMoaVsAffiliateData] = useState([]);
   const [moaSectorData, setMoaSectorData] = useState([]);
@@ -160,6 +181,8 @@ function Reports() {
       API.get('/reports/monthly-requests'),
       API.get('/reports/stage-summary'),
       API.get('/reports/office-minister-summary'),
+      API.get('/reports/funding-summary'),
+      API.get('/reports/currently-abroad'),
     ]);
 
     if (results[0].status === 'fulfilled') {
@@ -194,6 +217,19 @@ function Reports() {
       setError(
         'Some report data could not be loaded. Please check backend report APIs.'
       );
+    }
+
+    if (results[5].status === 'fulfilled') {
+      setFundingSummary(results[5].value.data || []);
+    }
+
+    if (results[6].status === 'fulfilled') {
+      setCurrentlyAbroad({
+        total: Number(results[6].value.data?.total || 0),
+        bySector: results[6].value.data?.bySector || [],
+        byDepartment: results[6].value.data?.byDepartment || [],
+        travelers: results[6].value.data?.travelers || [],
+      });
     }
   }, [canViewReports, transformSectorData]);
 
@@ -271,6 +307,18 @@ function Reports() {
     [monthlyRequests]
   );
 
+  const currentlyAbroadDepartmentChart = useMemo(
+    () =>
+      currentlyAbroad.byDepartment.map((item) => ({
+        ...item,
+        departmentLabel:
+          item.sector && item.sector !== 'Unassigned'
+            ? `${item.sector} - ${item.department || 'Unassigned'}`
+            : item.department || 'Unassigned',
+      })),
+    [currentlyAbroad.byDepartment]
+  );
+
   const forecastOnly = forecastData.filter((item) => item.type === 'Forecast');
   const nextForecast = forecastOnly[0]?.forecast || 0;
   const forecastAverage = forecastOnly.length
@@ -344,6 +392,136 @@ function Reports() {
           <strong>{forecastPeak.forecast}</strong>
           <small>{forecastPeak.month}</small>
         </div>
+      </div>
+
+      <div className="reports-section-heading">
+        <h2 className="reports-section-title">Currently Abroad</h2>
+        <p>
+          Approved travelers whose travel dates include today, grouped by sector
+          and department.
+        </p>
+      </div>
+
+      <div className="reports-currently-abroad">
+        <div className="reports-abroad-summary">
+          <span>Travelers Abroad Today</span>
+          <strong>{currentlyAbroad.total}</strong>
+          <small>Approved and within active travel dates</small>
+        </div>
+
+        <div className="reports-card">
+          <div className="reports-card-header">
+            <h3>Currently Abroad by Sector</h3>
+            <p>Active approved travelers grouped by owning structure.</p>
+          </div>
+
+          {currentlyAbroad.bySector.length === 0 ? (
+            <p className="reports-empty">No approved travelers are abroad today.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={currentlyAbroad.bySector}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="sector"
+                  angle={-15}
+                  textAnchor="end"
+                  interval={0}
+                  height={90}
+                />
+                <YAxis hide allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#0f766e" radius={[6, 6, 0, 0]}>
+                  <LabelList
+                    dataKey="count"
+                    position="top"
+                    fontWeight={700}
+                    fill="#334155"
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="reports-card">
+          <div className="reports-card-header">
+            <h3>Currently Abroad by Department</h3>
+            <p>Active approved travelers grouped by department or office.</p>
+          </div>
+
+          {currentlyAbroadDepartmentChart.length === 0 ? (
+            <p className="reports-empty">No department data available today.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={currentlyAbroadDepartmentChart}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="departmentLabel"
+                  angle={-15}
+                  textAnchor="end"
+                  interval={0}
+                  height={90}
+                />
+                <YAxis hide allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]}>
+                  <LabelList
+                    dataKey="count"
+                    position="top"
+                    fontWeight={700}
+                    fill="#334155"
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      <div className="reports-card reports-abroad-table-card">
+        <div className="reports-card-header">
+          <h3>Current Traveler List</h3>
+          <p>Names, destinations, sectors, departments, and remaining days abroad.</p>
+        </div>
+
+        {currentlyAbroad.travelers.length === 0 ? (
+          <p className="reports-empty">No approved travelers are abroad today.</p>
+        ) : (
+          <div className="reports-table-wrap">
+            <table className="reports-data-table">
+              <thead>
+                <tr>
+                  <th>Traveler</th>
+                  <th>Sector</th>
+                  <th>Department</th>
+                  <th>Destination</th>
+                  <th>Travel Dates</th>
+                  <th>Days Abroad</th>
+                  <th>Remaining</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentlyAbroad.travelers.map((traveler) => (
+                  <tr key={traveler.id}>
+                    <td>
+                      <strong>{traveler.full_name}</strong>
+                      <span>{traveler.position || '-'}</span>
+                    </td>
+                    <td>{traveler.sector || 'Unassigned'}</td>
+                    <td>{traveler.department || 'Unassigned'}</td>
+                    <td>{traveler.country || '-'}</td>
+                    <td>
+                      {formatReportDate(traveler.start_date)} to{' '}
+                      {formatReportDate(traveler.end_date)}
+                    </td>
+                    <td>{Number(traveler.days_abroad || 0)}</td>
+                    <td>{Number(traveler.days_remaining || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* ============================================================
@@ -564,6 +742,39 @@ function Reports() {
                     fill: '#334155',
                   }}
                 />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="reports-card">
+          <div className="reports-card-header">
+            <h3>Funding Source Summary</h3>
+            <p>Government vs non-government funding across travel requests.</p>
+          </div>
+
+          {fundingSummary.length === 0 ? (
+            <p className="reports-empty">No funding data available</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={fundingSummary}>
+                <CartesianGrid strokeDasharray="3 3" />
+
+                <XAxis dataKey="name" />
+
+                <YAxis hide allowDecimals={false} />
+
+                <Tooltip />
+                <Legend />
+
+                <Bar dataKey="count" fill="#0f766e" radius={[6, 6, 0, 0]}>
+                  <LabelList
+                    dataKey="count"
+                    position="top"
+                    fontWeight={700}
+                    fill="#334155"
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
