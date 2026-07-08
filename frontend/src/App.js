@@ -16,6 +16,7 @@ import Notifications from './components/Notifications';
 import AuditTrail from './components/AuditTrail';
 import PendingUsers from './components/PendingUsers';
 import TravelStatus from './components/TravelStatus';
+import ErrorBoundary from './components/ErrorBoundary';
 import './global-polish.css';
 
 const pageTitles = {
@@ -32,12 +33,21 @@ const pageTitles = {
   'reset-password': 'Reset Password',
 };
 
+const getStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem('user') || '{}');
+  } catch (_error) {
+    return {};
+  }
+};
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('token'));
 
   const [activePage, setActivePage] = useState('dashboard');
   const [isMobileWorkspace, setIsMobileWorkspace] = useState(false);
   const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
+  const [user] = useState(getStoredUser);
 
   const [activeAuthPage, setActiveAuthPage] = useState('login');
 
@@ -79,6 +89,51 @@ function App() {
       setMobileWorkspaceOpen(true);
     }
   };
+
+  const renderSafePage = () => (
+    <ErrorBoundary resetKey={activePage} onRecover={() => setActivePage('dashboard')}>
+      {renderPage()}
+    </ErrorBoundary>
+  );
+
+  const mobileNavItems = [
+    {
+      id: 'dashboard',
+      label: 'Home',
+      icon: 'DS',
+      show: true,
+    },
+    {
+      id: 'travel-request',
+      label: 'New',
+      icon: 'NT',
+      show: user?.role !== 'minister' && user?.role !== 'pm_office',
+    },
+    {
+      id: 'submitted-requests',
+      label: 'Requests',
+      icon: 'RQ',
+      show: true,
+    },
+    {
+      id: 'travel-status',
+      label: 'Status',
+      icon: 'ST',
+      show: true,
+    },
+    {
+      id: ['admin', 'super_admin', 'office_head', 'minister'].includes(user?.role)
+        ? 'reports'
+        : 'notifications',
+      label: ['admin', 'super_admin', 'office_head', 'minister'].includes(user?.role)
+        ? 'Reports'
+        : 'Alerts',
+      icon: ['admin', 'super_admin', 'office_head', 'minister'].includes(user?.role)
+        ? 'RP'
+        : 'MS',
+      show: true,
+    },
+  ].filter((item) => item.show);
 
   if (!isLoggedIn) {
     if (activeAuthPage === 'register') {
@@ -144,13 +199,43 @@ function App() {
         <Topbar handleLogout={handleLogout} />
         {isMobileWorkspace ? (
           <div className="mobile-workspace-home">
-            <h1>FTMS Workspace</h1>
-            <p>Select a menu item to open it in a mobile-friendly workspace.</p>
+            <span>Mobile Workspace</span>
+            <h1>FTMS</h1>
+            <p>Use the bottom navigation for the main daily actions.</p>
+
+            <div className="mobile-home-actions">
+              {mobileNavItems.map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  onClick={() => openPage(item.id)}
+                >
+                  <strong>{item.icon}</strong>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
-          renderPage()
+          renderSafePage()
         )}
       </div>
+
+      {isMobileWorkspace && (
+        <nav className="mobile-bottom-nav" aria-label="Mobile quick navigation">
+          {mobileNavItems.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={activePage === item.id ? 'active' : ''}
+              onClick={() => openPage(item.id)}
+            >
+              <span>{item.icon}</span>
+              <small>{item.label}</small>
+            </button>
+          ))}
+        </nav>
+      )}
 
       {isMobileWorkspace && mobileWorkspaceOpen && (
         <div className="mobile-workspace-overlay" role="dialog" aria-modal="true">
@@ -171,7 +256,7 @@ function App() {
             </div>
 
             <div className="mobile-workspace-body">
-              {renderPage()}
+              {renderSafePage()}
             </div>
           </div>
         </div>

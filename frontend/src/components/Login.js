@@ -27,6 +27,15 @@ function Login({ setIsLoggedIn, setActiveAuthPage }) {
   const [showResetPassword, setShowResetPassword] = useState(false);
 
   useEffect(() => {
+    const sessionNotice = sessionStorage.getItem('ftmsSessionNotice');
+
+    if (sessionNotice) {
+      setMessage(sessionNotice);
+      sessionStorage.removeItem('ftmsSessionNotice');
+    }
+  }, []);
+
+  useEffect(() => {
     if (!resetToken) return;
 
     const validateResetToken = async () => {

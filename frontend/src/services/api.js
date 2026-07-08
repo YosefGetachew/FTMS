@@ -18,4 +18,26 @@ API.interceptors.request.use((config) => {
   return config;
 });
 
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && localStorage.getItem('token')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      sessionStorage.setItem(
+        'ftmsSessionNotice',
+        'Your session expired. Please login again to continue.'
+      );
+
+      if (window.location.pathname !== '/') {
+        window.location.assign('/');
+      } else {
+        window.location.reload();
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export default API;

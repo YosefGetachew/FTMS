@@ -760,6 +760,248 @@ table tbody tr:hover {
 }
 
 /* ============================================================
+   GRAPHICAL UI ENHANCEMENTS
+============================================================ */
+
+@keyframes ftms-page-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dashboard-page,
+.request-table-page,
+.reports-page,
+.travel-status-page,
+.organization-settings-page,
+.user-management-page,
+.pending-users-page,
+.audit-trail-page,
+.form-container,
+.page-container {
+  animation: ftms-page-rise 220ms ease-out both;
+}
+
+.dashboard-panel,
+.reports-card,
+.travel-status-card,
+.request-section-card,
+.settings-container,
+.report-table-container,
+.table-container,
+.ministry-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-panel::after,
+.reports-card::after,
+.travel-status-card::after,
+.request-section-card::after,
+.settings-container::after,
+.ministry-card::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(15, 118, 110, 0.42),
+    rgba(37, 99, 235, 0.2),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.dashboard-panel:hover,
+.reports-card:hover,
+.travel-status-card:hover,
+.request-section-card:hover,
+.settings-container:hover,
+.ministry-card:hover {
+  border-color: #cbd8e5;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.09);
+}
+
+.dashboard-command-center,
+.dashboard-focus-strip div,
+.dashboard-action-tile,
+.dashboard-kpi-card,
+.request-summary-card,
+.reports-stat-card,
+.reports-abroad-summary,
+.organization-settings-summary-card {
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+.dashboard-action-tile:hover,
+.dashboard-kpi-card.interactive:hover,
+.request-summary-card:hover,
+.reports-stat-card:hover,
+.reports-abroad-summary:hover,
+.organization-settings-summary-card:hover {
+  transform: translateY(-2px);
+}
+
+.dashboard-focus-strip div:hover {
+  border-color: #b8c7d8;
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.dashboard-command-center {
+  background:
+    linear-gradient(135deg, rgba(236, 253, 245, 0.96), rgba(255, 255, 255, 0.98)),
+    linear-gradient(90deg, rgba(15, 118, 110, 0.08), rgba(37, 99, 235, 0.05));
+}
+
+.dashboard-chart-panel .recharts-wrapper,
+.reports-card .recharts-wrapper {
+  border-radius: var(--radius-md);
+}
+
+.dashboard-chart-panel .recharts-surface,
+.reports-card .recharts-surface {
+  overflow: visible;
+}
+
+.dashboard-chart-panel .recharts-cartesian-grid line,
+.reports-card .recharts-cartesian-grid line {
+  stroke: #edf2f7;
+}
+
+.dashboard-chart-panel .recharts-bar-rectangle path,
+.reports-card .recharts-bar-rectangle path {
+  filter: drop-shadow(0 4px 6px rgba(15, 23, 42, 0.1));
+}
+
+.dashboard-chart-panel .recharts-default-tooltip,
+.reports-card .recharts-default-tooltip {
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius-md) !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12) !important;
+}
+
+.dashboard-chart-panel .recharts-tooltip-label,
+.reports-card .recharts-tooltip-label {
+  color: var(--ink-900) !important;
+  font-weight: 760 !important;
+}
+
+.reports-card-header,
+.dashboard-panel-header,
+.travel-status-header,
+.request-table-header,
+.organization-settings-header {
+  position: relative;
+}
+
+.reports-card-header h3,
+.dashboard-panel-header h3,
+.request-table-header h2,
+.travel-status-header h2,
+.organization-settings-header h2 {
+  text-wrap: balance;
+}
+
+.request-table-page table tbody tr,
+.report-table-container table tbody tr,
+.table-container table tbody tr {
+  transition:
+    background-color 130ms ease,
+    box-shadow 130ms ease;
+}
+
+.request-table-page table tbody tr:hover,
+.report-table-container table tbody tr:hover,
+.table-container table tbody tr:hover {
+  background: #f8fcfb;
+  box-shadow: inset 3px 0 0 var(--brand-600);
+}
+
+.status-badge,
+.request-stage-text,
+.dashboard-chip,
+.request-date-cell strong,
+.sidebar-section-count,
+.sidebar-section-toggle {
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.dashboard-chip:hover,
+.request-date-cell strong:hover,
+.sidebar-section-count:hover,
+.sidebar-section-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.primary-btn,
+.secondary-btn,
+.save-settings-btn,
+.login-button,
+.request-refresh-btn,
+.dashboard-refresh-btn,
+.pdf-btn,
+.approve-btn,
+.reject-btn,
+.edit-btn,
+.delete-btn {
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.primary-btn:hover:not(:disabled),
+.secondary-btn:hover:not(:disabled),
+.save-settings-btn:hover:not(:disabled),
+.login-button:hover:not(:disabled),
+.request-refresh-btn:hover:not(:disabled),
+.dashboard-refresh-btn:hover:not(:disabled),
+.pdf-btn:hover:not(:disabled),
+.approve-btn:hover:not(:disabled),
+.reject-btn:hover:not(:disabled),
+.edit-btn:hover:not(:disabled),
+.delete-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.1);
+}
+
+.modal-content,
+.large-modal,
+.user-management-modal,
+.edit-modal,
+.affiliate-edit-modal {
+  animation: ftms-page-rise 180ms ease-out both;
+}
+
+.notice-success,
+.notice-error,
+.login-success,
+.login-error,
+.form-notice {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+}
+
+/* ============================================================
    RESPONSIVE SAFETY
 ============================================================ */
 
