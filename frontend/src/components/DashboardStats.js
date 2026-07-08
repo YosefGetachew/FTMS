@@ -101,6 +101,7 @@ function DashboardStats({ setActivePage }) {
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const normalizeSectorData = useCallback((data) => {
     return (data || [])
@@ -136,6 +137,7 @@ function DashboardStats({ setActivePage }) {
       });
 
       setChartData(normalizeSectorData(chartResponse.data || []));
+      setLastUpdated(new Date());
     } catch (err) {
       console.error(err);
       setError(err?.response?.data?.error || "Unable to load dashboard analytics.");
@@ -322,6 +324,7 @@ function DashboardStats({ setActivePage }) {
       title: "Open Assigned Queue",
       detail: "Review pending requests that match your workflow responsibility.",
       action: "Open requests",
+      tone: "teal",
       onClick: goToSubmittedRequests,
       show: role !== "traveler",
     },
@@ -329,6 +332,7 @@ function DashboardStats({ setActivePage }) {
       title: "Create Travel Request",
       detail: "Start a new foreign travel request for workflow approval.",
       action: "New request",
+      tone: "green",
       onClick: () => setActivePage && setActivePage("travel-request"),
       show: role !== "minister",
     },
@@ -336,10 +340,39 @@ function DashboardStats({ setActivePage }) {
       title: "Analytical Reports",
       detail: "Open detailed reports for status, sector, and approval trends.",
       action: "View reports",
+      tone: "blue",
       onClick: () => setActivePage && setActivePage("reports"),
       show: canOpenReports,
     },
   ].filter((item) => item.show);
+
+  const recommendedAction = useMemo(() => {
+    if (analytics.pending > 0 && role !== "traveler") {
+      return {
+        label: "Recommended next",
+        title: "Review pending requests",
+        detail: `${analytics.pending} request(s) need workflow attention.`,
+      };
+    }
+
+    if (role !== "minister") {
+      return {
+        label: "Recommended next",
+        title: "Create or track travel",
+        detail: "Start a request or open submitted requests to monitor progress.",
+      };
+    }
+
+    return {
+      label: "Recommended next",
+      title: "Review reports",
+      detail: "Open analytical reports for ministry-level travel visibility.",
+    };
+  }, [analytics.pending, role]);
+
+  const lastUpdatedLabel = lastUpdated
+    ? lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : "Not refreshed yet";
 
   const chartColors = ["#1d4ed8", "#15803d", "#b45309", "#7c3aed", "#0369a1"];
 
@@ -355,7 +388,7 @@ function DashboardStats({ setActivePage }) {
         tabIndex={clickable ? 0 : undefined}
         onClick={clickable ? item.onClick : undefined}
         onKeyDown={(event) => handleMetricKeyDown(event, item.onClick)}
-      title={clickable ? "Open related view" : undefined}
+        title={clickable ? "Open related view" : undefined}
       >
         <div className="dashboard-kpi-topline">
           <span>{item.label}</span>
@@ -413,21 +446,53 @@ function DashboardStats({ setActivePage }) {
       </div>
 
       {actionCards.length > 0 && (
-        <div className="dashboard-next-actions">
-          <div>
-            <span>Next Actions</span>
-            <strong>Jump directly to your daily work</strong>
+        <div className="dashboard-command-center">
+          <div className="dashboard-command-copy">
+            <span>Action Center</span>
+            <strong>{recommendedAction.title}</strong>
+            <p>{recommendedAction.detail}</p>
+            <small>Last updated: {lastUpdatedLabel}</small>
           </div>
 
           <div className="dashboard-next-action-buttons">
             {actionCards.map((item) => (
-              <button type="button" key={item.title} onClick={item.onClick}>
-                {item.action}
+              <button
+                type="button"
+                key={item.title}
+                className={`dashboard-action-tile ${item.tone}`}
+                onClick={item.onClick}
+              >
+                <span>{item.action}</span>
+                <strong>{item.title}</strong>
+                <small>{item.detail}</small>
               </button>
             ))}
           </div>
         </div>
       )}
+
+      <div className="dashboard-focus-strip">
+        <div>
+          <span>{recommendedAction.label}</span>
+          <strong>{recommendedAction.title}</strong>
+        </div>
+        <div>
+          <span>Active Queue</span>
+          <strong>{loading ? "-" : analytics.pending}</strong>
+        </div>
+        <div>
+          <span>Completion Rate</span>
+          <strong>{loading ? "-" : `${analytics.completedShare}%`}</strong>
+        </div>
+        <div>
+          <span>Top Workload</span>
+          <strong>
+            {analytics.topPendingSector
+              ? analytics.topPendingSector.sector
+              : "No active workload"}
+          </strong>
+        </div>
+      </div>
 
       <div className="dashboard-kpi-grid">
         {kpis.map(renderMetricCard)}
