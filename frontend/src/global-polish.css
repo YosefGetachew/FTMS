@@ -1919,3 +1919,55 @@ table tbody tr:hover,
     min-height: 86px;
   }
 }
+
+/* Compact dashboard header after the major refresh. */
+.dashboard-page .dashboard-header {
+  min-height: auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+}
+
+.dashboard-page .dashboard-header > div:first-child {
+  align-content: center;
+}
+
+.dashboard-page .dashboard-eyebrow {
+  margin-bottom: 7px;
+  padding: 3px 9px;
+  font-size: 0.64rem;
+}
+
+.dashboard-page .dashboard-header h2 {
+  font-size: clamp(1.35rem, 1.8vw, 1.7rem);
+  line-height: 1.12;
+}
+
+.dashboard-page .dashboard-header p {
+  margin-top: 6px;
+  margin-bottom: 0;
+  font-size: 0.86rem;
+}
+
+.dashboard-page .dashboard-refresh-btn {
+  align-self: center;
+  width: auto;
+  min-width: 84px;
+  min-height: 36px;
+  padding: 8px 13px;
+  border-radius: 10px;
+  box-shadow: 0 6px 14px rgba(15, 118, 110, 0.13);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 900px) {
+  .dashboard-page .dashboard-header {
+    align-items: stretch;
+  }
+
+  .dashboard-page .dashboard-refresh-btn {
+    width: 100%;
+  }
+}
