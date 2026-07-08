@@ -325,7 +325,7 @@ function DashboardStats({ setActivePage }) {
       detail: "Review pending requests that match your workflow responsibility.",
       action: "Open requests",
       tone: "teal",
-      onClick: goToSubmittedRequests,
+      onClick: () => goToSubmittedRequests(),
       show: role !== "traveler",
     },
     {
@@ -555,7 +555,7 @@ function DashboardStats({ setActivePage }) {
                   dataKey="pending_count"
                   name="Pending Requests"
                   radius={[6, 6, 0, 0]}
-                  onClick={goToSubmittedRequests}
+                  onClick={() => goToSubmittedRequests()}
                   style={{
                     cursor: user?.role !== "traveler" ? "pointer" : "default",
                   }}
