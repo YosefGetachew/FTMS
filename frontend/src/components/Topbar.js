@@ -105,9 +105,7 @@ function Topbar({ handleLogout }) {
 
       <div className="ethiopia-watch" aria-label={`Ethiopia time ${clock.time}`}>
         <div className="ethiopia-watch-face">
-          <span className="watch-band green"></span>
-          <span className="watch-band yellow"></span>
-          <span className="watch-band red"></span>
+          <img src={ministryLogo} alt="" className="watch-logo" />
           <span className="watch-mark mark-12"></span>
           <span className="watch-mark mark-3"></span>
           <span className="watch-mark mark-6"></span>
