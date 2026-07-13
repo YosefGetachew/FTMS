@@ -11,6 +11,7 @@ const crypto = require('crypto');
 
 const upload = require('./middleware/upload');
 const transporter = require('./config/email');
+const { sendSms } = require('./config/sms');
 const pool = require('./config/db');
 
 const app = express();
@@ -186,6 +187,31 @@ const normalizePhone = (phone) => {
   }
 
   return raw;
+};
+
+const normalizeSmsPhone = (phone) => {
+  const raw = String(phone || '').trim();
+  if (!raw) return null;
+
+  const digits = raw.replace(/\D/g, '');
+
+  if (/^0[97]\d{8}$/.test(digits)) {
+    return `+251${digits.slice(1)}`;
+  }
+
+  if (/^[97]\d{8}$/.test(digits)) {
+    return `+251${digits}`;
+  }
+
+  if (/^251[97]\d{8}$/.test(digits)) {
+    return `+${digits}`;
+  }
+
+  if (/^\d{10,15}$/.test(digits)) {
+    return `+${digits}`;
+  }
+
+  return null;
 };
 
 const validatePasswordStrength = (password) => {
@@ -381,6 +407,42 @@ const sendEmailSafe = async (opts, label = 'EMAIL ERROR') => {
     console.error(label, e);
   }
 };
+
+const sendSmsSafe = async ({ phone, message }, label = 'SMS ERROR') => {
+  const to = normalizeSmsPhone(phone);
+  if (!to || !message) return;
+
+  try {
+    await sendSms({ to, message });
+  } catch (e) {
+    console.error(label, e.message || e);
+  }
+};
+
+const travelStatusSms = ({ request: r, displayStatus }) =>
+  sendSmsSafe(
+    {
+      phone: r?.phone,
+      message: `FTMS: Your travel request to ${safeText(
+        r?.country
+      )} is now ${safeText(displayStatus)}.`,
+    },
+    'TRAVELER SMS ERROR:'
+  );
+
+const taskSms = ({ approver, request: r, stageName }) =>
+  sendSmsSafe(
+    {
+      phone: approver?.phone,
+      message: `FTMS: ${safeText(
+        r?.full_name,
+        'A traveler'
+      )}'s request to ${safeText(r?.country)} is waiting for your review at ${safeText(
+        stageName
+      )}.`,
+    },
+    'TASK SMS ERROR:'
+  );
 
 const query = (sql, params) => pool.query(sql, params);
 
@@ -2106,6 +2168,11 @@ app.post('/api/requests', uploadFields, async (req, res) => {
       message: `Your travel request to ${country} has been created.`,
     });
 
+    await travelStatusSms({
+      request: r.rows[0],
+      displayStatus: 'Draft / Expert Preparation',
+    });
+
     res.status(201).json(r.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2887,6 +2954,11 @@ app.put('/api/requests/:id/status', async (req, res) => {
       amendmentComment: amendComment,
     });
 
+    await travelStatusSms({
+      request: req2,
+      displayStatus,
+    });
+
     if (
       nextApprover &&
       ![STAGES.COMPLETED, STAGES.EXPERT_PREPARATION].includes(nextStage)
@@ -2905,6 +2977,12 @@ app.put('/api/requests/:id/status', async (req, res) => {
         message: `A travel request from ${safeText(
           req2.full_name
         )} is waiting for your review at ${getStageName(nextStage)}.`,
+      });
+
+      await taskSms({
+        approver: nextApprover,
+        request: req2,
+        stageName: getStageName(nextStage),
       });
     }
 
@@ -3018,6 +3096,11 @@ app.put('/api/requests/bulk/submit-to-pm-office', async (req, res) => {
         title: 'Travel Request Submitted to PM Office',
         message: `Your request to ${request.country} was submitted to the PM Office.`,
       });
+
+      await travelStatusSms({
+        request,
+        displayStatus: 'Submitted to PM Office',
+      });
     }
 
     const pmOfficeUser = await getFirstUserForStage(
@@ -3040,6 +3123,12 @@ app.put('/api/requests/bulk/submit-to-pm-office', async (req, res) => {
         message: `${updated.rowCount} travel request${
           updated.rowCount === 1 ? '' : 's'
         } were submitted to the PM Office queue.`,
+      });
+
+      await taskSms({
+        approver: pmOfficeUser,
+        request: updated.rows[0],
+        stageName: 'PM Office Follow-up',
       });
     }
 
@@ -3156,6 +3245,11 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
       displayStatus,
     });
 
+    await travelStatusSms({
+      request: req2,
+      displayStatus,
+    });
+
     if (nextApprover) {
       await taskEmail({
         to: nextApprover.email,
@@ -3171,6 +3265,12 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
         message: `A corrected travel request from ${safeText(
           req2.full_name
         )} is waiting for ${nextStageName}.`,
+      });
+
+      await taskSms({
+        approver: nextApprover,
+        request: req2,
+        stageName: nextStageName,
       });
     }
 
