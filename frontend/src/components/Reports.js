@@ -437,7 +437,8 @@ function Reports() {
                       cx="50%"
                       cy="50%"
                       outerRadius={120}
-                      label={({ name, count }) => `${name}: ${count}`}
+                      label={({ count }) => count}
+                      labelLine={false}
                     >
                       {moaVsAffiliateData.map((entry, index) => (
                         <Cell
