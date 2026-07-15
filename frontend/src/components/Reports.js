@@ -40,7 +40,6 @@ const formatReportDate = (value) => {
 
 function Reports() {
   const [statusSummary, setStatusSummary] = useState([]);
-  const [sectorStatus, setSectorStatus] = useState([]);
   const [monthlyRequests, setMonthlyRequests] = useState([]);
   const [fundingSummary, setFundingSummary] = useState([]);
   const [currentlyAbroad, setCurrentlyAbroad] = useState({
@@ -69,30 +68,6 @@ function Reports() {
   const canViewReports = REPORT_ROLES.includes(userRole);
   const canViewOfficeMinisterGraphs = canViewReports;
 
-  const transformSectorData = useCallback((data) => {
-    const grouped = {};
-
-    data.forEach((item) => {
-      const sector = item.sector || 'Unassigned';
-
-      if (!grouped[sector]) {
-        grouped[sector] = {
-          sector,
-          approved: 0,
-          rejected: 0,
-          pending: 0,
-          amended: 0,
-        };
-      }
-
-      const status = item.final_status || item.status || 'pending';
-
-      grouped[sector][status] = Number(item.count) || 0;
-    });
-
-    return Object.values(grouped);
-  }, []);
-
   const fetchReports = useCallback(async () => {
     if (!canViewReports) return;
 
@@ -100,7 +75,6 @@ function Reports() {
 
     const results = await Promise.allSettled([
       API.get('/reports/status-summary'),
-      API.get('/reports/sector-status'),
       API.get('/reports/monthly-requests'),
       API.get('/reports/office-minister-summary'),
       API.get('/reports/funding-summary'),
@@ -112,15 +86,11 @@ function Reports() {
     }
 
     if (results[1].status === 'fulfilled') {
-      setSectorStatus(transformSectorData(results[1].value.data || []));
+      setMonthlyRequests(results[1].value.data || []);
     }
 
     if (results[2].status === 'fulfilled') {
-      setMonthlyRequests(results[2].value.data || []);
-    }
-
-    if (results[3].status === 'fulfilled') {
-      const officeMinisterData = results[3].value.data || {};
+      const officeMinisterData = results[2].value.data || {};
 
       setMoaVsAffiliateData(officeMinisterData.moaVsAffiliate || []);
       setMoaSectorData(officeMinisterData.moaBySector || []);
@@ -137,19 +107,19 @@ function Reports() {
       );
     }
 
-    if (results[4].status === 'fulfilled') {
-      setFundingSummary(results[4].value.data || []);
+    if (results[3].status === 'fulfilled') {
+      setFundingSummary(results[3].value.data || []);
     }
 
-    if (results[5].status === 'fulfilled') {
+    if (results[4].status === 'fulfilled') {
       setCurrentlyAbroad({
-        total: Number(results[5].value.data?.total || 0),
-        bySector: results[5].value.data?.bySector || [],
-        byDepartment: results[5].value.data?.byDepartment || [],
-        travelers: results[5].value.data?.travelers || [],
+        total: Number(results[4].value.data?.total || 0),
+        bySector: results[4].value.data?.bySector || [],
+        byDepartment: results[4].value.data?.byDepartment || [],
+        travelers: results[4].value.data?.travelers || [],
       });
     }
-  }, [canViewReports, transformSectorData]);
+  }, [canViewReports]);
 
   useEffect(() => {
     fetchReports();
@@ -629,18 +599,18 @@ function Reports() {
 
         <div className="reports-card reports-card-wide">
           <div className="reports-card-header">
-            <h3>Status by Structure</h3>
-            <p>Approved, rejected, and pending requests by sector or organization group.</p>
+            <h3>Monthly Travel Trend</h3>
+            <p>Approved travel requests shown by month across the system.</p>
           </div>
 
-          {sectorStatus.length === 0 ? (
-            <p className="reports-empty">No sector data available</p>
+          {monthlyRequests.length === 0 ? (
+            <p className="reports-empty">No monthly travel data available</p>
           ) : (
             <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={sectorStatus}>
+              <LineChart data={monthlyRequests}>
                 <CartesianGrid strokeDasharray="3 3" />
 
-                <XAxis dataKey="sector" />
+                <XAxis dataKey="month" />
 
                 <YAxis
                   allowDecimals={false}
@@ -651,36 +621,26 @@ function Reports() {
                 <Tooltip />
                 <Legend />
 
-                <Bar
-                  dataKey="approved"
-                  fill="#16a34a"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-
-                <Bar
-                  dataKey="rejected"
-                  fill="#dc2626"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-
-                <Bar
-                  dataKey="pending"
-                  fill="#f59e0b"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-              </BarChart>
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  name="Approved Travel"
+                  stroke="#0f766e"
+                  strokeWidth={3}
+                  dot={{ r: 5 }}
+                  activeDot={{ r: 7 }}
+                >
+                  <LabelList
+                    dataKey="total"
+                    position="top"
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      fill: '#0f766e',
+                    }}
+                  />
+                </Line>
+              </LineChart>
             </ResponsiveContainer>
           )}
         </div>
