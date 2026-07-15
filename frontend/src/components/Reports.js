@@ -446,6 +446,149 @@ function Reports() {
       </div>
 
       {/* ============================================================
+          PART 2: OFFICE HEAD AND MINISTER REPORTS
+      ============================================================ */}
+
+      {canViewOfficeMinisterGraphs && (
+        <>
+          <div className="reports-section-heading">
+            <h2 className="reports-section-title">
+              Office Head and Minister Report
+            </h2>
+            <p>Organization-level reports visible to all report-authorized roles.</p>
+          </div>
+
+          <div className="reports-grid">
+            <div className="reports-card">
+              <div className="reports-card-header">
+                <h3>MoA vs Affiliate Institute Count</h3>
+                <p>Compares internal MoA and affiliate institution travel requests.</p>
+              </div>
+
+              {moaVsAffiliateData.length === 0 ? (
+                <p className="reports-empty">No MoA or Affiliate Institute data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={moaVsAffiliateData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+
+                    <XAxis dataKey="name" />
+
+                    <YAxis
+                      allowDecimals={false}
+                      tickCount={6}
+                      domain={[0, 'auto']}
+                    />
+
+                    <Tooltip />
+                    <Legend />
+
+                    <Bar
+                      dataKey="count"
+                      fill="#2563eb"
+                      label={{
+                        position: 'top',
+                        fontWeight: 600,
+                        fill: '#334155',
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="reports-card">
+              <div className="reports-card-header">
+                <h3>MoA Travelers by Sector</h3>
+                <p>MoA requests grouped by registered structure.</p>
+              </div>
+
+              {moaSectorData.length === 0 ? (
+                <p className="reports-empty">No MoA sector data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={moaSectorData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+
+                    <XAxis
+                      dataKey="name"
+                      angle={-10}
+                      textAnchor="end"
+                      interval={0}
+                      height={90}
+                    />
+
+                    <YAxis
+                      allowDecimals={false}
+                      tickCount={6}
+                      domain={[0, 'auto']}
+                    />
+
+                    <Tooltip />
+                    <Legend />
+
+                    <Bar
+                      dataKey="count"
+                      fill="#16a34a"
+                      label={{
+                        position: 'top',
+                        fontWeight: 600,
+                        fill: '#334155',
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="reports-card">
+              <div className="reports-card-header">
+                <h3>Affiliate Institute Travelers by Organization</h3>
+                <p>Affiliate institution requests grouped by organization.</p>
+              </div>
+
+              {affiliateOrganizationData.length === 0 ? (
+                <p className="reports-empty">No affiliate organization data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={affiliateOrganizationData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+
+                    <XAxis
+                      dataKey="name"
+                      angle={-25}
+                      textAnchor="end"
+                      interval={0}
+                      height={90}
+                    />
+
+                    <YAxis
+                      allowDecimals={false}
+                      tickCount={6}
+                      domain={[0, 'auto']}
+                    />
+
+                    <Tooltip />
+                    <Legend />
+
+                    <Bar
+                      dataKey="count"
+                      fill="#f97316"
+                      label={{
+                        position: 'top',
+                        fontWeight: 600,
+                        fill: '#334155',
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ============================================================
           PART 1: GENERAL ANALYTICAL REPORTS
       ============================================================ */}
 
@@ -663,148 +806,7 @@ function Reports() {
         </div>
       </div>
 
-      {/* ============================================================
-          PART 2: OFFICE HEAD AND MINISTER REPORTS
-      ============================================================ */}
 
-      {canViewOfficeMinisterGraphs && (
-        <>
-          <div className="reports-section-heading">
-            <h2 className="reports-section-title">
-              Office Head and Minister Report
-            </h2>
-            <p>Organization-level reports visible to all report-authorized roles.</p>
-          </div>
-
-          <div className="reports-grid">
-            <div className="reports-card">
-              <div className="reports-card-header">
-                <h3>MoA vs Affiliate Institute Count</h3>
-                <p>Compares internal MoA and affiliate institution travel requests.</p>
-              </div>
-
-              {moaVsAffiliateData.length === 0 ? (
-                <p className="reports-empty">No MoA or Affiliate Institute data available</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={moaVsAffiliateData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-
-                    <XAxis dataKey="name" />
-
-                    <YAxis
-                      allowDecimals={false}
-                      tickCount={6}
-                      domain={[0, 'auto']}
-                    />
-
-                    <Tooltip />
-                    <Legend />
-
-                    <Bar
-                      dataKey="count"
-                      fill="#2563eb"
-                      label={{
-                        position: 'top',
-                        fontWeight: 600,
-                        fill: '#334155',
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className="reports-card">
-              <div className="reports-card-header">
-                <h3>MoA Travelers by Sector</h3>
-                <p>MoA requests grouped by registered structure.</p>
-              </div>
-
-              {moaSectorData.length === 0 ? (
-                <p className="reports-empty">No MoA sector data available</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={moaSectorData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-
-                    <XAxis
-                      dataKey="name"
-                      angle={-10}
-                      textAnchor="end"
-                      interval={0}
-                      height={90}
-                    />
-
-                    <YAxis
-                      allowDecimals={false}
-                      tickCount={6}
-                      domain={[0, 'auto']}
-                    />
-
-                    <Tooltip />
-                    <Legend />
-
-                    <Bar
-                      dataKey="count"
-                      fill="#16a34a"
-                      label={{
-                        position: 'top',
-                        fontWeight: 600,
-                        fill: '#334155',
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className="reports-card">
-              <div className="reports-card-header">
-                <h3>Affiliate Institute Travelers by Organization</h3>
-                <p>Affiliate institution requests grouped by organization.</p>
-              </div>
-
-              {affiliateOrganizationData.length === 0 ? (
-                <p className="reports-empty">No affiliate organization data available</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={affiliateOrganizationData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-
-                    <XAxis
-                      dataKey="name"
-                      angle={-25}
-                      textAnchor="end"
-                      interval={0}
-                      height={90}
-                    />
-
-                    <YAxis
-                      allowDecimals={false}
-                      tickCount={6}
-                      domain={[0, 'auto']}
-                    />
-
-                    <Tooltip />
-                    <Legend />
-
-                    <Bar
-                      dataKey="count"
-                      fill="#f97316"
-                      label={{
-                        position: 'top',
-                        fontWeight: 600,
-                        fill: '#334155',
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }
