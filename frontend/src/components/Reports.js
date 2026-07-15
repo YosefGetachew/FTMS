@@ -549,64 +549,6 @@ function Reports() {
       ============================================================ */}
 
       <div className="reports-grid">
-        <div className="reports-card reports-card-wide">
-          <div className="reports-card-header">
-            <h3>Status by Structure</h3>
-            <p>Approved, rejected, and pending requests by sector or organization group.</p>
-          </div>
-
-          {sectorStatus.length === 0 ? (
-            <p className="reports-empty">No sector data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={sectorStatus}>
-                <CartesianGrid strokeDasharray="3 3" />
-
-                <XAxis dataKey="sector" />
-
-                <YAxis
-                  allowDecimals={false}
-                  tickCount={6}
-                  domain={[0, 'auto']}
-                />
-
-                <Tooltip />
-                <Legend />
-
-                <Bar
-                  dataKey="approved"
-                  fill="#16a34a"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-
-                <Bar
-                  dataKey="rejected"
-                  fill="#dc2626"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-
-                <Bar
-                  dataKey="pending"
-                  fill="#f59e0b"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
         <div className="reports-card">
           <div className="reports-card-header">
             <h3>Monthly Approved Travel</h3>
@@ -680,6 +622,64 @@ function Reports() {
                     fill="#334155"
                   />
                 </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="reports-card reports-card-wide">
+          <div className="reports-card-header">
+            <h3>Status by Structure</h3>
+            <p>Approved, rejected, and pending requests by sector or organization group.</p>
+          </div>
+
+          {sectorStatus.length === 0 ? (
+            <p className="reports-empty">No sector data available</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={sectorStatus}>
+                <CartesianGrid strokeDasharray="3 3" />
+
+                <XAxis dataKey="sector" />
+
+                <YAxis
+                  allowDecimals={false}
+                  tickCount={6}
+                  domain={[0, 'auto']}
+                />
+
+                <Tooltip />
+                <Legend />
+
+                <Bar
+                  dataKey="approved"
+                  fill="#16a34a"
+                  label={{
+                    position: 'top',
+                    fontWeight: 600,
+                    fill: '#334155',
+                  }}
+                />
+
+                <Bar
+                  dataKey="rejected"
+                  fill="#dc2626"
+                  label={{
+                    position: 'top',
+                    fontWeight: 600,
+                    fill: '#334155',
+                  }}
+                />
+
+                <Bar
+                  dataKey="pending"
+                  fill="#f59e0b"
+                  label={{
+                    position: 'top',
+                    fontWeight: 600,
+                    fill: '#334155',
+                  }}
+                />
               </BarChart>
             </ResponsiveContainer>
           )}
