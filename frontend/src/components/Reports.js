@@ -593,55 +593,7 @@ function Reports() {
       ============================================================ */}
 
       <div className="reports-grid">
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>Monthly Approved Travel</h3>
-            <p>Approved requests grouped by travel start month.</p>
-          </div>
-
-          {monthlyRequests.length === 0 ? (
-            <p className="reports-empty">No monthly data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={350}>
-              <LineChart data={monthlyRequests}>
-                <CartesianGrid strokeDasharray="3 3" />
-
-                <XAxis dataKey="month" />
-
-                <YAxis
-                  allowDecimals={false}
-                  tickCount={6}
-                  domain={[0, 'auto']}
-                />
-
-                <Tooltip />
-                <Legend />
-
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#2563eb"
-                  strokeWidth={3}
-                >
-                  <LabelList
-                    dataKey="total"
-                    position="top"
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      fill: '#2563eb',
-                    }}
-                  />
-                </Line>
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-      </div>
-
-      <div className="reports-grid">
-        <div className="reports-card">
+        <div className="reports-card reports-card-wide">
           <div className="reports-card-header">
             <h3>Status by Structure</h3>
             <p>Approved, rejected, and pending requests by sector or organization group.</p>
@@ -768,6 +720,51 @@ function Reports() {
                   }}
                 />
               </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="reports-card">
+          <div className="reports-card-header">
+            <h3>Monthly Approved Travel</h3>
+            <p>Approved requests grouped by travel start month.</p>
+          </div>
+
+          {monthlyRequests.length === 0 ? (
+            <p className="reports-empty">No monthly data available</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={350}>
+              <LineChart data={monthlyRequests}>
+                <CartesianGrid strokeDasharray="3 3" />
+
+                <XAxis dataKey="month" />
+
+                <YAxis
+                  allowDecimals={false}
+                  tickCount={6}
+                  domain={[0, 'auto']}
+                />
+
+                <Tooltip />
+                <Legend />
+
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  stroke="#2563eb"
+                  strokeWidth={3}
+                >
+                  <LabelList
+                    dataKey="total"
+                    position="top"
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      fill: '#2563eb',
+                    }}
+                  />
+                </Line>
+              </LineChart>
             </ResponsiveContainer>
           )}
         </div>
