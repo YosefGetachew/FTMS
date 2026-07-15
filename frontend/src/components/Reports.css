@@ -318,7 +318,23 @@
 }
 
 .reports-status-structure-card {
-  margin-top: 18px;
+  margin-top: 46px !important;
+  position: relative;
+}
+
+.reports-status-structure-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -24px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(15, 118, 110, 0.18),
+    transparent
+  );
 }
 
 .reports-card-header {
