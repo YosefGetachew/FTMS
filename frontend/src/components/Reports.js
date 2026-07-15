@@ -6,9 +6,6 @@ import {
   Bar,
   LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -22,40 +19,10 @@ import API from '../services/api';
 
 const REPORT_ROLES = ['admin', 'super_admin', 'minister', 'office_head'];
 
-const COLORS = {
-  approved: '#16a34a',
-  rejected: '#dc2626',
-  pending: '#f59e0b',
-  amended: '#7c3aed',
-  total: '#2563eb',
-  stage: ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#7c3aed', '#0891b2'],
-};
-
 const formatRole = (role) =>
   String(role || 'User')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
-
-const formatStage = (stage) => {
-  const labels = {
-    expert_preparation: 'Expert Preparation',
-    lead_executive_review: 'Lead Executive Review',
-    project_coordinator_review: 'Project Coordinator Review',
-    director_review: 'Lead Executive Review',
-    state_minister_review: 'State Minister Review',
-    ceo_review: 'CEO Review',
-    office_head_review: 'Office Head Review',
-    protocol_clearance: 'Protocol Clearance',
-    office_head_final: 'Office Head Final',
-    minister_review: 'Minister Review',
-    pm_office_submission: 'Protocol Submission to PM Office',
-    pm_office_followup: 'PM Office Follow-up',
-    foreign_affairs_followup: 'PM Office Follow-up',
-    completed: 'Completed',
-  };
-
-  return labels[stage] || formatRole(stage);
-};
 
 const formatReportDate = (value) => {
   if (!value) return '-';
@@ -75,7 +42,6 @@ function Reports() {
   const [statusSummary, setStatusSummary] = useState([]);
   const [sectorStatus, setSectorStatus] = useState([]);
   const [monthlyRequests, setMonthlyRequests] = useState([]);
-  const [stageSummary, setStageSummary] = useState([]);
   const [fundingSummary, setFundingSummary] = useState([]);
   const [currentlyAbroad, setCurrentlyAbroad] = useState({
     total: 0,
@@ -136,7 +102,6 @@ function Reports() {
       API.get('/reports/status-summary'),
       API.get('/reports/sector-status'),
       API.get('/reports/monthly-requests'),
-      API.get('/reports/stage-summary'),
       API.get('/reports/office-minister-summary'),
       API.get('/reports/funding-summary'),
       API.get('/reports/currently-abroad'),
@@ -155,11 +120,7 @@ function Reports() {
     }
 
     if (results[3].status === 'fulfilled') {
-      setStageSummary(results[3].value.data || []);
-    }
-
-    if (results[4].status === 'fulfilled') {
-      const officeMinisterData = results[4].value.data || {};
+      const officeMinisterData = results[3].value.data || {};
 
       setMoaVsAffiliateData(officeMinisterData.moaVsAffiliate || []);
       setMoaSectorData(officeMinisterData.moaBySector || []);
@@ -176,16 +137,16 @@ function Reports() {
       );
     }
 
-    if (results[5].status === 'fulfilled') {
-      setFundingSummary(results[5].value.data || []);
+    if (results[4].status === 'fulfilled') {
+      setFundingSummary(results[4].value.data || []);
     }
 
-    if (results[6].status === 'fulfilled') {
+    if (results[5].status === 'fulfilled') {
       setCurrentlyAbroad({
-        total: Number(results[6].value.data?.total || 0),
-        bySector: results[6].value.data?.bySector || [],
-        byDepartment: results[6].value.data?.byDepartment || [],
-        travelers: results[6].value.data?.travelers || [],
+        total: Number(results[5].value.data?.total || 0),
+        bySector: results[5].value.data?.bySector || [],
+        byDepartment: results[5].value.data?.byDepartment || [],
+        travelers: results[5].value.data?.travelers || [],
       });
     }
   }, [canViewReports, transformSectorData]);
@@ -253,11 +214,6 @@ function Reports() {
       tone: 'amber',
     },
   ];
-
-  const formattedStageSummary = stageSummary.map((item) => ({
-    ...item,
-    stageLabel: formatStage(item.current_stage),
-  }));
 
   const currentlyAbroadDepartmentChart = useMemo(
     () =>
@@ -640,79 +596,6 @@ function Reports() {
                 <Bar
                   dataKey="pending"
                   fill="#f59e0b"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>Requests by Workflow Stage</h3>
-            <p>Current workflow distribution across all requests.</p>
-          </div>
-
-          {stageSummary.length === 0 ? (
-            <p className="reports-empty">No workflow stage data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={350}>
-              <PieChart>
-                <Pie
-                  data={formattedStageSummary}
-                  dataKey="count"
-                  nameKey="stageLabel"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={120}
-                  label
-                >
-                  {formattedStageSummary.map((entry, index) => (
-                    <Cell
-                      key={index}
-                      fill={COLORS.stage[index % COLORS.stage.length]}
-                    />
-                  ))}
-                </Pie>
-
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>Status Summary</h3>
-            <p>Overall final status distribution.</p>
-          </div>
-
-          {statusSummary.length === 0 ? (
-            <p className="reports-empty">No status data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={statusSummary}>
-                <CartesianGrid strokeDasharray="3 3" />
-
-                <XAxis dataKey="status" />
-
-                <YAxis
-                  allowDecimals={false}
-                  tickCount={6}
-                  domain={[0, 'auto']}
-                />
-
-                <Tooltip />
-                <Legend />
-
-                <Bar
-                  dataKey="count"
-                  fill="#2563eb"
                   label={{
                     position: 'top',
                     fontWeight: 600,
