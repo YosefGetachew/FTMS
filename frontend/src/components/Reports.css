@@ -293,7 +293,8 @@
 .reports-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-  gap: 18px;
+  column-gap: 18px;
+  row-gap: 30px;
 }
 
 .reports-chart-pair {
