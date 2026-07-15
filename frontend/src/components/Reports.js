@@ -6,9 +6,6 @@ import {
   Bar,
   LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -21,7 +18,6 @@ import {
 import API from '../services/api';
 
 const REPORT_ROLES = ['admin', 'super_admin', 'minister', 'office_head'];
-const MOA_AFFILIATE_COLORS = ['#2563eb', '#f97316', '#0f766e', '#7c3aed'];
 
 const formatRole = (role) =>
   String(role || 'User')
@@ -429,31 +425,30 @@ function Reports() {
                 <p className="reports-empty">No MoA or Affiliate Institute data available</p>
               ) : (
                 <ResponsiveContainer width="100%" height={350}>
-                  <PieChart>
-                    <Pie
-                      data={moaVsAffiliateData}
-                      dataKey="count"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={120}
-                      label={({ count }) => count}
-                      labelLine={false}
-                    >
-                      {moaVsAffiliateData.map((entry, index) => (
-                        <Cell
-                          key={entry.name || index}
-                          fill={
-                            MOA_AFFILIATE_COLORS[
-                              index % MOA_AFFILIATE_COLORS.length
-                            ]
-                          }
-                        />
-                      ))}
-                    </Pie>
+                  <BarChart data={moaVsAffiliateData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+
+                    <XAxis dataKey="name" />
+
+                    <YAxis
+                      allowDecimals={false}
+                      tickCount={6}
+                      domain={[0, 'auto']}
+                    />
+
                     <Tooltip />
                     <Legend />
-                  </PieChart>
+
+                    <Bar
+                      dataKey="count"
+                      fill="#2563eb"
+                      label={{
+                        position: 'top',
+                        fontWeight: 600,
+                        fill: '#334155',
+                      }}
+                    />
+                  </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
