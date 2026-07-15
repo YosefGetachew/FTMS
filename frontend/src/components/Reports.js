@@ -627,7 +627,7 @@ function Reports() {
           )}
         </div>
 
-        <div className="reports-card reports-card-wide">
+        <div className="reports-card reports-card-wide reports-status-structure-card">
           <div className="reports-card-header">
             <h3>Status by Structure</h3>
             <p>Approved, rejected, and pending requests by sector or organization group.</p>
