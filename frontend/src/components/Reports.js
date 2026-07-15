@@ -57,18 +57,6 @@ const formatStage = (stage) => {
   return labels[stage] || formatRole(stage);
 };
 
-const addMonths = (date, months) => {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
-};
-
-const formatMonth = (date) =>
-  date.toLocaleDateString('en-US', {
-    month: 'short',
-    year: 'numeric',
-  });
-
 const formatReportDate = (value) => {
   if (!value) return '-';
 
@@ -81,37 +69,6 @@ const formatReportDate = (value) => {
     day: '2-digit',
     year: 'numeric',
   });
-};
-
-const buildMonthlyForecast = (monthlyRequests) => {
-  const actual = (monthlyRequests || []).map((item) => ({
-    month: item.month,
-    actual: Number(item.total || 0),
-    forecast: null,
-    type: 'Actual',
-  }));
-
-  if (actual.length === 0) return [];
-
-  const recent = actual.slice(-3);
-  const average =
-    recent.reduce((sum, item) => sum + item.actual, 0) / recent.length;
-  const last = actual[actual.length - 1]?.actual || 0;
-  const previous =
-    actual.length > 1 ? actual[actual.length - 2]?.actual || 0 : last;
-  const trend = Math.max(-2, Math.min(3, last - previous));
-  const lastMonthDate = monthlyRequests[monthlyRequests.length - 1]?.month_date
-    ? new Date(monthlyRequests[monthlyRequests.length - 1].month_date)
-    : new Date();
-
-  const forecast = [1, 2, 3].map((step) => ({
-    month: formatMonth(addMonths(lastMonthDate, step)),
-    actual: null,
-    forecast: Math.max(0, Math.round(average + trend * step)),
-    type: 'Forecast',
-  }));
-
-  return [...actual, ...forecast];
 };
 
 function Reports() {
@@ -302,11 +259,6 @@ function Reports() {
     stageLabel: formatStage(item.current_stage),
   }));
 
-  const forecastData = useMemo(
-    () => buildMonthlyForecast(monthlyRequests),
-    [monthlyRequests]
-  );
-
   const currentlyAbroadDepartmentChart = useMemo(
     () =>
       currentlyAbroad.byDepartment.map((item) => ({
@@ -317,19 +269,6 @@ function Reports() {
             : item.department || 'Unassigned',
       })),
     [currentlyAbroad.byDepartment]
-  );
-
-  const forecastOnly = forecastData.filter((item) => item.type === 'Forecast');
-  const nextForecast = forecastOnly[0]?.forecast || 0;
-  const forecastAverage = forecastOnly.length
-    ? Math.round(
-        forecastOnly.reduce((sum, item) => sum + item.forecast, 0) /
-          forecastOnly.length
-      )
-    : 0;
-  const forecastPeak = forecastOnly.reduce(
-    (peak, item) => (item.forecast > peak.forecast ? item : peak),
-    { month: '-', forecast: 0 }
   );
 
   if (!canViewReports) {
@@ -374,24 +313,6 @@ function Reports() {
             <small>{card.detail}</small>
           </div>
         ))}
-      </div>
-
-      <div className="reports-forecast-strip">
-        <div>
-          <span>Next Month Forecast</span>
-          <strong>{nextForecast}</strong>
-          <small>Estimated approved travel requests</small>
-        </div>
-        <div>
-          <span>3-Month Average Forecast</span>
-          <strong>{forecastAverage}</strong>
-          <small>Expected monthly approval volume</small>
-        </div>
-        <div>
-          <span>Forecast Peak</span>
-          <strong>{forecastPeak.forecast}</strong>
-          <small>{forecastPeak.month}</small>
-        </div>
       </div>
 
       <div className="reports-section-heading">
@@ -528,7 +449,7 @@ function Reports() {
           PART 1: GENERAL ANALYTICAL REPORTS
       ============================================================ */}
 
-      <div className="reports-chart-pair">
+      <div className="reports-grid">
         <div className="reports-card">
           <div className="reports-card-header">
             <h3>Monthly Approved Travel</h3>
@@ -574,45 +495,6 @@ function Reports() {
           )}
         </div>
 
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>3-Month Travel Forecast</h3>
-            <p>
-              Simple projection based on recent approved monthly travel volume.
-            </p>
-          </div>
-
-          {forecastData.length === 0 ? (
-            <p className="reports-empty">No monthly data available for forecasting</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={330}>
-              <LineChart data={forecastData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis allowDecimals={false} tickCount={6} domain={[0, 'auto']} />
-                <Tooltip />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="actual"
-                  name="Actual Approved"
-                  stroke="#2563eb"
-                  strokeWidth={3}
-                  connectNulls={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="forecast"
-                  name="Forecast"
-                  stroke="#f59e0b"
-                  strokeWidth={3}
-                  strokeDasharray="6 5"
-                  connectNulls={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
       </div>
 
       <div className="reports-grid">
