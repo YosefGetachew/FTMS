@@ -45,7 +45,7 @@ const nodemonBin =
 const child = spawn(nodemonBin, ["server.js"], {
   cwd: path.join(__dirname, ".."),
   stdio: "inherit",
-  shell: false,
+  shell: process.platform === "win32",
 });
 
 child.on("exit", (code, signal) => {

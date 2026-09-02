@@ -19,6 +19,7 @@ export function canDecideRequest(user, request) {
     return true;
   }
   if (['lead_executive_officer', 'lead_executive'].includes(role) && stageMatches(request, ['lead_executive_review', 'lead_executive'])) return true;
+  if (role === 'director_general' && request.traveler_category === 'affiliate_institution' && stageMatches(request, ['office_head_review', 'director_general'])) return true;
   if (role === 'state_minister' && workflowType === 'sector_structure' && stageMatches(request, ['state_minister', 'state_minister_review'])) return true;
   if (['chief_executive_officer', 'ceo'].includes(role) && workflowType === 'ceo_structure' && stageMatches(request, ['ceo_review', 'chief_executive_officer', 'ceo'])) return true;
   if (role === 'office_head' && stageMatches(request, ['office_head_review', 'office_head', 'office_head_final'])) return true;

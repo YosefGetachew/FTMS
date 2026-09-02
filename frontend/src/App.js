@@ -41,15 +41,38 @@ const getStoredUser = () => {
   }
 };
 
+const adminRoles = ['admin', 'super_admin'];
+const reportRoles = ['office_head', 'minister'];
+const protocolRestrictedPages = ['audit-trail', 'reset-password'];
+
+const getInitialPage = () => {
+  const storedUser = getStoredUser();
+
+  if (reportRoles.includes(storedUser?.role)) {
+    return 'reports';
+  }
+
+  if (adminRoles.includes(storedUser?.role)) {
+    return 'pending-users';
+  }
+
+  if (storedUser?.role === 'traveler') {
+    return 'submitted-requests';
+  }
+
+  return 'dashboard';
+};
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('token'));
 
-  const [activePage, setActivePage] = useState('dashboard');
+  const [activePage, setActivePage] = useState(getInitialPage);
   const [isMobileWorkspace, setIsMobileWorkspace] = useState(false);
   const [mobileWorkspaceOpen, setMobileWorkspaceOpen] = useState(false);
   const [user] = useState(getStoredUser);
 
   const [activeAuthPage, setActiveAuthPage] = useState('login');
+  const isAdminUser = adminRoles.includes(user?.role);
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 900px)');
@@ -96,7 +119,46 @@ function App() {
     </ErrorBoundary>
   );
 
-  const mobileNavItems = [
+  const mobileNavItems = (isAdminUser
+    ? [
+        {
+          id: 'pending-users',
+          label: 'Pending',
+          icon: 'PU',
+          show: true,
+        },
+        {
+          id: 'submitted-requests',
+          label: 'Requests',
+          icon: 'RQ',
+          show: true,
+        },
+        {
+          id: 'user-management',
+          label: 'Users',
+          icon: 'UM',
+          show: true,
+        },
+        {
+          id: 'settings',
+          label: 'Settings',
+          icon: 'OS',
+          show: true,
+        },
+        {
+          id: 'audit-trail',
+          label: 'Audit',
+          icon: 'AT',
+          show: true,
+        },
+        {
+          id: 'reset-password',
+          label: 'Password',
+          icon: 'PW',
+          show: true,
+        },
+      ]
+    : [
     {
       id: 'dashboard',
       label: 'Home',
@@ -122,18 +184,18 @@ function App() {
       show: true,
     },
     {
-      id: ['admin', 'super_admin', 'office_head', 'minister'].includes(user?.role)
+      id: reportRoles.includes(user?.role)
         ? 'reports'
         : 'notifications',
-      label: ['admin', 'super_admin', 'office_head', 'minister'].includes(user?.role)
+      label: reportRoles.includes(user?.role)
         ? 'Reports'
         : 'Alerts',
-      icon: ['admin', 'super_admin', 'office_head', 'minister'].includes(user?.role)
+      icon: reportRoles.includes(user?.role)
         ? 'RP'
         : 'MS',
       show: true,
     },
-  ].filter((item) => item.show);
+  ]).filter((item) => item.show);
 
   if (!isLoggedIn) {
     if (activeAuthPage === 'register') {
@@ -151,6 +213,10 @@ function App() {
   }
 
   const renderPage = () => {
+    if (user?.role === 'protocol' && protocolRestrictedPages.includes(activePage)) {
+      return <RequestTable />;
+    }
+
     switch (activePage) {
       case 'dashboard':
         return <DashboardStats setActivePage={openPage} />;

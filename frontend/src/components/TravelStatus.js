@@ -188,6 +188,19 @@ const formatPendingDays = (days) => {
   return `Pending for ${days} days`;
 };
 
+const stateLabel = (state) => {
+  const labels = {
+    complete: 'Done',
+    current: 'Current',
+    upcoming: 'Upcoming',
+    returned: 'Returned',
+    rejected: 'Rejected',
+    optional: 'Optional',
+  };
+
+  return labels[state] || state;
+};
+
 const formatTimelineDate = (date) => {
   const formatted = formatDate(date);
   return formatted === '-' ? 'Date unavailable' : formatted;
@@ -198,6 +211,28 @@ const getApproverName = (entry) =>
   entry?.actor_email ||
   (entry?.actor_role ? getStageLabel(entry.actor_role) : '');
 
+const getRequestStatusGroup = (request) => {
+  if (request?.current_stage === 'completed') return 'completed';
+
+  const finalStatus = normalizeText(request?.final_status);
+
+  if (finalStatus === 'approved' || finalStatus === 'rejected') return 'completed';
+  if (finalStatus === 'amended') return 'returned';
+
+  return 'pending';
+};
+
+const formatStatusGroup = (value) => {
+  const labels = {
+    all: 'All Requests',
+    pending: 'Pending',
+    returned: 'Returned',
+    completed: 'Completed',
+  };
+
+  return labels[value] || value;
+};
+
 function TravelStatus() {
   const user = useMemo(() => getCurrentUser(), []);
   const [requests, setRequests] = useState([]);
@@ -206,6 +241,7 @@ function TravelStatus() {
   const [workflowApprovers, setWorkflowApprovers] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
 
@@ -308,31 +344,53 @@ function TravelStatus() {
   const filteredRequests = useMemo(() => {
     const keyword = normalizeText(search);
 
-    if (!keyword) return requests;
+    return requests.filter((request) => {
+      const matchesStatus =
+        statusFilter === 'all' || getRequestStatusGroup(request) === statusFilter;
+      const matchesSearch =
+        !keyword ||
+        [
+          request.full_name,
+          request.country,
+          request.sector,
+          request.department,
+          request.organization_name,
+          request.current_stage,
+          request.final_status,
+          request.status,
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword);
 
-    return requests.filter((request) =>
-      [
-        request.full_name,
-        request.country,
-        request.sector,
-        request.department,
-        request.organization_name,
-        request.current_stage,
-        request.final_status,
-        request.status,
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(keyword)
+      return matchesStatus && matchesSearch;
+    });
+  }, [requests, search, statusFilter]);
+
+  useEffect(() => {
+    if (!filteredRequests.length) {
+      if (selectedRequestId) {
+        setSelectedRequestId('');
+      }
+
+      return;
+    }
+
+    const selectedIsVisible = filteredRequests.some(
+      (request) => String(request.id) === String(selectedRequestId)
     );
-  }, [requests, search]);
+
+    if (!selectedIsVisible) {
+      setSelectedRequestId(String(filteredRequests[0].id));
+    }
+  }, [filteredRequests, selectedRequestId]);
 
   const selectedRequest = useMemo(
     () =>
-      requests.find((request) => String(request.id) === String(selectedRequestId)) ||
+      filteredRequests.find((request) => String(request.id) === String(selectedRequestId)) ||
       filteredRequests[0] ||
       null,
-    [requests, selectedRequestId, filteredRequests]
+    [selectedRequestId, filteredRequests]
   );
 
   const stageTimeline = useMemo(() => {
@@ -389,13 +447,25 @@ function TravelStatus() {
         : workflowStages[projectWorkflowType] ||
           workflowStages[workflowType] ||
           workflowStages.office_head_structure;
+    const shouldShowPmOfficeStages =
+      selectedRequest.pm_approval_required !== false ||
+      ['pm_office_submission', 'pm_office_followup', 'foreign_affairs_followup'].includes(
+        selectedRequest.current_stage
+      ) ||
+      normalizeText(selectedRequest.status).includes('pm office');
     const ministerStageActive = shouldShowMinisterStage(selectedRequest);
     const hasMinisterStage = baseStages.includes('minister_review');
-    const stages = baseStages.flatMap((stage) =>
+    const stagesWithMinister = baseStages.flatMap((stage) =>
       stage === 'pm_office_submission' && !hasMinisterStage
         ? ['minister_review', stage]
         : [stage]
     );
+    const stages = shouldShowPmOfficeStages
+      ? stagesWithMinister
+      : stagesWithMinister.filter(
+          (stage) =>
+            !['pm_office_submission', 'pm_office_followup', 'foreign_affairs_followup'].includes(stage)
+        );
     const currentStage = selectedRequest.current_stage;
     const finalStatus = selectedRequest.final_status;
     const currentIndex =
@@ -456,8 +526,11 @@ function TravelStatus() {
     () => [
       {
         label: 'Visible Requests',
-        value: requests.length,
-        helper: 'Available in your role',
+        value: filteredRequests.length,
+        helper:
+          filteredRequests.length === requests.length
+            ? 'Available in your role'
+            : `${requests.length} total available`,
       },
       {
         label: 'Pending',
@@ -478,8 +551,43 @@ function TravelStatus() {
         helper: 'PM Office status completed',
       },
     ],
-    [requests]
+    [filteredRequests.length, requests]
   );
+
+  const progressSummary = useMemo(() => {
+    if (!diagramStages.length) {
+      return {
+        completed: 0,
+        total: 0,
+        percent: 0,
+        current: 'No active request',
+        pendingLabel: 'No workflow selected',
+      };
+    }
+
+    const requiredStages = diagramStages.filter((item) => !item.optional);
+    const completed = requiredStages.filter((item) => item.state === 'complete').length;
+    const activeStage =
+      diagramStages.find((item) => item.state === 'current') ||
+      diagramStages.find((item) => ['returned', 'rejected'].includes(item.state)) ||
+      diagramStages[diagramStages.length - 1];
+    const total = requiredStages.length || diagramStages.length;
+    const percent =
+      selectedRequest?.final_status === 'approved' || selectedRequest?.current_stage === 'completed'
+        ? 100
+        : Math.round((completed / Math.max(total, 1)) * 100);
+
+    return {
+      completed,
+      total,
+      percent,
+      current: activeStage?.label || 'Workflow',
+      pendingLabel:
+        activeStage?.state === 'current'
+          ? formatPendingDays(activeStage.pendingDays)
+          : stateLabel(activeStage?.state || 'upcoming'),
+    };
+  }, [diagramStages, selectedRequest]);
 
   return (
     <div className="travel-status-page">
@@ -531,6 +639,20 @@ function TravelStatus() {
         </label>
 
         <label>
+          Status
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            {['all', 'pending', 'returned', 'completed'].map((item) => (
+              <option key={item} value={item}>
+                {formatStatusGroup(item)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
           Request
           <select
             value={selectedRequestId}
@@ -564,6 +686,15 @@ function TravelStatus() {
                 </h3>
                 <p>{selectedRequest.status || 'Request status not set'}</p>
               </div>
+
+              <div className="travel-status-progress-card">
+                <span>{progressSummary.percent}% complete</span>
+                <strong>{progressSummary.current}</strong>
+                <small>{progressSummary.pendingLabel}</small>
+                <div className="travel-status-progress-track" aria-hidden="true">
+                  <i style={{ width: `${progressSummary.percent}%` }} />
+                </div>
+              </div>
             </div>
 
             <div className="travel-status-diagram">
@@ -578,7 +709,12 @@ function TravelStatus() {
                   <div className={`travel-status-step ${item.state}`}>
                     <span>{index + 1}</span>
                     <div className="travel-status-step-copy">
-                      <strong>{item.label}</strong>
+                      <div className="travel-status-step-title">
+                        <strong>{item.label}</strong>
+                        <small className={`travel-status-state-chip ${item.state}`}>
+                          {stateLabel(item.state)}
+                        </small>
+                      </div>
 
                       {(item.state !== 'upcoming' || item.expectedApprover) && (
                         <div className="travel-status-step-meta">
@@ -685,6 +821,16 @@ function TravelStatus() {
                 <span>Current Stage</span>
                 <strong>
                   {getStageLabel(selectedRequest.current_stage, selectedRequest) || '-'}
+                </strong>
+              </div>
+              <div>
+                <span>Protocol PM Decision</span>
+                <strong>
+                  {selectedRequest.pm_approval_required === true
+                    ? 'PM Office approval required'
+                    : selectedRequest.pm_approval_required === false
+                    ? 'No PM Office approval required'
+                    : 'Not decided yet'}
                 </strong>
               </div>
               <div>

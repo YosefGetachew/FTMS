@@ -436,6 +436,7 @@ export default function RequestForm() {
       startDate: "",
       endDate: "",
       purpose: "",
+      fundingSourceType: "",
       sponsor: "",
       passportNumber: "",
       passportFile: null,
@@ -463,6 +464,7 @@ export default function RequestForm() {
     leadExecutiveOffices: false,
     moaProjects: false,
     submitting: false,
+    drafting: false,
   });
 
   const isMoA = formData.organizationType === "moa";
@@ -726,6 +728,10 @@ export default function RequestForm() {
         next.leadExecutiveOffice = "";
       }
 
+      if (name === "fundingSourceType" && value === "government") {
+        next.sponsor = "";
+      }
+
       return next;
     });
   };
@@ -776,6 +782,10 @@ export default function RequestForm() {
     if (formData.startDate && formData.endDate && formData.endDate < formData.startDate) {
       e.endDate = "End date must be on or after start date.";
     }
+    if (!formData.fundingSourceType) e.fundingSourceType = "Select funding source type.";
+    if (formData.fundingSourceType === "non_government" && !formData.sponsor.trim()) {
+      e.sponsor = "Enter the non-government funding source.";
+    }
     if (!formData.purpose.trim()) e.purpose = "Purpose is required.";
 
     return e;
@@ -816,8 +826,9 @@ export default function RequestForm() {
     return Boolean(errors[k]);
   });
 
-  const step2Valid = !["country", "startDate", "endDate", "purpose"].some((k) => errors[k]);
+  const step2Valid = !["country", "startDate", "endDate", "fundingSourceType", "sponsor", "purpose"].some((k) => errors[k]);
   const canSubmit = step1Valid && step2Valid;
+  const draftValid = !["fullName", "email", "country", "startDate", "endDate"].some((k) => errors[k]);
 
   const fetchOrganizations = useCallback(async () => {
     setLoading((p) => ({ ...p, organizations: true }));
@@ -1001,7 +1012,7 @@ export default function RequestForm() {
     }
 
     if (step === 2) {
-      touchMany(["country", "startDate", "endDate", "purpose"]);
+      touchMany(["country", "startDate", "endDate", "fundingSourceType", "sponsor", "purpose"]);
 
       if (!step2Valid) {
         setNotice({ type: "error", message: "Please fix the highlighted fields." });
@@ -1021,12 +1032,7 @@ export default function RequestForm() {
     setStep(1);
   };
 
-  const submitRequest = async () => {
-    if (submitInFlightRef.current || loading.submitting) {
-      return;
-    }
-
-    setNotice({ type: "", message: "" });
+  const touchSubmitFields = () => {
     touchMany([
       "organizationType",
       "travelerType",
@@ -1042,8 +1048,106 @@ export default function RequestForm() {
       "country",
       "startDate",
       "endDate",
+      "fundingSourceType",
+      "sponsor",
       "purpose",
     ]);
+  };
+
+  const buildRequestPayload = () => {
+    const data = new FormData();
+
+    data.append("travelerCategory", isAffiliate ? "affiliate_institution" : formData.travelerType);
+    data.append("workflowType", isMoA ? formData.workflowType : "office_head_structure");
+    data.append("organizationName", isAffiliate ? formData.organizationName : "MoA");
+    data.append("fundingSourceType", formData.fundingSourceType);
+    data.append(
+      "department",
+      isMoA
+        ? isAdvisorTraveler
+          ? "Advisor"
+          : isStateMinisterSectorTraveler
+          ? "State Minister"
+          : formData.leadExecutiveOffice
+        : isAffiliateDirectorGeneralTraveler
+        ? "Director General"
+        : formData.department
+    );
+
+    [
+      "fullName",
+      "position",
+      "sector",
+      "email",
+      "phone",
+      "country",
+      "startDate",
+      "endDate",
+      "purpose",
+      "passportNumber",
+    ].forEach((k) => {
+      if (formData[k]) {
+        data.append(k, k === "phone" ? normalizedPhone : formData[k]);
+      }
+    });
+
+    data.append(
+      "sponsor",
+      formData.fundingSourceType === "government"
+        ? "Government"
+        : formData.sponsor
+    );
+
+    ["passportFile", "invitationLetter", "torFile"].forEach((k) => {
+      if (formData[k]) data.append(k, formData[k]);
+    });
+
+    return data;
+  };
+
+  const saveDraft = async () => {
+    if (submitInFlightRef.current || loading.submitting || loading.drafting) {
+      return;
+    }
+
+    setNotice({ type: "", message: "" });
+    touchMany(["fullName", "email", "country", "startDate", "endDate"]);
+
+    if (!draftValid) {
+      setNotice({ type: "error", message: "Please complete required fields before saving a draft." });
+      return;
+    }
+
+    submitInFlightRef.current = true;
+    setLoading((p) => ({ ...p, drafting: true }));
+    try {
+      await API.post("/requests", buildRequestPayload());
+
+      setNotice({
+        type: "success",
+        message: "Draft saved. You can continue it later from Submitted Requests.",
+      });
+      resetForm({ keepNotice: true });
+    } catch (error) {
+      const msg =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Error saving draft.";
+      setNotice({ type: "error", message: typeof msg === "string" ? msg : "Error saving draft." });
+    } finally {
+      submitInFlightRef.current = false;
+      setLoading((p) => ({ ...p, drafting: false }));
+    }
+  };
+
+  const submitRequest = async () => {
+    if (submitInFlightRef.current || loading.submitting || loading.drafting) {
+      return;
+    }
+
+    setNotice({ type: "", message: "" });
+    touchSubmitFields();
 
     if (!canSubmit) {
       setNotice({ type: "error", message: "Please complete all required fields." });
@@ -1053,47 +1157,7 @@ export default function RequestForm() {
     submitInFlightRef.current = true;
     setLoading((p) => ({ ...p, submitting: true }));
     try {
-      const data = new FormData();
-
-      data.append("travelerCategory", isAffiliate ? "affiliate_institution" : formData.travelerType);
-      data.append("workflowType", isMoA ? formData.workflowType : "office_head_structure");
-      data.append("organizationName", isAffiliate ? formData.organizationName : "MoA");
-      data.append(
-        "department",
-        isMoA
-          ? isAdvisorTraveler
-            ? "Advisor"
-            : isStateMinisterSectorTraveler
-            ? "State Minister"
-            : formData.leadExecutiveOffice
-          : isAffiliateDirectorGeneralTraveler
-          ? "Director General"
-          : formData.department
-      );
-
-      [
-        "fullName",
-        "position",
-        "sector",
-        "email",
-        "phone",
-        "country",
-        "startDate",
-        "endDate",
-        "purpose",
-        "sponsor",
-        "passportNumber",
-      ].forEach((k) => {
-        if (formData[k]) {
-          data.append(k, k === "phone" ? normalizedPhone : formData[k]);
-        }
-      });
-
-      ["passportFile", "invitationLetter", "torFile"].forEach((k) => {
-        if (formData[k]) data.append(k, formData[k]);
-      });
-
-      const created = (await API.post("/requests", data)).data;
+      const created = (await API.post("/requests", buildRequestPayload())).data;
 
       if (created?.id) {
         await API.put(`/requests/${created.id}/status`, {
@@ -1239,7 +1303,7 @@ export default function RequestForm() {
                         name="travelerType"
                         value={formData.travelerType}
                         onChange={handleChange}
-                        cols={3}
+                        cols={4}
                         options={travelerTypeOptions}
                       />
                     </Field>
@@ -1295,7 +1359,7 @@ export default function RequestForm() {
                       </div>
 
                     <div>
-                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                      <div className="structure-assignment-grid">
                         <Field
                           name="sector"
                           label={`${selectedStructureTypeLabel} Structure`}
@@ -1655,13 +1719,36 @@ export default function RequestForm() {
                 <div className="trip-detail-panel">
                   <div className="traveler-detail-heading">
                     <span>Travel Support and Purpose</span>
-                    <small>Sponsor, passport, and purpose of travel</small>
+                    <small>Funding, passport, and purpose of travel</small>
                   </div>
 
                   <div className="trip-support-grid">
-                    <Field name="sponsor" label="Sponsor / Funding Source" hint="Optional" touched={touched} errors={errors}>
-                      <input name="sponsor" value={formData.sponsor} onChange={handleChange} className="ministry-input" />
+                    <Field name="fundingSourceType" label="Funding Source" required touched={touched} errors={errors}>
+                      <select
+                        name="fundingSourceType"
+                        value={formData.fundingSourceType}
+                        onChange={handleChange}
+                        onBlur={() => markTouched("fundingSourceType")}
+                        className="ministry-input"
+                      >
+                        <option value="">Select funding source</option>
+                        <option value="government">Government</option>
+                        <option value="non_government">Non-government</option>
+                      </select>
                     </Field>
+
+                    {formData.fundingSourceType === "non_government" && (
+                      <Field name="sponsor" label="Source of Fund" required touched={touched} errors={errors}>
+                        <input
+                          name="sponsor"
+                          value={formData.sponsor}
+                          onChange={handleChange}
+                          onBlur={() => markTouched("sponsor")}
+                          className="ministry-input"
+                          placeholder="Enter organization or sponsor name"
+                        />
+                      </Field>
+                    )}
 
                     <Field name="passportNumber" label="Passport Number" hint="Optional" touched={touched} errors={errors}>
                       <input
@@ -1771,6 +1858,16 @@ export default function RequestForm() {
                       {formData.startDate || "-"} to {formData.endDate || "-"}
                     </strong>
                   </div>
+                  <div>
+                    <span>Funding</span>
+                    <strong>
+                      {formData.fundingSourceType === "government"
+                        ? "Government"
+                        : formData.fundingSourceType === "non_government"
+                        ? formData.sponsor || "Non-government"
+                        : "-"}
+                    </strong>
+                  </div>
                 </div>
                 {isMoA && selectedWorkflow && (
                   <div className="review-route">
@@ -1788,27 +1885,36 @@ export default function RequestForm() {
             </div>
           )}
 
-          <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <button type="button" onClick={() => resetForm()} className="secondary-btn">
-              Reset
+          <div className="mt-10 flex flex-row flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={saveDraft}
+              className="secondary-btn"
+              disabled={loading.submitting || loading.drafting}
+            >
+              {loading.drafting ? "Saving Draft..." : "Save Draft"}
             </button>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              {step > 1 && (
-                <button type="button" onClick={goBack} className="secondary-btn">
-                  Back
-                </button>
-              )}
-              {step < 3 ? (
-                <button type="button" onClick={goNext} className="primary-btn">
-                  Continue
-                </button>
-              ) : (
-                <button type="button" onClick={submitRequest} className="primary-btn" disabled={loading.submitting}>
-                  {loading.submitting ? "Submitting..." : "Submit Request"}
-                </button>
-              )}
-            </div>
+            {step > 1 && (
+              <button type="button" onClick={goBack} className="secondary-btn">
+                Back
+              </button>
+            )}
+
+            {step < 3 ? (
+              <button type="button" onClick={goNext} className="primary-btn">
+                Continue
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submitRequest}
+                className="primary-btn"
+                disabled={loading.submitting || loading.drafting}
+              >
+                {loading.submitting ? "Submitting..." : "Submit Request"}
+              </button>
+            )}
           </div>
         </form>
       </div>

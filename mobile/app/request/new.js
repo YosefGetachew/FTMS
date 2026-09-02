@@ -35,6 +35,7 @@ const workflowTypes = [
   { label: 'Sector', value: 'sector_structure' },
   { label: 'CEO', value: 'ceo_structure' },
   { label: "Office Head", value: 'office_head_structure' },
+  { label: 'Minister', value: 'minister_structure' },
 ];
 
 export default function NewRequestScreen() {
@@ -51,6 +52,7 @@ export default function NewRequestScreen() {
   const [affiliates, setAffiliates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
+  const isAdvisor = form.organizationType === 'moa' && form.travelerType === 'advisor';
 
   const sectorOptions = useMemo(
     () => structures.filter((item) => item.workflow_type === form.workflowType),
@@ -121,7 +123,7 @@ export default function NewRequestScreen() {
     if (!form.organizationType || !form.fullName || !form.position || !form.department || !form.email || !form.country || !form.startDate || !form.endDate || !form.purpose) {
       return 'Please complete all required fields.';
     }
-    if (form.organizationType === 'moa' && (!form.travelerType || !form.workflowType || !form.sector || !form.leadExecutiveOffice)) {
+    if (form.organizationType === 'moa' && (!form.travelerType || !form.workflowType || !form.sector || (!isAdvisor && !form.leadExecutiveOffice))) {
       return 'Complete the MoA traveler structure and Lead Executive Office.';
     }
     if (form.organizationType === 'affiliate' && !form.organizationName) {
@@ -146,7 +148,7 @@ export default function NewRequestScreen() {
       data.append('travelerCategory', isAffiliate ? 'affiliate_institution' : form.travelerType);
       data.append('workflowType', isAffiliate ? 'office_head_structure' : form.workflowType);
       data.append('organizationName', isAffiliate ? form.organizationName : 'MoA');
-      data.append('department', form.organizationType === 'moa' ? form.leadExecutiveOffice : form.department);
+      data.append('department', form.organizationType === 'moa' ? (isAdvisor ? 'Advisor' : form.leadExecutiveOffice) : form.department);
 
       ['fullName', 'position', 'sector', 'email', 'phone', 'country', 'startDate', 'endDate', 'purpose', 'sponsor', 'passportNumber'].forEach((key) => {
         if (form[key]) data.append(key, form[key]);
@@ -207,10 +209,19 @@ export default function NewRequestScreen() {
 
         {form.organizationType === 'moa' ? (
           <>
-            <ChoiceRow label="Traveler Type *" value={form.travelerType} options={[{ label: 'Higher Official', value: 'higher_official' }, { label: 'Expert', value: 'expert' }]} onChange={(value) => update('travelerType', value)} />
+            <ChoiceRow label="Traveler Type *" value={form.travelerType} options={[{ label: 'Higher Official', value: 'higher_official' }, { label: 'Advisor', value: 'advisor' }, { label: 'Expert', value: 'expert' }]} onChange={(value) => update('travelerType', value)} />
             <ChoiceRow label="Structure Type *" value={form.workflowType} options={workflowTypes} onChange={(value) => update('workflowType', value)} />
             <ChoiceRow label="Structure *" value={form.sector} options={sectorOptions.map((item) => item.name)} onChange={(value) => update('sector', value)} />
-            <ChoiceRow label="Lead Executive Office *" value={form.leadExecutiveOffice} options={officeOptions.map((item) => item.name)} onChange={(value) => update('leadExecutiveOffice', value)} disabled={!form.sector} />
+            {isAdvisor ? (
+              <View style={styles.routeNotice}>
+                <Text style={styles.routeTitle}>Advisor Routing</Text>
+                <Text style={styles.routeText}>
+                  Advisor travel skips Lead Executive Office and follows the selected structure route.
+                </Text>
+              </View>
+            ) : (
+              <ChoiceRow label="Lead Executive Office *" value={form.leadExecutiveOffice} options={officeOptions.map((item) => item.name)} onChange={(value) => update('leadExecutiveOffice', value)} disabled={!form.sector} />
+            )}
           </>
         ) : null}
 
@@ -295,6 +306,16 @@ const styles = StyleSheet.create({
   choiceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   choiceButton: { minHeight: 40, paddingHorizontal: 12 },
   emptyChoice: { color: colors.muted },
+  routeNotice: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 14,
+    padding: 12,
+  },
+  routeTitle: { color: colors.primary, fontSize: 13, fontWeight: '900' },
+  routeText: { color: colors.muted, lineHeight: 19, marginTop: 4 },
   fileRow: { alignItems: 'center', borderTopColor: colors.border, borderTopWidth: 1, flexDirection: 'row', gap: 12, paddingVertical: 12 },
   fileLabel: { color: colors.text, fontWeight: '900' },
   fileName: { color: colors.muted, marginTop: 2 },

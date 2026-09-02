@@ -4,7 +4,7 @@ import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react
 import RequestCard from '../../src/components/RequestCard';
 import { Button, EmptyState, Field, Notice } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
-import { useRequests } from '../../src/hooks/useRequests';
+import { useRequests } from '../../src/context/RequestsContext';
 import API, { getApiErrorMessage } from '../../src/services/api';
 import { colors } from '../../src/styles/theme';
 import { canCreateRequest } from '../../src/utils/access';
@@ -13,7 +13,7 @@ import { canDecideRequest, getNegativeAction, getPrimaryAction } from '../../src
 
 export default function RequestsScreen() {
   const { user } = useAuth();
-  const { requests, loading, error, refresh } = useRequests(user);
+  const { requests, loading, error, refresh } = useRequests();
   const showNewRequest = canCreateRequest(user?.role);
   const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState(null);

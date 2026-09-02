@@ -20,6 +20,7 @@ export default function MoreScreen() {
   const items = [
     {
       title: 'Dashboard',
+      group: 'Overview',
       detail: 'Analytics and approval overview',
       href: '/dashboard',
       icon: 'grid-outline',
@@ -27,6 +28,7 @@ export default function MoreScreen() {
     },
     {
       title: 'New Travel Request',
+      group: 'Travel Work',
       detail: 'Prepare and submit travel',
       href: '/request/new',
       icon: 'add-circle-outline',
@@ -34,6 +36,7 @@ export default function MoreScreen() {
     },
     {
       title: 'Submitted Requests',
+      group: 'Travel Work',
       detail: 'Review assigned and historical travel requests',
       href: '/requests',
       icon: 'briefcase-outline',
@@ -41,6 +44,7 @@ export default function MoreScreen() {
     },
     {
       title: 'Travel Status',
+      group: 'Travel Work',
       detail: 'Diagram view of request progress',
       href: '/status',
       icon: 'git-branch-outline',
@@ -48,6 +52,7 @@ export default function MoreScreen() {
     },
     {
       title: 'Notifications',
+      group: 'Travel Work',
       detail: 'System messages and updates',
       href: '/notifications',
       icon: 'notifications-outline',
@@ -55,6 +60,7 @@ export default function MoreScreen() {
     },
     {
       title: 'Reports',
+      group: 'Analytics',
       detail: 'Performance and travel analytics',
       href: '/reports',
       icon: 'bar-chart-outline',
@@ -62,6 +68,7 @@ export default function MoreScreen() {
     },
     {
       title: 'Pending Users',
+      group: 'People Administration',
       detail: 'Approve account requests',
       href: '/admin/pending-users',
       icon: 'person-add-outline',
@@ -69,6 +76,7 @@ export default function MoreScreen() {
     },
     {
       title: 'User Management',
+      group: 'People Administration',
       detail: 'Officers and user accounts',
       href: '/admin/users',
       icon: 'people-outline',
@@ -76,6 +84,7 @@ export default function MoreScreen() {
     },
     {
       title: 'Organization Settings',
+      group: 'System Governance',
       detail: 'Structures, offices, affiliate institutions',
       href: '/admin/settings',
       icon: 'settings-outline',
@@ -83,6 +92,7 @@ export default function MoreScreen() {
     },
     {
       title: 'Audit Trail',
+      group: 'System Governance',
       detail: 'Accountability records',
       href: '/admin/audit',
       icon: 'shield-checkmark-outline',
@@ -90,12 +100,15 @@ export default function MoreScreen() {
     },
     {
       title: 'Reset Password',
+      group: 'Account Security',
       detail: 'Secure account password',
       href: '/account/password',
       icon: 'key-outline',
       show: role !== 'minister' && role !== 'pm_office',
     },
   ].filter((item) => item.show);
+
+  const groups = [...new Set(items.map((item) => item.group))];
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
@@ -107,19 +120,30 @@ export default function MoreScreen() {
         </Text>
       </View>
 
-      {items.map((item) => (
-        <Pressable key={item.title} onPress={() => router.push(item.href)}>
-          <Card style={styles.item}>
-            <View style={styles.iconBox}>
-              <Ionicons name={item.icon} size={22} color={colors.primary} />
-            </View>
-            <View style={styles.textBlock}>
-              <Text style={styles.itemTitle}>{item.title}</Text>
-              <Text style={styles.itemDetail}>{item.detail}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.muted} />
-          </Card>
-        </Pressable>
+      <Card style={styles.summaryCard}>
+        <Text style={styles.summaryLabel}>Available Features</Text>
+        <Text style={styles.summaryValue}>{items.length}</Text>
+        <Text style={styles.summaryDetail}>Role-based system workspaces visible on mobile.</Text>
+      </Card>
+
+      {groups.map((group) => (
+        <View key={group} style={styles.group}>
+          <Text style={styles.groupTitle}>{group}</Text>
+          {items.filter((item) => item.group === group).map((item) => (
+            <Pressable key={item.title} onPress={() => router.push(item.href)}>
+              <Card style={styles.item}>
+                <View style={styles.iconBox}>
+                  <Ionicons name={item.icon} size={22} color={colors.primary} />
+                </View>
+                <View style={styles.textBlock}>
+                  <Text style={styles.itemTitle}>{item.title}</Text>
+                  <Text style={styles.itemDetail}>{item.detail}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+              </Card>
+            </Pressable>
+          ))}
+        </View>
       ))}
     </ScrollView>
   );
@@ -151,6 +175,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginBottom: 10,
+  },
+  summaryCard: {
+    marginBottom: 14,
+  },
+  summaryLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    color: colors.text,
+    fontSize: 30,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  summaryDetail: {
+    color: colors.muted,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  group: {
+    marginBottom: 10,
+  },
+  groupTitle: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 8,
+    textTransform: 'uppercase',
   },
   iconBox: {
     alignItems: 'center',

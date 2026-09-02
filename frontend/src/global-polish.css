@@ -410,7 +410,7 @@ label,
 .request-refresh-btn {
   border: 1px solid var(--brand-600);
   background: var(--brand-600);
-  color: #ffffff;
+  color: #f3f2f2;
   border-radius: var(--radius-md);
   font-weight: 650;
 }
@@ -1898,6 +1898,7 @@ table tbody tr:hover,
   border-radius: 9px;
   box-shadow: 0 4px 10px rgba(15, 118, 110, 0.12);
   font-size: 0.76rem;
+  color: white;
 }
 
 @media (max-width: 900px) {

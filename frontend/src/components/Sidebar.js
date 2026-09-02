@@ -7,6 +7,7 @@ const formatRole = (value) => {
   if (!value) return 'User';
 
   const labels = {
+    director_general: 'Director General',
     pm_office: 'PM Office',
   };
 
@@ -43,6 +44,7 @@ const roleGuidance = {
   state_minister: 'Decide requests from assigned sector offices',
   chief_executive_officer: 'Decide CEO structure requests',
   ceo: 'Decide CEO structure requests',
+  director_general: 'Review requests from your affiliate institute',
   office_head: 'Coordinate clearance and final office review',
   protocol: 'Process protocol clearance tasks',
   pm_office: 'Review requests submitted by Protocol to the PM Office',
@@ -62,9 +64,10 @@ function Sidebar({ setActivePage }) {
   const isMinister = role === 'minister';
   const isPmOffice = role === 'pm_office';
   const formattedRole = formatRole(role);
+  const canViewReports = ['office_head', 'minister'].includes(role);
 
   const [activeMenu, setActiveMenu] = useState(
-    isTraveler ? 'submitted-requests' : 'dashboard'
+    isAdmin ? 'pending-users' : canViewReports ? 'reports' : isTraveler ? 'submitted-requests' : 'dashboard'
   );
 
   const [pendingUserCount, setPendingUserCount] = useState(0);
@@ -81,8 +84,6 @@ function Sidebar({ setActivePage }) {
 
   const allowedReportRoles = useMemo(
     () => [
-      'admin',
-      'super_admin',
       'office_head',
       'minister',
     ],
@@ -174,10 +175,10 @@ function Sidebar({ setActivePage }) {
         label: 'Dashboard',
         description: 'Analytics and approval overview',
         icon: 'DS',
-        show: !isTraveler,
+        show: !isTraveler && !isAdmin,
       },
     ],
-    [isTraveler]
+    [isTraveler, isAdmin]
   );
 
   const travelItems = useMemo(
@@ -187,20 +188,20 @@ function Sidebar({ setActivePage }) {
         label: 'New Travel Request',
         description: 'Prepare and submit travel',
         icon: 'NT',
-        show: !isMinister && !isPmOffice,
+        show: !isMinister && !isPmOffice && !isAdmin,
       },
       {
         id: 'submitted-requests',
-        label: 'Submitted Requests',
+        label: isTraveler ? 'Submitted Requests' : 'Requested Travel',
         description: isTraveler
           ? 'Track your submitted and amended requests'
           : isPmOffice
           ? 'Review requests submitted to the PM Office'
-          : 'Review assigned and historical travel requests',
+          : 'Requested travel that needs your action or decision',
         icon: 'RQ',
         badge: submittedRequestCount > 0 ? submittedRequestCount : null,
         badgeLabel: 'active request',
-        countLabel: isTraveler ? 'Needs attention' : 'Assigned queue',
+        countLabel: isTraveler ? 'Needs attention' : 'Needs decision',
         show: true,
       },
       {
@@ -209,17 +210,17 @@ function Sidebar({ setActivePage }) {
         description: 'Diagram view of request progress',
         icon: '',
         iconClass: 'workflow-icon',
-        show: !isPmOffice,
+        show: !isPmOffice && !isAdmin,
       },
       {
         id: 'notifications',
         label: 'Notifications',
         description: 'System messages and updates',
         icon: 'MS',
-        show: !isMinister && !isPmOffice,
+        show: !isMinister && !isPmOffice && !isAdmin,
       },
     ],
-    [isMinister, isPmOffice, isTraveler, submittedRequestCount]
+    [isMinister, isPmOffice, isTraveler, isAdmin, submittedRequestCount]
   );
 
   const insightItems = useMemo(
@@ -275,10 +276,10 @@ function Sidebar({ setActivePage }) {
         label: 'Audit Trail',
         description: 'Accountability records',
         icon: 'AT',
-        show: isAdmin || isProtocol,
+        show: isAdmin,
       },
     ],
-    [isAdmin, isProtocol]
+    [isAdmin]
   );
 
   const accountItems = useMemo(
@@ -288,10 +289,10 @@ function Sidebar({ setActivePage }) {
         label: 'Reset Password',
         description: 'Secure account password',
         icon: 'PW',
-        show: !isMinister && !isPmOffice,
+        show: !isMinister && !isPmOffice && !isProtocol,
       },
     ],
-    [isMinister, isPmOffice]
+    [isMinister, isPmOffice, isProtocol]
   );
 
   const allVisibleItems = useMemo(
@@ -322,7 +323,7 @@ function Sidebar({ setActivePage }) {
         label: isTraveler ? 'Open Requests' : 'Active Queue',
         value: compactCount(submittedRequestCount),
         helper: isTraveler ? 'Submitted or amended' : 'Pending or assigned',
-        show: true,
+        show: !isAdmin,
       },
       {
         label: 'Pending Users',

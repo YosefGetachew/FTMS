@@ -99,6 +99,7 @@ function UserManagement() {
     roleGroup: "",
     role: "",
     structureType: "",
+    structure: "",
     status: "",
   });
   const [notice, setNotice] = useState(null);
@@ -628,6 +629,17 @@ function UserManagement() {
     [officerRoles]
   );
 
+  const structureFilterOptions = useMemo(() => {
+    const structures = [
+      ...moaSectors.map((item) => item.name),
+      ...affiliateInstitutions.map((item) => item.organization_name),
+    ];
+
+    return [...new Set(structures)]
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ value: name, label: name }));
+  }, [moaSectors, affiliateInstitutions]);
+
   const handleDirectoryFilterChange = (name, value) => {
     setDirectoryFilters((current) => ({
       ...current,
@@ -654,6 +666,14 @@ function UserManagement() {
       if (
         directoryFilters.structureType &&
         structureType !== directoryFilters.structureType
+      ) {
+        return false;
+      }
+
+      if (
+        directoryFilters.structure &&
+        user.sector !== directoryFilters.structure &&
+        user.organization_name !== directoryFilters.structure
       ) {
         return false;
       }
@@ -1031,6 +1051,22 @@ function UserManagement() {
           >
             <option value="">All structure types</option>
             {workflowTypes.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Structure
+          <select
+            value={directoryFilters.structure}
+            onChange={(e) =>
+              handleDirectoryFilterChange("structure", e.target.value)
+            }
+          >
+            <option value="">All structures</option>
+            {structureFilterOptions.map((item) => (
               <option key={item.value} value={item.value}>
                 {item.label}
               </option>

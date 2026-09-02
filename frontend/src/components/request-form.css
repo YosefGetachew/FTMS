@@ -640,6 +640,13 @@ select.ministry-input {
   background: var(--ministry-primary);
 }
 
+.structure-assignment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
 /* ============================================================
    WORKFLOWS & TRIP LAYOUT PANELS
 ============================================================ */
@@ -985,12 +992,16 @@ select.ministry-input {
   .stepper-row,
   .radio-cards.cols-2,
   .radio-cards.cols-3,
-  .radio-cards.cols-4,
   .request-context-grid,
+  .structure-assignment-grid,
   .traveler-split-grid,
   .trip-details-panels,
   .review-grid {
     grid-template-columns: 1fr;
+  }
+
+  .radio-cards.cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .request-hero-content {

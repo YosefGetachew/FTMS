@@ -121,7 +121,7 @@
 
 .travel-status-controls {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(280px, 1.3fr);
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.55fr) minmax(280px, 1.25fr);
   gap: 12px;
   margin-bottom: 14px;
   padding: 14px;
@@ -176,9 +176,17 @@
 }
 
 .travel-status-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
   padding: 14px;
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
+}
+
+.travel-status-card-header > div:first-child {
+  min-width: 0;
 }
 
 .travel-status-card-header h3 {
@@ -193,6 +201,46 @@
   color: #64748b;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.travel-status-progress-card {
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+  padding: 10px 12px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.travel-status-progress-card span,
+.travel-status-progress-card small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.travel-status-progress-card strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 780;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.travel-status-progress-track {
+  height: 7px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.travel-status-progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
 }
 
 .travel-status-diagram {
@@ -254,6 +302,13 @@
   min-width: 0;
 }
 
+.travel-status-step-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .travel-status-step strong {
   display: block;
   color: #0f172a;
@@ -270,6 +325,36 @@
   font-weight: 700;
   line-height: 1.35;
   text-transform: uppercase;
+}
+
+.travel-status-state-chip {
+  margin-top: 0 !important;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+}
+
+.travel-status-state-chip.complete {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.travel-status-state-chip.current {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.travel-status-state-chip.upcoming {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.travel-status-state-chip.optional {
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .travel-status-step-meta {
@@ -475,6 +560,14 @@
   .travel-status-summary-grid,
   .travel-status-controls {
     grid-template-columns: 1fr;
+  }
+
+  .travel-status-card-header {
+    flex-direction: column;
+  }
+
+  .travel-status-progress-card {
+    width: 100%;
   }
 
   .travel-status-step-wrap {
