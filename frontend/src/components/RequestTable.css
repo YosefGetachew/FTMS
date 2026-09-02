@@ -296,6 +296,99 @@
   color: #475569;
 }
 
+.request-date-cell {
+  min-width: 132px;
+}
+
+.request-date-cell .request-date-range {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #334155;
+  line-height: 1.25;
+}
+
+.request-date-cell .request-date-range span {
+  display: block;
+  color: #334155;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.request-date-cell .request-date-range em {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.25;
+}
+
+.request-date-cell strong {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 6px;
+  white-space: nowrap;
+}
+
+.request-clamped-text {
+  position: relative;
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: 100%;
+  color: #334155;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.request-clamped-text.has-more:not(.expanded)::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 46%;
+  height: 1.5em;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), #ffffff 72%);
+}
+
+.request-clamped-text.expanded {
+  display: block;
+  overflow: visible;
+  padding: 8px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  -webkit-line-clamp: unset;
+}
+
+.request-read-more-btn {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 7px;
+  padding: 3px 9px;
+  border: 1px solid #99f6e4;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #0f766e;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.35;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.request-read-more-btn:hover,
+.request-read-more-btn:focus-visible {
+  border-color: #5eead4;
+  background: #ccfbf1;
+  color: #115e59;
+  outline: none;
+  transform: translateY(-1px);
+}
+
 .request-stage-text {
   font-weight: 650;
 }
@@ -364,6 +457,12 @@
   border-color: #bfdbfe;
   background: #eff6ff;
   color: #1d4ed8;
+}
+
+.request-action-group .reminder-btn {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
 }
 
 .request-action-group .action-icon-btn:hover {

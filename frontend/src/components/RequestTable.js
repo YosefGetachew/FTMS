@@ -3,6 +3,17 @@ import API from "../services/api";
 import "./RequestTable.css";
 
 const normalizeText = (value) => String(value || "").toLowerCase();
+const REMINDER_DECISION_STAGES = [
+  "lead_executive_review",
+  "project_coordinator_review",
+  "state_minister_review",
+  "ceo_review",
+  "office_head_review",
+  "office_head_final",
+  "minister_review",
+  "pm_office_followup",
+  "foreign_affairs_followup",
+];
 
 function RequestTable() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -19,6 +30,7 @@ function RequestTable() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
   const [selectedActionIds, setSelectedActionIds] = useState([]);
+  const [expandedTextCells, setExpandedTextCells] = useState({});
 
   const API_ORIGIN =
     import.meta.env.VITE_API_ORIGIN ||
@@ -194,20 +206,6 @@ function RequestTable() {
     return stages[stage] || stage || "-";
   };
 
-  const getStageTone = (stage) => {
-    if (["completed"].includes(stage)) return "#166534";
-    if (["expert_preparation"].includes(stage)) return "#b45309";
-    if (["minister_review", "office_head_final"].includes(stage)) return "#7c3aed";
-    if (["protocol_clearance", "pm_office_submission", "pm_office_followup", "foreign_affairs_followup"].includes(stage)) return "#0369a1";
-    return "#1d4ed8";
-  };
-
-  const getComment = (request) =>
-    request.amendment_comment ||
-    request.decision_comment ||
-    request.foreign_affairs_comment ||
-    "-";
-
   const requiresPmOffice = (request) => request.pm_approval_required !== false;
 
   const getPrimaryActionLabel = (request) => {
@@ -307,6 +305,21 @@ function RequestTable() {
     [canViewPdf]
   );
 
+  const canSendDecisionReminder = useCallback(
+    (request) => {
+      if (!isProtocol || isSavedDraftRequest(request)) return false;
+
+      const currentStage = normalizeText(request?.current_stage);
+      const finalStatus = normalizeText(request?.final_status);
+
+      return (
+        finalStatus === "pending" &&
+        REMINDER_DECISION_STAGES.includes(currentStage)
+      );
+    },
+    [isProtocol, isSavedDraftRequest]
+  );
+
   const showActiveSection = dashboardFilter?.scope !== "historical";
   const showHistoricalSection =
     canSeeHistorical &&
@@ -401,10 +414,17 @@ function RequestTable() {
       if (isAmendedForTraveler || isEditableOwnerDraft) return true;
       if (!isPending) return false;
       if (isTraveler) return true;
+      if (canSendDecisionReminder(request)) return true;
 
       return canDecideRequest(request);
     });
-  }, [requests, isTraveler, isOwnEditableDraft, canDecideRequest]);
+  }, [
+    requests,
+    isTraveler,
+    isOwnEditableDraft,
+    canDecideRequest,
+    canSendDecisionReminder,
+  ]);
 
   const allHistoricalRequests = useMemo(() => {
     return requests.filter((request) => {
@@ -632,6 +652,47 @@ function RequestTable() {
         type: "error",
         message:
           error.response?.data?.error || "Failed to update request status",
+      });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const sendDecisionReminder = async (request) => {
+    if (updatingId || !canSendDecisionReminder(request)) return;
+
+    const approverLabel = formatStage(request.current_stage);
+    const confirmed = window.confirm(
+      `Send a reminder to the current ${approverLabel} approver for request #${request.id}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setUpdatingId(`reminder-${request.id}`);
+
+      const response = await API.post(`/requests/${request.id}/send-reminder`, {
+        role: user.role,
+        actorEmail: user.email,
+        actorId: user.id || null,
+      });
+
+      const approverName =
+        response.data?.approver?.fullName ||
+        response.data?.approver?.email ||
+        "the decision maker";
+
+      await fetchRequests();
+      setNotice({
+        type: "success",
+        message: `Reminder sent to ${approverName}.`,
+      });
+    } catch (error) {
+      console.error(error);
+      setNotice({
+        type: "error",
+        message:
+          error.response?.data?.error || "Failed to send reminder.",
       });
     } finally {
       setUpdatingId(null);
@@ -982,48 +1043,67 @@ function RequestTable() {
 
   const renderTripDate = (request, label = "Travel Date") => (
     <td className="request-date-cell" data-label={label}>
-      <div>{formatDate(request.start_date)}</div>
-      <span>to</span>
-      <div>{formatDate(request.end_date)}</div>
+      <div className="request-date-range">
+        <span>{formatDate(request.start_date)}</span>
+        <em>-</em>
+        <span>{formatDate(request.end_date)}</span>
+      </div>
       <strong>
         {getTripDays(request.start_date, request.end_date)} Days
       </strong>
     </td>
   );
 
-  const renderStatus = (request) => (
-    <span
-      className={`status-badge ${normalizeText(request.status).replace(
-        / /g,
-        "-"
-      )}`}
-    >
-      {request.status || "-"}
-    </span>
-  );
+  const toggleTextCell = (key) => {
+    setExpandedTextCells((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
 
-  const renderStage = (request) => (
-    <span
-      className="request-stage-text"
-      style={{
-        "--stage-color": getStageTone(request.current_stage),
-      }}
-    >
-      {formatStage(request.current_stage)}
-    </span>
-  );
+  const renderWrappedText = (
+    value,
+    maxWidth = "220px",
+    label = "Details",
+    textKey = `${label}-${String(value || "").slice(0, 40)}`
+  ) => {
+    const text = String(value || "").trim();
+    const isLongText = text.length > 150;
+    const isExpanded = Boolean(expandedTextCells[textKey]);
 
-  const renderWrappedText = (value, maxWidth = "220px", label = "Details") => (
-    <td
-      className="request-wrap-cell"
-      data-label={label}
-      style={{
-        maxWidth,
-      }}
-    >
-      {value || "-"}
-    </td>
-  );
+    return (
+      <td
+        className="request-wrap-cell"
+        data-label={label}
+        title={text || "-"}
+        style={{
+          maxWidth,
+        }}
+      >
+        <span
+          className={`request-clamped-text ${
+            isExpanded ? "expanded" : ""
+          } ${isLongText ? "has-more" : ""
+          }`}
+        >
+          {text || "-"}
+        </span>
+
+        {isLongText && (
+          <button
+            type="button"
+            className="request-read-more-btn"
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleTextCell(textKey);
+            }}
+          >
+            {isExpanded ? "Show less" : "Read more"}
+          </button>
+        )}
+      </td>
+    );
+  };
 
   const renderTravelerCell = (request, label = "Traveler") => (
     <td className="request-traveler-cell" data-label={label}>
@@ -1031,33 +1111,6 @@ function RequestTable() {
       <small>{request.position || "-"}</small>
     </td>
   );
-
-  const renderCommentCell = (request, label = "Comment") => (
-    <td
-      className={`request-comment-cell ${
-        request.final_status === "amended" ? "amended" : ""
-      }`}
-      data-label={label}
-    >
-      {getComment(request)}
-    </td>
-  );
-
-  const renderFinalStatus = (request) => {
-    if (request.final_status === "approved") {
-      return <span className="status-badge approved">Approved</span>;
-    }
-
-    if (request.final_status === "rejected") {
-      return <span className="status-badge rejected">Rejected</span>;
-    }
-
-    if (request.final_status === "amended") {
-      return <span className="status-badge amended">Amended</span>;
-    }
-
-    return <span className="status-badge pending">Pending</span>;
-  };
 
   const canActAtStage = (request) => {
     return !isSavedDraftRequest(request) && canDecideRequest(request);
@@ -1069,7 +1122,8 @@ function RequestTable() {
       request.current_stage === "completed" ||
       request.final_status === "approved" ||
       request.final_status === "rejected";
-    const isBusy = updatingId === request.id;
+    const isBusy =
+      updatingId === request.id || updatingId === `reminder-${request.id}`;
     const processingLabel = isBusy ? "..." : null;
 
     return (
@@ -1080,7 +1134,7 @@ function RequestTable() {
           disabled={isBusy}
           onClick={() => setViewingRequest(request)}
         >
-          {processingLabel || "View"}
+          {processingLabel || "Details"}
         </button>
 
         {canCompleteSavedDraft(request) && (
@@ -1091,6 +1145,17 @@ function RequestTable() {
             onClick={() => setEditingRequest(request)}
           >
             Complete Draft
+          </button>
+        )}
+
+        {canSendDecisionReminder(request) && (
+          <button
+            className="reminder-btn action-icon-btn action-wide-btn"
+            title="Send reminder to the current decision maker"
+            disabled={isBusy}
+            onClick={() => sendDecisionReminder(request)}
+          >
+            {processingLabel || "Remind"}
           </button>
         )}
 
@@ -1459,11 +1524,7 @@ function RequestTable() {
                     <th>Name</th>
                     <th>Sector / Lead Executive Office</th>
                     <th>Destination</th>
-                    <th>Purpose</th>
                     <th>Travel Date</th>
-                    <th>Status</th>
-                    <th>Current Stage</th>
-                    <th>Comment</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -1473,7 +1534,7 @@ function RequestTable() {
                     <tr>
                       <td
                         className="request-empty-cell"
-                        colSpan={showBulkActions ? "10" : "9"}
+                        colSpan={showBulkActions ? "6" : "5"}
                       >
                         <strong>Loading submitted requests...</strong>
                         <span>Please wait while the request queue refreshes.</span>
@@ -1483,7 +1544,7 @@ function RequestTable() {
                     <tr>
                       <td
                         className="request-empty-cell"
-                        colSpan={showBulkActions ? "10" : "9"}
+                        colSpan={showBulkActions ? "6" : "5"}
                       >
                         <strong>No submitted requests found</strong>
                         <span>Try changing the search text or active request filter.</span>
@@ -1527,15 +1588,7 @@ function RequestTable() {
 
                         {renderWrappedText(request.country, "110px", "Destination")}
 
-                        {renderWrappedText(request.purpose, "240px", "Purpose")}
-
                         {renderTripDate(request, "Travel Date")}
-
-                        <td className="request-status-cell" data-label="Status">{renderStatus(request)}</td>
-
-                        <td data-label="Current Stage">{renderStage(request)}</td>
-
-                        {renderCommentCell(request, "Comment")}
 
                         <td data-label="Actions" onClick={(event) => event.stopPropagation()}>
                           {renderRequestActions(request)}
@@ -1583,10 +1636,7 @@ function RequestTable() {
                     <th>Name</th>
                     <th>Sector / Lead Executive Office</th>
                     <th>Destination</th>
-                    <th>Purpose</th>
                     <th>Travel Date</th>
-                    <th>Final Status</th>
-                    <th>Current Stage</th>
                     {canViewPdf && <th>PDF</th>}
                   </tr>
                 </thead>
@@ -1594,7 +1644,7 @@ function RequestTable() {
                 <tbody>
                   {historicalRequests.length === 0 ? (
                     <tr>
-                      <td className="request-empty-cell" colSpan={canViewPdf ? "8" : "7"}>
+                      <td className="request-empty-cell" colSpan={canViewPdf ? "5" : "4"}>
                         <strong>No historical requests found</strong>
                         <span>Try changing the historical travel search text.</span>
                       </td>
@@ -1619,13 +1669,7 @@ function RequestTable() {
 
                         {renderWrappedText(request.country, "110px", "Destination")}
 
-                        {renderWrappedText(request.purpose, "260px", "Purpose")}
-
                         {renderTripDate(request, "Travel Date")}
-
-                        <td className="request-status-cell" data-label="Final Status">{renderFinalStatus(request)}</td>
-
-                        <td data-label="Current Stage">{renderStage(request)}</td>
 
                         {canViewPdf && (
                           <td data-label="Letter" onClick={(event) => event.stopPropagation()}>

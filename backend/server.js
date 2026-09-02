@@ -100,6 +100,22 @@ const STAGE_ROLES = {
   foreign_affairs_followup: 'pm_office',
 };
 
+const REMINDER_DECISION_STAGES = [
+  STAGES.LEAD_EXECUTIVE_REVIEW,
+  STAGES.PROJECT_COORDINATOR_REVIEW,
+  STAGES.STATE_MINISTER_REVIEW,
+  STAGES.CEO_REVIEW,
+  STAGES.OFFICE_HEAD_REVIEW,
+  STAGES.OFFICE_HEAD_FINAL,
+  STAGES.MINISTER_REVIEW,
+  STAGES.PM_OFFICE,
+  'foreign_affairs_followup',
+];
+
+const REMINDER_DECISION_STAGE_SQL = REMINDER_DECISION_STAGES
+  .map((stage) => `'${stage}'`)
+  .join(',');
+
 const ROLE_STAGES = {
   traveler: [STAGES.EXPERT_PREPARATION],
   expert: [STAGES.EXPERT_PREPARATION],
@@ -1303,6 +1319,48 @@ const taskEmail = ({ to, recipientName, request: r, stageName, actionUrl }) =>
     'TASK EMAIL ERROR:'
   );
 
+const reminderEmail = ({ to, recipientName, request: r, stageName, actionUrl }) =>
+  sendEmailSafe(
+    {
+      from: EMAIL_FROM,
+      to,
+      subject: `FTMS Reminder: Decision Needed for Request #${r.id}`,
+      html: `<div style="font-family:Arial;padding:20px">
+        <h2 style="color:#0f766e">FTMS Decision Reminder</h2>
+        <p>Dear <strong>${safeText(
+          recipientName,
+          'Approver'
+        )}</strong>, this is a reminder that a travel request is still waiting for your decision.</p>
+
+        <table border="1" cellpadding="10" style="border-collapse:collapse;width:100%">
+          <tr><td><strong>Request ID</strong></td><td>#${safeText(r.id)}</td></tr>
+          <tr><td><strong>Traveler</strong></td><td>${safeText(
+            r.full_name
+          )}</td></tr>
+          <tr><td><strong>Destination</strong></td><td>${safeText(
+            r.country
+          )}</td></tr>
+          <tr><td><strong>Travel Dates</strong></td><td>${formatTravelDateRange(
+            r.start_date,
+            r.end_date
+          )}</td></tr>
+          <tr><td><strong>Current Stage</strong></td><td>${safeText(
+            stageName
+          )}</td></tr>
+        </table>
+
+        <p>
+          <a href="${
+            actionUrl || FRONTEND_URL
+          }" style="display:inline-block;background:#0f766e;color:white;padding:12px 18px;text-decoration:none;border-radius:6px">
+            Open FTMS
+          </a>
+        </p>
+      </div>`,
+    },
+    'REMINDER EMAIL ERROR:'
+  );
+
 const travelerEmail = ({ request: r, status, displayStatus, amendmentComment }) =>
   r?.email &&
   sendEmailSafe(
@@ -2357,6 +2415,7 @@ const ROLE_QUERIES = {
 
   protocol: `${BASE_SELECT}
     WHERE (r.current_stage IN ('protocol_clearance','pm_office_submission') AND r.final_status='pending')
+       OR (r.current_stage IN (${REMINDER_DECISION_STAGE_SQL}) AND r.final_status='pending')
        OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
@@ -2413,6 +2472,100 @@ app.get('/api/requests', async (req, res) => {
     const r = await query(sql, needsEmail ? [email || ''] : []);
 
     res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/requests/:id/send-reminder', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role, actorEmail, actorId } = req.body;
+
+    if (!['protocol', 'admin', 'super_admin'].includes(role)) {
+      return res.status(403).json({
+        error: 'Only Protocol can send decision reminders.',
+      });
+    }
+
+    const existing = (
+      await query(`SELECT * FROM requests WHERE id=$1`, [id])
+    ).rows[0];
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+
+    if (
+      existing.current_stage === STAGES.COMPLETED ||
+      [STATUS.APPROVED, STATUS.REJECTED].includes(existing.final_status)
+    ) {
+      return res.status(400).json({
+        error: 'Reminder is not available for finalized requests.',
+      });
+    }
+
+    if (!REMINDER_DECISION_STAGES.includes(existing.current_stage)) {
+      return res.status(400).json({
+        error:
+          'Reminder is only available while a request is pending with a decision maker.',
+      });
+    }
+
+    const actor = await getActorUser({ actorId, actorEmail });
+
+    if (role === 'protocol' && actor?.role !== 'protocol') {
+      return res.status(403).json({
+        error: 'Logged-in account does not match the Protocol role.',
+      });
+    }
+
+    const approver = await getFirstUserForStage(existing.current_stage, existing);
+
+    if (!approver?.email) {
+      return res.status(400).json({
+        error: `No active approver is configured for ${getStageName(
+          existing.current_stage
+        )}.`,
+      });
+    }
+
+    await reminderEmail({
+      to: approver.email,
+      recipientName: approver.full_name,
+      request: existing,
+      stageName: getStageName(existing.current_stage),
+      actionUrl: FRONTEND_URL,
+    });
+
+    await addNotification({
+      userEmail: approver.email,
+      title: 'FTMS Decision Reminder',
+      message: `Protocol reminded you to review request #${existing.id} from ${safeText(
+        existing.full_name
+      )} at ${getStageName(existing.current_stage)}.`,
+    });
+
+    await addAudit({
+      requestId: existing.id,
+      action: 'reminder_sent',
+      actorRole: role,
+      actorEmail,
+      comment: `Reminder sent to ${approver.full_name || approver.email}`,
+      oldStage: existing.current_stage,
+      newStage: existing.current_stage,
+      oldStatus: existing.final_status,
+      newStatus: existing.final_status,
+    });
+
+    res.json({
+      message: 'Reminder sent.',
+      approver: {
+        fullName: approver.full_name,
+        email: approver.email,
+        role: approver.role,
+      },
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
