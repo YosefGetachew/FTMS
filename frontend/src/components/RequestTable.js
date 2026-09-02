@@ -1470,7 +1470,7 @@ function RequestTable() {
           <div className="request-section-card">
             <div className="request-section-header">
               <div>
-                <h3>Active Request Queue</h3>
+                <h3>Active Travel Requests That Need Your Decision</h3>
                 <p>{filteredSubmittedRequests.length} request{filteredSubmittedRequests.length === 1 ? "" : "s"} in this view</p>
               </div>
 
@@ -1517,7 +1517,15 @@ function RequestTable() {
             </div>
 
             <div className="request-table-scroll">
-              <table>
+              <table className="active-request-table">
+                <colgroup>
+                  {showBulkActions && <col className="request-col-select" />}
+                  <col className="request-col-name" />
+                  <col className="request-col-structure" />
+                  <col className="request-col-destination" />
+                  <col className="request-col-date" />
+                  <col className="request-col-actions" />
+                </colgroup>
                 <thead>
                   <tr>
                     {showBulkActions && <th className="request-select-col">Select</th>}
