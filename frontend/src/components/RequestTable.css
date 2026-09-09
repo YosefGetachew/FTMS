@@ -289,15 +289,19 @@
 }
 
 .active-request-table .request-col-name {
-  width: 21%;
+  width: 18%;
 }
 
 .active-request-table .request-col-structure {
-  width: 27%;
+  width: 23%;
 }
 
 .active-request-table .request-col-destination {
-  width: 10%;
+  width: 9%;
+}
+
+.active-request-table .request-col-stage {
+  width: 14%;
 }
 
 .active-request-table .request-col-date {
@@ -305,7 +309,7 @@
 }
 
 .active-request-table .request-col-actions {
-  width: 25%;
+  width: 24%;
 }
 
 .request-clickable-row {
@@ -349,6 +353,36 @@
 
 .request-wrap-cell {
   color: #475569;
+}
+
+.request-stage-cell {
+  min-width: 0;
+}
+
+.request-stage-cell span {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  padding: 4px 8px;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.request-stage-cell small {
+  display: -webkit-box;
+  max-width: 100%;
+  margin-top: 6px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11.5px;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .request-date-cell {

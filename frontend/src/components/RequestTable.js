@@ -236,6 +236,7 @@ function RequestTable() {
   const isPmOffice = user?.role === "pm_office";
   const isMinister = user?.role === "minister";
   const canSeeHistorical = !isPmOffice;
+  const showPendingAtColumn = isProtocol || isAdmin || isOfficeHead;
 
   const isOwnEditableDraft = useCallback(
     (request) => {
@@ -326,6 +327,10 @@ function RequestTable() {
     (showHistorical ||
       dashboardFilter?.scope === "historical" ||
       dashboardFilter?.scope === "all");
+  const requestPageTitle = isTraveler ? "My Travel Requests" : "Travel Requests";
+  const requestPageDescription = isTraveler
+    ? "Create drafts, finish returned requests, and follow your travel progress."
+    : "Review active travel requests and open details when you need more information.";
 
   const stageMatches = useCallback((request, stages) => {
     const currentStage = normalizeText(request.current_stage);
@@ -1054,6 +1059,13 @@ function RequestTable() {
     </td>
   );
 
+  const renderCurrentStageCell = (request) => (
+    <td className="request-stage-cell" data-label="Pending At">
+      <span>{formatStage(request.current_stage)}</span>
+      <small>{request.status || "Pending decision"}</small>
+    </td>
+  );
+
   const toggleTextCell = (key) => {
     setExpandedTextCells((prev) => ({
       ...prev,
@@ -1381,11 +1393,9 @@ function RequestTable() {
     <div className="table-container request-table-page">
       <div className="table-header request-table-header">
         <div>
-          <span className="request-table-kicker">Travel Workflow</span>
-          <h2>Submitted Requests</h2>
-          <p>
-            Review assigned travel requests, returned corrections, and completed history.
-          </p>
+          <span className="request-table-kicker">Requests</span>
+          <h2>{requestPageTitle}</h2>
+          <p>{requestPageDescription}</p>
         </div>
 
         <div className="request-header-actions">
@@ -1459,10 +1469,10 @@ function RequestTable() {
               value={activeFilter}
               onChange={(e) => setActiveFilter(e.target.value)}
             >
-              <option value="all">All active requests</option>
-              <option value="action">Needs my action</option>
-              <option value="amended">Returned / amended</option>
-              <option value="protocol">Protocol clearance</option>
+              <option value="all">All active</option>
+              <option value="action">Needs my decision</option>
+              <option value="amended">Returned</option>
+              <option value="protocol">Protocol</option>
               <option value="pm_office">PM Office</option>
             </select>
           </div>
@@ -1470,7 +1480,7 @@ function RequestTable() {
           <div className="request-section-card">
             <div className="request-section-header">
               <div>
-                <h3>Active Travel Requests That Need Your Decision</h3>
+                <h3>Active Requested Travel</h3>
                 <p>{filteredSubmittedRequests.length} request{filteredSubmittedRequests.length === 1 ? "" : "s"} in this view</p>
               </div>
 
@@ -1482,7 +1492,7 @@ function RequestTable() {
                       checked={allVisibleActionsSelected}
                       onChange={toggleAllVisibleActions}
                     />
-                    Select actionable requests
+                    Select requests
                   </label>
 
                   <button
@@ -1523,6 +1533,7 @@ function RequestTable() {
                   <col className="request-col-name" />
                   <col className="request-col-structure" />
                   <col className="request-col-destination" />
+                  {showPendingAtColumn && <col className="request-col-stage" />}
                   <col className="request-col-date" />
                   <col className="request-col-actions" />
                 </colgroup>
@@ -1532,6 +1543,7 @@ function RequestTable() {
                     <th>Name</th>
                     <th>Sector / Lead Executive Office</th>
                     <th>Destination</th>
+                    {showPendingAtColumn && <th>Pending At</th>}
                     <th>Travel Date</th>
                     <th>Actions</th>
                   </tr>
@@ -1542,20 +1554,24 @@ function RequestTable() {
                     <tr>
                       <td
                         className="request-empty-cell"
-                        colSpan={showBulkActions ? "6" : "5"}
+                        colSpan={
+                          (showBulkActions ? 6 : 5) + (showPendingAtColumn ? 1 : 0)
+                        }
                       >
-                        <strong>Loading submitted requests...</strong>
-                        <span>Please wait while the request queue refreshes.</span>
+                        <strong>Loading requests...</strong>
+                        <span>Please wait while the list refreshes.</span>
                       </td>
                     </tr>
                   ) : filteredSubmittedRequests.length === 0 ? (
                     <tr>
                       <td
                         className="request-empty-cell"
-                        colSpan={showBulkActions ? "6" : "5"}
+                        colSpan={
+                          (showBulkActions ? 6 : 5) + (showPendingAtColumn ? 1 : 0)
+                        }
                       >
-                        <strong>No submitted requests found</strong>
-                        <span>Try changing the search text or active request filter.</span>
+                        <strong>No active requests found</strong>
+                        <span>Try another filter or clear the search box.</span>
                       </td>
                     </tr>
                   ) : (
@@ -1595,6 +1611,8 @@ function RequestTable() {
                         {renderSectorDepartment(request, "Structure")}
 
                         {renderWrappedText(request.country, "110px", "Destination")}
+
+                        {showPendingAtColumn && renderCurrentStageCell(request)}
 
                         {renderTripDate(request, "Travel Date")}
 
