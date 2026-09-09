@@ -188,6 +188,17 @@ const formatPendingDays = (days) => {
   return `Pending for ${days} days`;
 };
 
+const getTripDays = (startDate, endDate) => {
+  if (!startDate || !endDate) return '-';
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '-';
+
+  return Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1);
+};
+
 const stateLabel = (state) => {
   const labels = {
     complete: 'Done',
@@ -531,16 +542,19 @@ function TravelStatus() {
           filteredRequests.length === requests.length
             ? 'Available in your role'
             : `${requests.length} total available`,
+        tone: 'blue',
       },
       {
         label: 'Pending',
         value: requests.filter((request) => request.final_status === 'pending').length,
         helper: 'Still in workflow',
+        tone: 'amber',
       },
       {
         label: 'Returned',
         value: requests.filter((request) => request.final_status === 'amended').length,
         helper: 'Needs correction',
+        tone: 'orange',
       },
       {
         label: 'Completed',
@@ -549,6 +563,7 @@ function TravelStatus() {
           request.current_stage === 'completed'
         ).length,
         helper: 'PM Office status completed',
+        tone: 'green',
       },
     ],
     [filteredRequests.length, requests]
@@ -586,18 +601,43 @@ function TravelStatus() {
         activeStage?.state === 'current'
           ? formatPendingDays(activeStage.pendingDays)
           : stateLabel(activeStage?.state || 'upcoming'),
+      activeStage,
     };
   }, [diagramStages, selectedRequest]);
+
+  const requestInsight = useMemo(() => {
+    if (!selectedRequest) {
+      return [
+        { label: 'Current Stage', value: '-' },
+        { label: 'Destination', value: '-' },
+        { label: 'Duration', value: '-' },
+      ];
+    }
+
+    return [
+      {
+        label: 'Current Stage',
+        value: getStageLabel(selectedRequest.current_stage, selectedRequest) || '-',
+      },
+      {
+        label: 'Destination',
+        value: selectedRequest.country || '-',
+      },
+      {
+        label: 'Duration',
+        value: `${getTripDays(selectedRequest.start_date, selectedRequest.end_date)} Days`,
+      },
+    ];
+  }, [selectedRequest]);
 
   return (
     <div className="travel-status-page">
       <div className="travel-status-header">
         <div>
-          <span className="travel-status-kicker">Request Progress</span>
+          <span className="travel-status-kicker">Progress</span>
           <h2>Travel Status</h2>
           <p>
-            Select a travel request to see its approval path and current position
-            in the workflow.
+            Select a request to see where it is now and what comes next.
           </p>
         </div>
 
@@ -613,7 +653,7 @@ function TravelStatus() {
 
       <div className="travel-status-summary-grid">
         {summary.map((item) => (
-          <div className="travel-status-summary-card" key={item.label}>
+          <div className={`travel-status-summary-card ${item.tone}`} key={item.label}>
             <span>{item.label}</span>
             <strong>{item.value}</strong>
             <small>{item.helper}</small>
@@ -629,10 +669,10 @@ function TravelStatus() {
 
       <div className="travel-status-controls">
         <label>
-          Search Requests
+          Search
           <input
             type="search"
-            placeholder="Search traveler, country, sector..."
+            placeholder="Search name, country, or structure..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -674,7 +714,53 @@ function TravelStatus() {
 
       {selectedRequest ? (
         <div className="travel-status-layout">
+          <div className="travel-status-request-panel">
+            <div className="travel-status-panel-heading">
+              <span>Requests</span>
+              <strong>{filteredRequests.length} visible</strong>
+            </div>
+
+            <div className="travel-status-request-list">
+              {filteredRequests.map((request) => {
+                const isSelected = String(request.id) === String(selectedRequestId);
+                const group = getRequestStatusGroup(request);
+
+                return (
+                  <button
+                    type="button"
+                    key={request.id}
+                    className={`travel-status-request-card ${group} ${
+                      isSelected ? 'selected' : ''
+                    }`}
+                    onClick={() => setSelectedRequestId(String(request.id))}
+                  >
+                    <span>#{request.id}</span>
+                    <strong>{request.full_name || 'Traveler'}</strong>
+                    <small>{request.country || 'Destination'} - {formatDate(request.start_date)}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="travel-status-diagram-card">
+            <div className="travel-status-hero">
+              <div>
+                <span className="travel-status-kicker">Current Step</span>
+                <h3>{progressSummary.current}</h3>
+                <p>{selectedRequest.status || 'Request status not set'}</p>
+              </div>
+
+              <div className="travel-status-hero-metrics">
+                {requestInsight.map((item) => (
+                  <div key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="travel-status-card-header">
               <div>
                 <h3>
@@ -771,7 +857,10 @@ function TravelStatus() {
           </div>
 
           <div className="travel-status-detail-card">
-            <h3>Selected Request</h3>
+            <div className="travel-status-detail-heading">
+              <span>Selected Request</span>
+              <strong>#{selectedRequest.id}</strong>
+            </div>
 
             <div className="travel-status-detail-list">
               <div>
