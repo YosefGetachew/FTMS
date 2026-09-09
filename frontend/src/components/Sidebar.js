@@ -24,14 +24,145 @@ const compactCount = (value) => {
   return String(value);
 };
 
-const isTravelerSubmittedRequestVisible = (request, userEmail) => {
+const normalizeText = (value) => String(value || '').toLowerCase();
+
+const REMINDER_DECISION_STAGES = [
+  'lead_executive_review',
+  'project_coordinator_review',
+  'state_minister_review',
+  'ceo_review',
+  'office_head_review',
+  'office_head_final',
+  'minister_review',
+  'pm_office_followup',
+  'foreign_affairs_followup',
+];
+
+const isSavedDraftRequest = (request) =>
+  normalizeText(request?.final_status) === 'pending' &&
+  normalizeText(request?.current_stage) === 'expert_preparation' &&
+  normalizeText(request?.status).includes('draft');
+
+const stageMatches = (request, stages) => {
+  const currentStage = normalizeText(request?.current_stage);
+  const status = normalizeText(request?.status);
+
+  return stages.some((stage) => currentStage === stage || status === stage);
+};
+
+const isOwnEditableDraft = (request, userEmail) => {
   const sameTraveler =
     String(request.email || '').trim().toLowerCase() ===
     String(userEmail || '').trim().toLowerCase();
   const isOpen =
     request.final_status === 'pending' || request.final_status === 'amended';
+  const noApproverAction =
+    request.has_workflow_action === false ||
+    request.has_workflow_action === 'false' ||
+    request.has_workflow_action === 0 ||
+    request.has_workflow_action === '0';
 
-  return sameTraveler && isOpen && request.current_stage !== 'completed';
+  return sameTraveler && isOpen && noApproverAction;
+};
+
+const canSendDecisionReminder = (request, role) =>
+  role === 'protocol' &&
+  !isSavedDraftRequest(request) &&
+  normalizeText(request?.final_status) === 'pending' &&
+  REMINDER_DECISION_STAGES.includes(normalizeText(request?.current_stage));
+
+const canDecideRequest = (request, role) => {
+  if (isSavedDraftRequest(request)) return false;
+  if (['admin', 'super_admin'].includes(role)) return true;
+
+  const workflowType = request.workflow_type;
+
+  if (
+    ['lead_executive_officer', 'lead_executive'].includes(role) &&
+    stageMatches(request, ['lead_executive_review', 'lead_executive'])
+  ) {
+    return true;
+  }
+
+  if (
+    role === 'project_coordinator' &&
+    request.traveler_category === 'project' &&
+    stageMatches(request, ['project_coordinator_review', 'project_coordinator'])
+  ) {
+    return true;
+  }
+
+  if (
+    role === 'director_general' &&
+    request.traveler_category === 'affiliate_institution' &&
+    stageMatches(request, ['office_head_review', 'director_general'])
+  ) {
+    return true;
+  }
+
+  if (
+    role === 'state_minister' &&
+    workflowType === 'sector_structure' &&
+    stageMatches(request, ['state_minister', 'state_minister_review'])
+  ) {
+    return true;
+  }
+
+  if (
+    ['chief_executive_officer', 'ceo'].includes(role) &&
+    workflowType === 'ceo_structure' &&
+    stageMatches(request, ['ceo_review', 'chief_executive_officer', 'ceo'])
+  ) {
+    return true;
+  }
+
+  if (
+    role === 'office_head' &&
+    stageMatches(request, ['office_head_review', 'office_head', 'office_head_final'])
+  ) {
+    return true;
+  }
+
+  if (
+    role === 'protocol' &&
+    stageMatches(request, ['protocol_clearance', 'protocol', 'pm_office_submission'])
+  ) {
+    return true;
+  }
+
+  if (
+    role === 'pm_office' &&
+    stageMatches(request, ['pm_office_followup', 'foreign_affairs_followup'])
+  ) {
+    return true;
+  }
+
+  if (role === 'minister' && stageMatches(request, ['minister_review', 'minister'])) {
+    return true;
+  }
+
+  return false;
+};
+
+const isSubmittedRequestVisible = (request, { role, userEmail, isTraveler }) => {
+  const finalStatus = normalizeText(request.final_status);
+  const currentStage = normalizeText(request.current_stage);
+  const isPending =
+    !['approved', 'rejected'].includes(finalStatus) &&
+    currentStage !== 'completed';
+
+  const isAmendedForTraveler =
+    isTraveler &&
+    currentStage === 'expert_preparation' &&
+    finalStatus === 'amended';
+  const isEditableOwnerDraft = isOwnEditableDraft(request, userEmail);
+
+  if (isAmendedForTraveler || isEditableOwnerDraft) return true;
+  if (!isPending) return false;
+  if (isTraveler) return true;
+  if (canSendDecisionReminder(request, role)) return true;
+
+  return canDecideRequest(request, role);
 };
 
 const roleGuidance = {
@@ -64,10 +195,10 @@ function Sidebar({ setActivePage }) {
   const isMinister = role === 'minister';
   const isPmOffice = role === 'pm_office';
   const formattedRole = formatRole(role);
-  const canViewReports = ['office_head', 'minister'].includes(role);
+  const canViewReports = isAdmin || ['office_head', 'minister'].includes(role);
 
   const [activeMenu, setActiveMenu] = useState(
-    isAdmin ? 'pending-users' : canViewReports ? 'reports' : isTraveler ? 'submitted-requests' : 'dashboard'
+    isAdmin ? 'dashboard' : canViewReports ? 'reports' : isTraveler ? 'submitted-requests' : 'dashboard'
   );
 
   const [pendingUserCount, setPendingUserCount] = useState(0);
@@ -84,6 +215,8 @@ function Sidebar({ setActivePage }) {
 
   const allowedReportRoles = useMemo(
     () => [
+      'admin',
+      'super_admin',
       'office_head',
       'minister',
     ],
@@ -126,20 +259,9 @@ function Sidebar({ setActivePage }) {
 
         const requests = requestsResponse.data || [];
 
-        const activeSubmittedRequests = requests.filter((request) => {
-          if (isTraveler) {
-            return isTravelerSubmittedRequestVisible(request, userEmail);
-          }
-
-          const isPending =
-            request.final_status === 'pending' &&
-            request.current_stage !== 'completed';
-
-          const isAmendedForTraveler =
-            isTraveler && request.final_status === 'amended';
-
-          return isPending || isAmendedForTraveler;
-        });
+        const activeSubmittedRequests = requests.filter((request) =>
+          isSubmittedRequestVisible(request, { role, userEmail, isTraveler })
+        );
 
         setSubmittedRequestCount(activeSubmittedRequests.length);
       } catch (error) {
@@ -173,31 +295,31 @@ function Sidebar({ setActivePage }) {
       {
         id: 'dashboard',
         label: 'Dashboard',
-        description: 'Analytics and approval overview',
+        description: 'Today overview',
         icon: 'DS',
-        show: !isTraveler && !isAdmin,
+        show: !isTraveler,
       },
     ],
-    [isTraveler, isAdmin]
+    [isTraveler]
   );
 
   const travelItems = useMemo(
     () => [
       {
         id: 'travel-request',
-        label: 'New Travel Request',
-        description: 'Prepare and submit travel',
+        label: 'New Request',
+        description: 'Create travel request',
         icon: 'NT',
-        show: !isMinister && !isPmOffice && !isAdmin,
+        show: !isMinister && !isPmOffice,
       },
       {
         id: 'submitted-requests',
-        label: isTraveler ? 'Submitted Requests' : 'Requested Travel',
+        label: isTraveler ? 'My Requests' : 'Active Requested Travel',
         description: isTraveler
-          ? 'Track your submitted and amended requests'
+          ? 'Submitted, draft, and returned travel'
           : isPmOffice
-          ? 'Review requests submitted to the PM Office'
-          : 'Requested travel that needs your action or decision',
+          ? 'Requests submitted to PM Office'
+          : 'Travel that needs a decision',
         icon: 'RQ',
         badge: submittedRequestCount > 0 ? submittedRequestCount : null,
         badgeLabel: 'active request',
@@ -207,20 +329,20 @@ function Sidebar({ setActivePage }) {
       {
         id: 'travel-status',
         label: 'Travel Status',
-        description: 'Diagram view of request progress',
+        description: 'Follow approval progress',
         icon: '',
         iconClass: 'workflow-icon',
-        show: !isPmOffice && !isAdmin,
+        show: !isPmOffice,
       },
       {
         id: 'notifications',
-        label: 'Notifications',
-        description: 'System messages and updates',
+        label: 'Messages',
+        description: 'System updates',
         icon: 'MS',
-        show: !isMinister && !isPmOffice && !isAdmin,
+        show: !isMinister && !isPmOffice,
       },
     ],
-    [isMinister, isPmOffice, isTraveler, isAdmin, submittedRequestCount]
+    [isMinister, isPmOffice, isTraveler, submittedRequestCount]
   );
 
   const insightItems = useMemo(
@@ -228,7 +350,7 @@ function Sidebar({ setActivePage }) {
       {
         id: 'reports',
         label: 'Reports',
-        description: 'Performance and travel analytics',
+        description: 'Travel analytics',
         icon: 'RP',
         show: allowedReportRoles.includes(role),
       },
@@ -244,7 +366,7 @@ function Sidebar({ setActivePage }) {
       {
         id: 'pending-users',
         label: 'Pending Users',
-        description: 'Approve account requests',
+        description: 'Approve new accounts',
         icon: 'PU',
         badge: pendingUserCount > 0 ? pendingUserCount : null,
         badgeLabel: 'waiting user',
@@ -253,8 +375,8 @@ function Sidebar({ setActivePage }) {
       },
       {
         id: 'user-management',
-        label: 'User Management',
-        description: 'Officers and user accounts',
+        label: 'Users',
+        description: 'Manage accounts',
         icon: 'UM',
         show: isAdmin,
       },
@@ -266,15 +388,15 @@ function Sidebar({ setActivePage }) {
     () => [
       {
         id: 'settings',
-        label: 'Organization Settings',
-        description: 'Structures, offices, approvers',
+        label: 'Organization Setup',
+        description: 'Structures and approvers',
         icon: 'OS',
         show: isAdmin,
       },
       {
         id: 'audit-trail',
         label: 'Audit Trail',
-        description: 'Accountability records',
+        description: 'Decision history',
         icon: 'AT',
         show: isAdmin,
       },
@@ -287,7 +409,7 @@ function Sidebar({ setActivePage }) {
       {
         id: 'reset-password',
         label: 'Reset Password',
-        description: 'Secure account password',
+        description: 'Change your password',
         icon: 'PW',
         show: !isMinister && !isPmOffice && !isProtocol,
       },
@@ -323,7 +445,7 @@ function Sidebar({ setActivePage }) {
         label: isTraveler ? 'Open Requests' : 'Active Queue',
         value: compactCount(submittedRequestCount),
         helper: isTraveler ? 'Submitted or amended' : 'Pending or assigned',
-        show: !isAdmin,
+        show: true,
       },
       {
         label: 'Pending Users',
@@ -447,7 +569,7 @@ function Sidebar({ setActivePage }) {
       </div>
 
       <div className="sidebar-profile-panel">
-        <div className="sidebar-profile-heading">Access Context</div>
+        <div className="sidebar-profile-heading">Your Access</div>
         {userContext.map((item) => (
           <div className="sidebar-profile-row" key={item.label}>
             <span>{item.label}</span>
@@ -457,7 +579,7 @@ function Sidebar({ setActivePage }) {
       </div>
 
       <div className="sidebar-role-note">
-        <strong>Your responsibility</strong>
+        <strong>Your Role</strong>
         <span>
           {roleGuidance[role] || 'Use the menu to access your available tasks'}
         </span>
@@ -476,18 +598,18 @@ function Sidebar({ setActivePage }) {
       )}
 
       <div className="sidebar-current-page">
-        <span>Current Workspace</span>
+        <span>Current Page</span>
         <strong>{activeItem?.label || 'Dashboard'}</strong>
         <small>{activeItem?.description || 'System overview'}</small>
       </div>
 
       <nav className="sidebar-menu" aria-label="Main navigation">
-        {renderSection('overview', 'Overview', 'Dashboard and operating picture', overviewItems)}
-        {renderSection('travel', 'Travel Work', 'Requests, status, and messages', travelItems)}
-        {renderSection('insights', 'Analytics', 'Reports and forecasting', insightItems)}
-        {renderSection('people', 'People Administration', 'User approvals and access', peopleItems)}
-        {renderSection('governance', 'System Governance', 'Organization setup and audit', governanceItems)}
-        {renderSection('account', 'Account Security', 'Password and personal access', accountItems)}
+        {renderSection('overview', 'Overview', 'Main dashboard', overviewItems)}
+        {renderSection('travel', 'Travel', 'Create and review requests', travelItems)}
+        {renderSection('insights', 'Reports', 'Travel summaries', insightItems)}
+        {renderSection('people', 'Admin', 'Users and approvals', peopleItems)}
+        {renderSection('governance', 'Setup', 'Organization and audit', governanceItems)}
+        {renderSection('account', 'Account', 'Password', accountItems)}
       </nav>
 
       <div className="sidebar-footer">

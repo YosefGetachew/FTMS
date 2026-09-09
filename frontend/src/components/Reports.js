@@ -203,8 +203,8 @@ function Reports() {
         <div className="reports-access-card">
           <h2>Reports Access Restricted</h2>
           <p>
-            Analytical reports are available only to Admin, Super Admin,
-            Minister, and Office Head roles.
+            Analytical reports are available to Admin, Minister, and Office
+            Head roles.
           </p>
           <span>Your role: {formatRole(userRole)}</span>
         </div>
@@ -216,16 +216,15 @@ function Reports() {
     <div className="reports-page">
       <div className="reports-hero">
         <div>
-          <span>FTMS Reports</span>
-          <h2 className="reports-title">Analytical Reports</h2>
+          <span>Reports</span>
+          <h2 className="reports-title">Travel Reports</h2>
           <p>
-            Ministry-level travel analytics for Admin, Super Admin, Minister,
-            and Office Head review.
+            Simple travel summaries for administrators and leadership review.
           </p>
         </div>
 
         <button type="button" onClick={fetchReports}>
-          Refresh Reports
+          Refresh
         </button>
       </div>
 
@@ -242,28 +241,27 @@ function Reports() {
       </div>
 
       <div className="reports-section-heading">
-        <h2 className="reports-section-title">Currently Abroad</h2>
+        <h2 className="reports-section-title">Staff Currently Abroad</h2>
         <p>
-          Approved travelers whose travel dates include today, grouped by sector
-          and department.
+          Approved staff traveling today, grouped by sector and department.
         </p>
       </div>
 
       <div className="reports-currently-abroad">
         <div className="reports-abroad-summary">
-          <span>Travelers Abroad Today</span>
+          <span>Staff Abroad Today</span>
           <strong>{currentlyAbroad.total}</strong>
           <small>Approved and within active travel dates</small>
         </div>
 
         <div className="reports-card">
           <div className="reports-card-header">
-            <h3>Currently Abroad by Sector</h3>
-            <p>Active approved travelers grouped by owning structure.</p>
+            <h3>Staff Abroad by Sector</h3>
+            <p>Active approved staff grouped by owning structure.</p>
           </div>
 
           {currentlyAbroad.bySector.length === 0 ? (
-            <p className="reports-empty">No approved travelers are abroad today.</p>
+            <p className="reports-empty">No approved staff are abroad today.</p>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={currentlyAbroad.bySector}>
@@ -292,8 +290,8 @@ function Reports() {
 
         <div className="reports-card">
           <div className="reports-card-header">
-            <h3>Currently Abroad by Department</h3>
-            <p>Active approved travelers grouped by department or office.</p>
+            <h3>Staff Abroad by Department</h3>
+            <p>Active approved staff grouped by department or office.</p>
           </div>
 
           {currentlyAbroadDepartmentChart.length === 0 ? (
@@ -327,18 +325,18 @@ function Reports() {
 
       <div className="reports-card reports-abroad-table-card">
         <div className="reports-card-header">
-          <h3>Current Traveler List</h3>
+          <h3>Current Staff Abroad List</h3>
           <p>Names, destinations, sectors, departments, and remaining days abroad.</p>
         </div>
 
         {currentlyAbroad.travelers.length === 0 ? (
-          <p className="reports-empty">No approved travelers are abroad today.</p>
+          <p className="reports-empty">No approved staff are abroad today.</p>
         ) : (
           <div className="reports-table-wrap">
             <table className="reports-data-table">
               <thead>
                 <tr>
-                  <th>Traveler</th>
+                  <th>Staff Member</th>
                   <th>Sector</th>
                   <th>Department</th>
                   <th>Destination</th>

@@ -51,7 +51,7 @@ const getDashboardScope = (user) => {
   }
 
   if (role === "protocol") {
-    return "Protocol clearance and PM Office submission workload";
+    return "Clear protocol reviews, remind decision makers, and submit approved requests to PM Office.";
   }
 
   if (role === "pm_office") {
@@ -98,6 +98,7 @@ function DashboardStats({ setActivePage }) {
       affiliateInstitute: 0,
     },
   });
+  const [currentlyAbroadCount, setCurrentlyAbroadCount] = useState(0);
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -118,9 +119,10 @@ function DashboardStats({ setActivePage }) {
       setLoading(true);
       setError("");
 
-      const [statsResponse, chartResponse] = await Promise.all([
+      const [statsResponse, chartResponse, abroadResponse] = await Promise.all([
         API.get(`/stats?role=${role}`),
         API.get(`/dashboard/pending-by-sector?role=${role}&id=${user.id}`),
+        API.get('/reports/currently-abroad').catch(() => ({ data: { total: 0 } })),
       ]);
 
       setStats({
@@ -136,6 +138,7 @@ function DashboardStats({ setActivePage }) {
         },
       });
 
+      setCurrentlyAbroadCount(Number(abroadResponse.data?.total || 0));
       setChartData(normalizeSectorData(chartResponse.data || []));
       setLastUpdated(new Date());
     } catch (err) {
@@ -229,7 +232,7 @@ function DashboardStats({ setActivePage }) {
     {
       label: "Total Requests",
       value: analytics.total,
-      detail: "All travel requests recorded",
+      detail: "All travel requests",
       tone: "blue",
       meter: 100,
       onClick: canOpenQueue
@@ -239,7 +242,7 @@ function DashboardStats({ setActivePage }) {
     {
       label: "Approved",
       value: analytics.approved,
-      detail: `${analytics.approvalRate}% of completed decisions`,
+      detail: `${analytics.approvalRate}% approval rate`,
       tone: "green",
       meter: analytics.approvalRate,
       onClick: canOpenQueue
@@ -249,7 +252,7 @@ function DashboardStats({ setActivePage }) {
     {
       label: "Pending",
       value: analytics.pending,
-      detail: `${analytics.pendingShare}% of total requests`,
+      detail: "Still waiting",
       tone: "amber",
       meter: analytics.pendingShare,
       onClick: canOpenQueue
@@ -259,7 +262,7 @@ function DashboardStats({ setActivePage }) {
     {
       label: "Rejected",
       value: analytics.rejected,
-      detail: `${analytics.rejectionRate}% of completed decisions`,
+      detail: `${analytics.rejectionRate}% rejection rate`,
       tone: "rose",
       meter: analytics.rejectionRate,
       onClick: canOpenQueue
@@ -272,7 +275,7 @@ function DashboardStats({ setActivePage }) {
     {
       label: "Project Staff",
       value: analytics.requestTypeCounts.projectStaff,
-      detail: "Requests from registered MoA projects",
+      detail: "Project-based requests",
       tone: "blue",
       meter: analytics.total
         ? Math.round((analytics.requestTypeCounts.projectStaff / analytics.total) * 100)
@@ -284,7 +287,7 @@ function DashboardStats({ setActivePage }) {
     {
       label: "Advisors",
       value: analytics.requestTypeCounts.advisor,
-      detail: "Advisor requests under MoA structures",
+      detail: "Advisor requests",
       tone: "green",
       meter: analytics.total
         ? Math.round((analytics.requestTypeCounts.advisor / analytics.total) * 100)
@@ -296,7 +299,7 @@ function DashboardStats({ setActivePage }) {
     {
       label: "Staff under Lead Executive",
       value: analytics.requestTypeCounts.leadExecutiveStaff,
-      detail: "Regular MoA staff requests",
+      detail: "Regular MoA staff",
       tone: "amber",
       meter: analytics.total
         ? Math.round((analytics.requestTypeCounts.leadExecutiveStaff / analytics.total) * 100)
@@ -308,7 +311,7 @@ function DashboardStats({ setActivePage }) {
     {
       label: "Affiliate Institute",
       value: analytics.requestTypeCounts.affiliateInstitute,
-      detail: "Affiliate organization requests",
+      detail: "Affiliate requests",
       tone: "rose",
       meter: analytics.total
         ? Math.round((analytics.requestTypeCounts.affiliateInstitute / analytics.total) * 100)
@@ -321,25 +324,28 @@ function DashboardStats({ setActivePage }) {
 
   const actionCards = [
     {
-      title: "Open Assigned Queue",
-      detail: "Review pending requests that match your workflow responsibility.",
-      action: "Open requests",
+      title: role === "protocol" ? "Open active requested travel" : "Review requests",
+      detail:
+        role === "protocol"
+          ? "Clear protocol items or remind decision makers."
+          : "Open the travel requests waiting for action.",
+      action: "Open",
       tone: "teal",
       onClick: () => goToSubmittedRequests(),
       show: role !== "traveler",
     },
     {
-      title: "Create Travel Request",
-      detail: "Start a new foreign travel request for workflow approval.",
-      action: "New request",
+      title: "Create request",
+      detail: "Start a new foreign travel request.",
+      action: "New",
       tone: "green",
       onClick: () => setActivePage && setActivePage("travel-request"),
       show: role !== "minister",
     },
     {
-      title: "Analytical Reports",
-      detail: "Open detailed reports for status, sector, and approval trends.",
-      action: "View reports",
+      title: "View reports",
+      detail: "See travel summaries and trends.",
+      action: "Reports",
       tone: "blue",
       onClick: () => setActivePage && setActivePage("reports"),
       show: canOpenReports,
@@ -347,26 +353,34 @@ function DashboardStats({ setActivePage }) {
   ].filter((item) => item.show);
 
   const recommendedAction = useMemo(() => {
+    if (role === "protocol" && analytics.pending > 0) {
+      return {
+        label: "Next step",
+        title: "Open active requested travel",
+        detail: `${analytics.pending} request(s) need protocol action or reminder follow-up.`,
+      };
+    }
+
     if (analytics.pending > 0 && role !== "traveler") {
       return {
-        label: "Recommended next",
+        label: "Next step",
         title: "Review pending requests",
-        detail: `${analytics.pending} request(s) need workflow attention.`,
+        detail: `${analytics.pending} request(s) are waiting for a decision.`,
       };
     }
 
     if (role !== "minister") {
       return {
-        label: "Recommended next",
+        label: "Next step",
         title: "Create or track travel",
-        detail: "Start a request or open submitted requests to monitor progress.",
+        detail: "Start a request or check existing travel progress.",
       };
     }
 
     return {
-      label: "Recommended next",
+      label: "Next step",
       title: "Review reports",
-      detail: "Open analytical reports for ministry-level travel visibility.",
+      detail: "Open reports for ministry travel visibility.",
     };
   }, [analytics.pending, role]);
 
@@ -375,6 +389,34 @@ function DashboardStats({ setActivePage }) {
     : "Not refreshed yet";
 
   const chartColors = ["#1d4ed8", "#15803d", "#b45309", "#7c3aed", "#0369a1"];
+
+  const intelligenceItems = [
+    {
+      label: role === "protocol" ? "Active Requested Travel" : "Requests Needing Action",
+      value: loading ? "-" : analytics.pending,
+      helper:
+        role === "protocol"
+          ? "Clear, submit, or send reminders"
+          : analytics.pending > 0
+          ? "Waiting for decision"
+          : "Nothing waiting",
+    },
+    {
+      label: "Completion Rate",
+      value: loading ? "-" : `${analytics.completedShare}%`,
+      helper: `${analytics.completed} of ${analytics.total} finished`,
+    },
+    {
+      label: "Staff Currently Abroad",
+      value: loading ? "-" : currentlyAbroadCount,
+      helper: "Approved and traveling now",
+    },
+    {
+      label: "Your Role",
+      value: dashboardContext.roleLabel,
+      helper: dashboardContext.structure,
+    },
+  ];
 
   const renderMetricCard = (item) => {
     const clickable = Boolean(item.onClick);
@@ -394,8 +436,10 @@ function DashboardStats({ setActivePage }) {
           <span>{item.label}</span>
           {clickable && <em>Open</em>}
         </div>
-        <strong>{loading ? "-" : item.value}</strong>
-        <small>{item.detail}</small>
+        <div className="dashboard-kpi-main">
+          <strong>{loading ? "-" : item.value}</strong>
+          <small>{item.detail}</small>
+        </div>
         <div className="dashboard-kpi-meter" aria-hidden="true">
           <i style={{ width: `${meterValue}%` }} />
         </div>
@@ -407,7 +451,7 @@ function DashboardStats({ setActivePage }) {
     <div className="dashboard-page">
       <div className="dashboard-header">
         <div>
-          <span className="dashboard-eyebrow">Dashboard Overview</span>
+          <span className="dashboard-eyebrow">Overview</span>
           <h2>{dashboardContext.roleLabel} Workspace</h2>
           <p>
             {dashboardContext.scope}
@@ -426,35 +470,26 @@ function DashboardStats({ setActivePage }) {
 
       {error && <div className="notice-error">{error}</div>}
 
-      <div className="dashboard-context-grid">
-        <div className="dashboard-context-card">
-          <span>Logged-in Role</span>
-          <strong>{dashboardContext.roleLabel}</strong>
+      <div className={`dashboard-smart-panel role-${role || "user"}`}>
+        <div className="dashboard-smart-main">
+          <span>{recommendedAction.label}</span>
+          <h3>{recommendedAction.title}</h3>
+          <p>{recommendedAction.detail}</p>
+          <small>Last updated: {lastUpdatedLabel}</small>
         </div>
-        <div className="dashboard-context-card">
-          <span>Structure</span>
-          <strong title={dashboardContext.structure}>
-            {dashboardContext.structure}
-          </strong>
-        </div>
-        <div className="dashboard-context-card">
-          <span>Lead Executive Office</span>
-          <strong title={dashboardContext.office}>
-            {dashboardContext.office}
-          </strong>
-        </div>
-      </div>
 
-      {actionCards.length > 0 && (
-        <div className="dashboard-command-center">
-          <div className="dashboard-command-copy">
-            <span>Action Center</span>
-            <strong>{recommendedAction.title}</strong>
-            <p>{recommendedAction.detail}</p>
-            <small>Last updated: {lastUpdatedLabel}</small>
-          </div>
+        <div className="dashboard-smart-metrics">
+          {intelligenceItems.map((item) => (
+            <div key={item.label}>
+              <span>{item.label}</span>
+              <strong title={item.value}>{item.value}</strong>
+              <small title={item.helper}>{item.helper}</small>
+            </div>
+          ))}
+        </div>
 
-          <div className="dashboard-next-action-buttons">
+        {actionCards.length > 0 && (
+          <div className="dashboard-smart-actions">
             {actionCards.map((item) => (
               <button
                 type="button"
@@ -468,30 +503,7 @@ function DashboardStats({ setActivePage }) {
               </button>
             ))}
           </div>
-        </div>
-      )}
-
-      <div className="dashboard-focus-strip">
-        <div>
-          <span>{recommendedAction.label}</span>
-          <strong>{recommendedAction.title}</strong>
-        </div>
-        <div>
-          <span>Active Queue</span>
-          <strong>{loading ? "-" : analytics.pending}</strong>
-        </div>
-        <div>
-          <span>Completion Rate</span>
-          <strong>{loading ? "-" : `${analytics.completedShare}%`}</strong>
-        </div>
-        <div>
-          <span>Top Workload</span>
-          <strong>
-            {analytics.topPendingSector
-              ? analytics.topPendingSector.sector
-              : "No active workload"}
-          </strong>
-        </div>
+        )}
       </div>
 
       <div className="dashboard-kpi-grid">
@@ -501,13 +513,34 @@ function DashboardStats({ setActivePage }) {
       <div className="dashboard-panel" style={{ marginBottom: "24px" }}>
         <div className="dashboard-panel-header">
           <div>
-            <h3>Requests by Traveler Structure</h3>
-            <p>Counts by the structure selected during traveler registration and request submission.</p>
+            <h3>Requests by Traveler Type</h3>
+            <p>Quick count of where requests came from.</p>
           </div>
         </div>
 
-        <div className="dashboard-kpi-grid">
-          {structureCounts.map(renderMetricCard)}
+        <div className="dashboard-structure-strip">
+          {structureCounts.map((item) => {
+            const clickable = Boolean(item.onClick);
+            const meterValue = Math.max(0, Math.min(100, Number(item.meter || 0)));
+
+            return (
+              <button
+                type="button"
+                key={item.label}
+                className={`dashboard-structure-chip ${item.tone}`}
+                onClick={clickable ? item.onClick : undefined}
+                disabled={!clickable}
+                title={clickable ? "Open related requests" : undefined}
+              >
+                <span>{item.label}</span>
+                <strong>{loading ? "-" : item.value}</strong>
+                <small>{item.detail}</small>
+                <i aria-hidden="true">
+                  <b style={{ width: `${meterValue}%` }} />
+                </i>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -515,8 +548,8 @@ function DashboardStats({ setActivePage }) {
         <div className="dashboard-panel dashboard-chart-panel">
           <div className="dashboard-panel-header">
             <div>
-              <h3>Pending Requests by Sector</h3>
-              <p>Shows where active review workload is concentrated.</p>
+              <h3>Pending by Sector</h3>
+              <p>Where requests are waiting now.</p>
             </div>
 
             {analytics.pendingSectorTotal > 0 && (

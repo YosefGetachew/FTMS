@@ -42,18 +42,18 @@ const getStoredUser = () => {
 };
 
 const adminRoles = ['admin', 'super_admin'];
-const reportRoles = ['office_head', 'minister'];
+const reportRoles = [...adminRoles, 'office_head', 'minister'];
 const protocolRestrictedPages = ['audit-trail', 'reset-password'];
 
 const getInitialPage = () => {
   const storedUser = getStoredUser();
 
-  if (reportRoles.includes(storedUser?.role)) {
-    return 'reports';
+  if (adminRoles.includes(storedUser?.role)) {
+    return 'dashboard';
   }
 
-  if (adminRoles.includes(storedUser?.role)) {
-    return 'pending-users';
+  if (reportRoles.includes(storedUser?.role)) {
+    return 'reports';
   }
 
   if (storedUser?.role === 'traveler') {
@@ -122,6 +122,12 @@ function App() {
   const mobileNavItems = (isAdminUser
     ? [
         {
+          id: 'dashboard',
+          label: 'Home',
+          icon: 'DS',
+          show: true,
+        },
+        {
           id: 'pending-users',
           label: 'Pending',
           icon: 'PU',
@@ -143,6 +149,24 @@ function App() {
           id: 'settings',
           label: 'Settings',
           icon: 'OS',
+          show: true,
+        },
+        {
+          id: 'reports',
+          label: 'Reports',
+          icon: 'RP',
+          show: true,
+        },
+        {
+          id: 'travel-status',
+          label: 'Status',
+          icon: 'ST',
+          show: true,
+        },
+        {
+          id: 'notifications',
+          label: 'Alerts',
+          icon: 'MS',
           show: true,
         },
         {
