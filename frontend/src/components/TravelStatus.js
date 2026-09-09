@@ -630,6 +630,19 @@ function TravelStatus() {
     ];
   }, [selectedRequest]);
 
+  const statusOptions = useMemo(
+    () =>
+      ['all', 'pending', 'returned', 'completed'].map((value) => ({
+        value,
+        label: formatStatusGroup(value),
+        count:
+          value === 'all'
+            ? requests.length
+            : requests.filter((request) => getRequestStatusGroup(request) === value).length,
+      })),
+    [requests]
+  );
+
   return (
     <div className="travel-status-page">
       <div className="travel-status-header">
@@ -668,29 +681,23 @@ function TravelStatus() {
       )}
 
       <div className="travel-status-controls">
-        <label>
-          Search
-          <input
-            type="search"
-            placeholder="Search name, country, or structure..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-
-        <label>
-          Status
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-          >
-            {['all', 'pending', 'returned', 'completed'].map((item) => (
-              <option key={item} value={item}>
-                {formatStatusGroup(item)}
-              </option>
+        <div className="travel-status-filter-group">
+          <span>Status</span>
+          <div className="travel-status-filter-cards" role="group" aria-label="Filter requests by status">
+            {statusOptions.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                className={`travel-status-filter-card ${statusFilter === item.value ? 'active' : ''}`}
+                onClick={() => setStatusFilter(item.value)}
+                aria-pressed={statusFilter === item.value}
+              >
+                <strong>{item.label}</strong>
+                <small>{item.count}</small>
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+        </div>
 
         <label>
           Request
@@ -709,6 +716,16 @@ function TravelStatus() {
               ))
             )}
           </select>
+        </label>
+
+        <label className="travel-status-search-field">
+          Search
+          <input
+            type="search"
+            placeholder="Search..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
         </label>
       </div>
 

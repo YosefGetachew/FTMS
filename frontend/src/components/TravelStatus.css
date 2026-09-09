@@ -147,7 +147,7 @@
 
 .travel-status-controls {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.55fr) minmax(280px, 1.25fr);
+  grid-template-columns: minmax(360px, 1.25fr) minmax(300px, 1fr) minmax(180px, 0.55fr);
   gap: 12px;
   margin-bottom: 14px;
   padding: 14px;
@@ -183,6 +183,90 @@
 .travel-status-controls select:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.travel-status-search-field {
+  max-width: 260px;
+  justify-self: end;
+}
+
+.travel-status-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.travel-status-filter-group > span {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.travel-status-filter-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.travel-status-filter-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.travel-status-filter-card:hover,
+.travel-status-filter-card:focus-visible {
+  border-color: #0f766e;
+  background: #f0fdfa;
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.12);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.travel-status-filter-card.active {
+  border-color: #0f766e;
+  background: #0f766e;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.18);
+}
+
+.travel-status-filter-card strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.travel-status-filter-card small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.travel-status-filter-card.active small {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
 }
 
 .travel-status-layout {
@@ -717,6 +801,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .travel-status-controls {
+    grid-template-columns: 1fr;
+  }
+
   .travel-status-layout {
     grid-template-columns: 1fr;
   }
@@ -738,6 +826,10 @@
   .travel-status-summary-grid,
   .travel-status-controls {
     grid-template-columns: 1fr;
+  }
+
+  .travel-status-filter-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .travel-status-card-header {
