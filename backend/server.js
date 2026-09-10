@@ -2122,6 +2122,35 @@ const uploadFields = upload.fields([
   { name: 'torFile', maxCount: 1 },
 ]);
 
+const findOverlappingTravelerRequest = async ({
+  email,
+  startDate,
+  endDate,
+  excludeRequestId = null,
+}) => {
+  const travelerEmail = normalizeEmail(email);
+
+  if (!travelerEmail || !startDate || !endDate) return null;
+
+  const overlap = await query(
+    `SELECT id, full_name, country, start_date, end_date, status, final_status
+       FROM requests
+      WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))
+        AND ($2::date <= end_date::date AND $3::date >= start_date::date)
+        AND ($4::int IS NULL OR id <> $4::int)
+        AND COALESCE(LOWER(final_status), '') <> 'rejected'
+        AND COALESCE(LOWER(status), '') NOT LIKE '%rejected%'
+      ORDER BY start_date DESC, id DESC
+      LIMIT 1`,
+    [travelerEmail, startDate, endDate, excludeRequestId]
+  );
+
+  return overlap.rows[0] || null;
+};
+
+const duplicateTravelMessage = (request) =>
+  `This traveler already has travel request #${request.id} for ${request.country || 'another destination'} during the selected travel dates. Please update the existing request instead of creating a duplicate.`;
+
 app.post('/api/requests', uploadFields, async (req, res) => {
   try {
     const {
@@ -2149,7 +2178,26 @@ app.post('/api/requests', uploadFields, async (req, res) => {
       });
     }
 
+    if (new Date(startDate) > new Date(endDate)) {
+      return res.status(400).json({
+        error: 'Travel start date must be before or equal to the end date.',
+      });
+    }
+
     const ne = normalizeEmail(email);
+
+    const duplicateRequest = await findOverlappingTravelerRequest({
+      email: ne,
+      startDate,
+      endDate,
+    });
+
+    if (duplicateRequest) {
+      return res.status(409).json({
+        error: duplicateTravelMessage(duplicateRequest),
+        duplicateRequest,
+      });
+    }
 
     const existingUser = (
       await query(`SELECT * FROM users WHERE LOWER(TRIM(email))=$1`, [ne])
@@ -2575,6 +2623,14 @@ app.post('/api/requests/:id/send-reminder', async (req, res) => {
 
 app.put('/api/requests/:id', uploadFields, async (req, res) => {
   try {
+    const existingRequest = (
+      await query(`SELECT * FROM requests WHERE id=$1`, [req.params.id])
+    ).rows[0];
+
+    if (!existingRequest) {
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+
     const {
       travelerCategory,
       workflowType,
@@ -2593,6 +2649,30 @@ app.put('/api/requests/:id', uploadFields, async (req, res) => {
       sponsor,
       passportNumber,
     } = req.body;
+
+    const nextEmail = email ? normalizeEmail(email) : existingRequest.email;
+    const nextStartDate = startDate || existingRequest.start_date;
+    const nextEndDate = endDate || existingRequest.end_date;
+
+    if (new Date(nextStartDate) > new Date(nextEndDate)) {
+      return res.status(400).json({
+        error: 'Travel start date must be before or equal to the end date.',
+      });
+    }
+
+    const duplicateRequest = await findOverlappingTravelerRequest({
+      email: nextEmail,
+      startDate: nextStartDate,
+      endDate: nextEndDate,
+      excludeRequestId: req.params.id,
+    });
+
+    if (duplicateRequest) {
+      return res.status(409).json({
+        error: duplicateTravelMessage(duplicateRequest),
+        duplicateRequest,
+      });
+    }
 
     const r = await query(
       `UPDATE requests SET
@@ -2640,10 +2720,6 @@ app.put('/api/requests/:id', uploadFields, async (req, res) => {
         req.params.id,
       ]
     );
-
-    if (!r.rows.length) {
-      return res.status(404).json({ error: 'Request not found.' });
-    }
 
     res.json({ message: 'Request updated.', request: r.rows[0] });
   } catch (e) {

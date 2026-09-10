@@ -456,6 +456,7 @@ export default function RequestForm() {
   const [touched, setTouched] = useState({});
   const [notice, setNotice] = useState({ type: "", message: "" });
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
+  const [duplicateDialog, setDuplicateDialog] = useState(null);
   const submitInFlightRef = useRef(false);
   const [loading, setLoading] = useState({
     countries: false,
@@ -1105,6 +1106,27 @@ export default function RequestForm() {
     return data;
   };
 
+  const handleRequestError = (error, fallbackMessage) => {
+    const message =
+      error?.response?.data?.error ||
+      error?.response?.data?.message ||
+      error?.message ||
+      fallbackMessage;
+
+    if (error?.response?.status === 409) {
+      setDuplicateDialog({
+        message: typeof message === "string" ? message : fallbackMessage,
+        request: error?.response?.data?.duplicateRequest || null,
+      });
+      return;
+    }
+
+    setNotice({
+      type: "error",
+      message: typeof message === "string" ? message : fallbackMessage,
+    });
+  };
+
   const saveDraft = async () => {
     if (submitInFlightRef.current || loading.submitting || loading.drafting) {
       return;
@@ -1129,12 +1151,7 @@ export default function RequestForm() {
       });
       resetForm({ keepNotice: true });
     } catch (error) {
-      const msg =
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        error?.message ||
-        "Error saving draft.";
-      setNotice({ type: "error", message: typeof msg === "string" ? msg : "Error saving draft." });
+      handleRequestError(error, "Error saving draft.");
     } finally {
       submitInFlightRef.current = false;
       setLoading((p) => ({ ...p, drafting: false }));
@@ -1176,12 +1193,7 @@ export default function RequestForm() {
       setSuccessDialogOpen(true);
       resetForm({ keepNotice: true });
     } catch (error) {
-      const msg =
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        error?.message ||
-        "Error submitting request.";
-      setNotice({ type: "error", message: typeof msg === "string" ? msg : "Error submitting request." });
+      handleRequestError(error, "Error submitting request.");
     } finally {
       submitInFlightRef.current = false;
       setLoading((p) => ({ ...p, submitting: false }));
@@ -1227,6 +1239,44 @@ export default function RequestForm() {
                   onClick={() => setSuccessDialogOpen(false)}
                 >
                   OK
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {duplicateDialog && (
+          <div className="modal-overlay">
+            <div className="modal-content request-duplicate-modal">
+              <span className="request-modal-kicker">Duplicate travel dates</span>
+              <h2>Existing Request Found</h2>
+              <p>{duplicateDialog.message}</p>
+              {duplicateDialog.request && (
+                <div className="request-duplicate-summary">
+                  <strong>Request #{duplicateDialog.request.id}</strong>
+                  <span>{duplicateDialog.request.country || "Destination not specified"}</span>
+                </div>
+              )}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => setDuplicateDialog(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => {
+                    setDuplicateDialog(null);
+                    setNotice({
+                      type: "error",
+                      message: "Please open Submitted Requests and update the existing travel request.",
+                    });
+                  }}
+                >
+                  Open Existing Request Later
                 </button>
               </div>
             </div>
