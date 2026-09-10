@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card, EmptyState, Field, Notice } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
-import { useRequests } from '../../src/hooks/useRequests';
+import { useRequests } from '../../src/context/RequestsContext';
 import { colors } from '../../src/styles/theme';
 import { formatDate, formatStage, normalizeText } from '../../src/utils/format';
 
@@ -10,12 +10,13 @@ const workflowStages = {
   sector_structure: ['expert_preparation', 'lead_executive_review', 'state_minister_review', 'protocol_clearance', 'office_head_final', 'minister_review', 'pm_office_submission', 'pm_office_followup', 'completed'],
   ceo_structure: ['expert_preparation', 'lead_executive_review', 'ceo_review', 'protocol_clearance', 'office_head_final', 'minister_review', 'pm_office_submission', 'pm_office_followup', 'completed'],
   office_head_structure: ['expert_preparation', 'lead_executive_review', 'office_head_review', 'protocol_clearance', 'office_head_final', 'minister_review', 'pm_office_submission', 'pm_office_followup', 'completed'],
+  minister_structure: ['expert_preparation', 'protocol_clearance', 'office_head_final', 'pm_office_submission', 'pm_office_followup', 'completed'],
   affiliate_institution: ['expert_preparation', 'protocol_clearance', 'office_head_final', 'minister_review', 'pm_office_submission', 'pm_office_followup', 'completed'],
 };
 
 export default function StatusScreen() {
   const { user } = useAuth();
-  const { requests, loading, error, refresh } = useRequests(user);
+  const { requests, loading, error, refresh } = useRequests();
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {

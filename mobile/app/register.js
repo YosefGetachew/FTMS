@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Field, Notice } from '../src/components/ui';
 import API, { getApiErrorMessage } from '../src/services/api';
 import { colors } from '../src/styles/theme';
@@ -12,11 +12,39 @@ const initialForm = {
   position: '',
   organizationType: '',
   organizationName: '',
+  moaAssignmentType: '',
   sectorId: '',
   sector: '',
   department: '',
   password: '',
   confirmPassword: '',
+};
+
+const existingAccountResetMessage =
+  'This email is already registered in FTMS. Please request a password reset from the system administrator instead of creating a new account.';
+
+const getRegistrationErrorMessage = (err) => {
+  const serverCode = err?.response?.data?.code;
+  const serverMessage = err?.response?.data?.error || err?.response?.data?.message;
+
+  if (
+    serverCode === 'ACCOUNT_ALREADY_EXISTS' ||
+    /already registered/i.test(serverMessage || '')
+  ) {
+    return existingAccountResetMessage;
+  }
+
+  return getApiErrorMessage(err, 'Registration failed.');
+};
+
+const isExistingAccountError = (err) => {
+  const serverCode = err?.response?.data?.code;
+  const serverMessage = err?.response?.data?.error || err?.response?.data?.message;
+
+  return (
+    serverCode === 'ACCOUNT_ALREADY_EXISTS' ||
+    /already registered/i.test(serverMessage || '')
+  );
 };
 
 export default function RegisterScreen() {
@@ -27,6 +55,7 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [loadingLists, setLoadingLists] = useState(false);
   const [notice, setNotice] = useState(null);
+  const isMoaAdvisor = form.organizationType === 'MoA' && form.moaAssignmentType === 'advisor';
 
   const selectedSector = useMemo(
     () => moaSectors.find((item) => String(item.id) === String(form.sectorId)),
@@ -85,9 +114,19 @@ export default function RegisterScreen() {
         ...current,
         organizationType: value,
         organizationName: value === 'MoA' ? 'Ministry of Agriculture' : '',
+        moaAssignmentType: '',
         sectorId: '',
         sector: '',
         department: '',
+      }));
+      return;
+    }
+
+    if (name === 'moaAssignmentType') {
+      setForm((current) => ({
+        ...current,
+        moaAssignmentType: value,
+        department: value === 'advisor' ? 'Advisor' : '',
       }));
       return;
     }
@@ -117,8 +156,8 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (form.organizationType === 'MoA' && (!form.sectorId || !form.department)) {
-      setNotice({ type: 'error', message: 'Select your MoA structure and Lead Executive Office.' });
+    if (form.organizationType === 'MoA' && (!form.sectorId || !form.moaAssignmentType || (!isMoaAdvisor && !form.department))) {
+      setNotice({ type: 'error', message: 'Select your MoA structure and assignment.' });
       return;
     }
 
@@ -137,14 +176,45 @@ export default function RegisterScreen() {
         organizationType: form.organizationType,
         organizationName: form.organizationType === 'MoA' ? 'Ministry of Agriculture' : form.organizationName,
         sector: form.organizationType === 'MoA' ? form.sector : null,
-        department: form.organizationType === 'MoA' ? form.department : form.department || null,
+        department: form.organizationType === 'MoA' ? (isMoaAdvisor ? 'Advisor' : form.department) : form.department || null,
         password: form.password,
       });
 
       setForm(initialForm);
       setNotice({ type: 'success', message: 'Account request submitted. You can login after admin approval.' });
     } catch (err) {
-      setNotice({ type: 'error', message: getApiErrorMessage(err, 'Registration failed.') });
+      if (isExistingAccountError(err)) {
+        const email = form.email.trim();
+        Alert.alert(
+          'Password reset required',
+          getRegistrationErrorMessage(err),
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Send Request',
+              onPress: async () => {
+                try {
+                  await API.post('/password-reset-request', { email });
+                  setNotice({
+                    type: 'success',
+                    message: 'Password reset request sent to the system administrator.',
+                  });
+                } catch (requestErr) {
+                  setNotice({
+                    type: 'error',
+                    message: getApiErrorMessage(
+                      requestErr,
+                      'Unable to send password reset request.'
+                    ),
+                  });
+                }
+              },
+            },
+          ]
+        );
+      } else {
+        setNotice({ type: 'error', message: getRegistrationErrorMessage(err) });
+      }
     } finally {
       setLoading(false);
     }
@@ -173,6 +243,15 @@ export default function RegisterScreen() {
         {form.organizationType === 'MoA' ? (
           <>
             <ChoiceRow
+              label="Assignment Type *"
+              value={form.moaAssignmentType}
+              options={[
+                { label: 'Staff', value: 'staff' },
+                { label: 'Advisor', value: 'advisor' },
+              ]}
+              onChange={(value) => update('moaAssignmentType', value)}
+            />
+            <ChoiceRow
               label="MoA Structure *"
               value={form.sectorId}
               options={moaSectors.map((item) => ({ label: item.name, value: String(item.id) }))}
@@ -180,13 +259,22 @@ export default function RegisterScreen() {
               loading={loadingLists}
             />
             {selectedSector ? <Text style={styles.selected}>Selected: {selectedSector.name}</Text> : null}
-            <ChoiceRow
-              label="Lead Executive Office *"
-              value={form.department}
-              options={offices.map((item) => item.name)}
-              onChange={(value) => update('department', value)}
-              disabled={!form.sectorId}
-            />
+            {isMoaAdvisor ? (
+              <View style={styles.routeNotice}>
+                <Text style={styles.routeTitle}>Advisor Routing</Text>
+                <Text style={styles.routeText}>
+                  Your travel requests will go directly to the selected structure owner.
+                </Text>
+              </View>
+            ) : (
+              <ChoiceRow
+                label="Lead Executive Office *"
+                value={form.department}
+                options={offices.map((item) => item.name)}
+                onChange={(value) => update('department', value)}
+                disabled={!form.sectorId}
+              />
+            )}
           </>
         ) : null}
 
@@ -280,4 +368,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 12,
   },
+  routeNotice: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 14,
+    padding: 12,
+  },
+  routeTitle: { color: colors.primary, fontSize: 13, fontWeight: '900' },
+  routeText: { color: colors.muted, lineHeight: 19, marginTop: 4 },
 });

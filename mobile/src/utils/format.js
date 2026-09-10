@@ -29,6 +29,7 @@ export function formatStage(stage) {
     completed: 'Completed',
     state_minister: 'State Minister',
     protocol: 'Protocol',
+    director_general: 'Director General',
     office_head: 'Office Head',
     minister: 'Minister',
     pm_office: 'PM Office',
@@ -54,6 +55,7 @@ export function getRoleAliases(role) {
     lead_executive: ['lead_executive', 'lead_executive_officer'],
     lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
     state_minister: ['state_minister'],
+    director_general: ['director_general'],
     office_head: ['office_head'],
     pm_office: ['pm_office'],
   };

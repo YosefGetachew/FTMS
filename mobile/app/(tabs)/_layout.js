@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
+import { useRequests } from '../../src/context/RequestsContext';
 import { colors } from '../../src/styles/theme';
 import { canUseNotifications, canViewReports } from '../../src/utils/access';
 
@@ -16,9 +17,14 @@ const iconFor = {
 
 export default function TabsLayout() {
   const { user } = useAuth();
+  const { requests } = useRequests();
   const showReports = canViewReports(user?.role);
   const showNotifications = canUseNotifications(user?.role);
   const showStatus = user?.role !== 'pm_office';
+  const ministerDecisionCount = user?.role === 'minister'
+    ? requests.filter((item) => item.current_stage === 'minister_review' && item.final_status === 'pending').length
+    : 0;
+  const requestsBadge = ministerDecisionCount > 0 ? ministerDecisionCount : undefined;
 
   return (
     <Tabs
@@ -34,7 +40,7 @@ export default function TabsLayout() {
       })}
     >
       <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
-      <Tabs.Screen name="requests" options={{ title: 'Requests' }} />
+      <Tabs.Screen name="requests" options={{ title: 'Requests', tabBarBadge: requestsBadge }} />
       <Tabs.Screen name="status" options={{ title: 'Status', href: showStatus ? undefined : null }} />
       <Tabs.Screen name="reports" options={{ title: 'Reports', href: showReports ? undefined : null }} />
       <Tabs.Screen name="notifications" options={{ title: 'Alerts', href: showNotifications ? undefined : null }} />

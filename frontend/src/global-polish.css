@@ -90,6 +90,26 @@ textarea {
 
 .main-content {
   background: transparent;
+  position: relative;
+  isolation: isolate;
+}
+
+.main-content::before {
+  content: "";
+  position: fixed;
+  inset: 70px 0 0 286px;
+  background-image: url("./assets/ministry-logo.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: min(54vw, 700px);
+  opacity: 0.065;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.main-content > * {
+  position: relative;
+  z-index: 1;
 }
 
 .form-container,
@@ -151,6 +171,37 @@ a:hover {
     linear-gradient(90deg, var(--brand-900), var(--brand-700));
   border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 8px 22px rgba(6, 63, 53, 0.16);
+  gap: 16px;
+  overflow: hidden;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.topbar-logo-tile {
+  width: 46px;
+  height: 46px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.16);
+  flex: 0 0 auto;
+}
+
+.topbar-logo-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.topbar-title-block {
+  min-width: 0;
 }
 
 .system-title {
@@ -359,7 +410,7 @@ label,
 .request-refresh-btn {
   border: 1px solid var(--brand-600);
   background: var(--brand-600);
-  color: #ffffff;
+  color: #f3f2f2;
   border-radius: var(--radius-md);
   font-weight: 650;
 }
@@ -512,15 +563,54 @@ table tbody tr:hover {
 ============================================================ */
 
 .login-page {
+  position: relative;
+  isolation: isolate;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(245, 247, 251, 0.98)),
     var(--canvas);
+  overflow: hidden;
+}
+
+.login-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: url("./assets/ministry-logo.png");
+  background-repeat: no-repeat;
+  background-position: 72% 50%;
+  background-size: min(44vw, 640px);
+  opacity: 0.07;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .login-left {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   background:
     linear-gradient(145deg, rgba(6, 63, 53, 0.96), rgba(15, 118, 110, 0.93)),
     radial-gradient(circle at top right, rgba(255, 255, 255, 0.14), transparent 34%);
+}
+
+.login-left::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("./assets/ministry-logo.png");
+  background-repeat: no-repeat;
+  background-position: 54% 54%;
+  background-size: min(44vw, 620px);
+  filter: grayscale(1) brightness(0) invert(1);
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.login-left > *,
+.login-right {
+  position: relative;
+  z-index: 1;
 }
 
 .ministry-brand h1,
@@ -612,12 +702,258 @@ table tbody tr:hover {
 }
 
 /* ============================================================
+   GRAPHICAL UI ENHANCEMENTS
+============================================================ */
+
+@keyframes ftms-page-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dashboard-page,
+.request-table-page,
+.reports-page,
+.travel-status-page,
+.organization-settings-page,
+.user-management-page,
+.pending-users-page,
+.audit-trail-page,
+.form-container,
+.page-container {
+  animation: ftms-page-rise 220ms ease-out both;
+}
+
+.dashboard-panel,
+.reports-card,
+.travel-status-card,
+.request-section-card,
+.settings-container,
+.report-table-container,
+.table-container,
+.ministry-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-panel::after,
+.reports-card::after,
+.travel-status-card::after,
+.request-section-card::after,
+.settings-container::after,
+.ministry-card::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(15, 118, 110, 0.42),
+    rgba(37, 99, 235, 0.2),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.dashboard-panel:hover,
+.reports-card:hover,
+.travel-status-card:hover,
+.request-section-card:hover,
+.settings-container:hover,
+.ministry-card:hover {
+  border-color: #cbd8e5;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.09);
+}
+
+.dashboard-command-center,
+.dashboard-focus-strip div,
+.dashboard-action-tile,
+.dashboard-kpi-card,
+.request-summary-card,
+.reports-stat-card,
+.reports-abroad-summary,
+.organization-settings-summary-card {
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+.dashboard-action-tile:hover,
+.dashboard-kpi-card.interactive:hover,
+.request-summary-card:hover,
+.reports-stat-card:hover,
+.reports-abroad-summary:hover,
+.organization-settings-summary-card:hover {
+  transform: translateY(-2px);
+}
+
+.dashboard-focus-strip div:hover {
+  border-color: #b8c7d8;
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.dashboard-command-center {
+  background:
+    linear-gradient(135deg, rgba(236, 253, 245, 0.96), rgba(255, 255, 255, 0.98)),
+    linear-gradient(90deg, rgba(15, 118, 110, 0.08), rgba(37, 99, 235, 0.05));
+}
+
+.dashboard-chart-panel .recharts-wrapper,
+.reports-card .recharts-wrapper {
+  border-radius: var(--radius-md);
+}
+
+.dashboard-chart-panel .recharts-surface,
+.reports-card .recharts-surface {
+  overflow: visible;
+}
+
+.dashboard-chart-panel .recharts-cartesian-grid line,
+.reports-card .recharts-cartesian-grid line {
+  stroke: #edf2f7;
+}
+
+.dashboard-chart-panel .recharts-bar-rectangle path,
+.reports-card .recharts-bar-rectangle path {
+  filter: drop-shadow(0 4px 6px rgba(15, 23, 42, 0.1));
+}
+
+.dashboard-chart-panel .recharts-default-tooltip,
+.reports-card .recharts-default-tooltip {
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius-md) !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12) !important;
+}
+
+.dashboard-chart-panel .recharts-tooltip-label,
+.reports-card .recharts-tooltip-label {
+  color: var(--ink-900) !important;
+  font-weight: 760 !important;
+}
+
+.reports-card-header,
+.dashboard-panel-header,
+.travel-status-header,
+.request-table-header,
+.organization-settings-header {
+  position: relative;
+}
+
+.reports-card-header h3,
+.dashboard-panel-header h3,
+.request-table-header h2,
+.travel-status-header h2,
+.organization-settings-header h2 {
+  text-wrap: balance;
+}
+
+.request-table-page table tbody tr,
+.report-table-container table tbody tr,
+.table-container table tbody tr {
+  transition:
+    background-color 130ms ease,
+    box-shadow 130ms ease;
+}
+
+.request-table-page table tbody tr:hover,
+.report-table-container table tbody tr:hover,
+.table-container table tbody tr:hover {
+  background: #f8fcfb;
+  box-shadow: inset 3px 0 0 var(--brand-600);
+}
+
+.status-badge,
+.request-stage-text,
+.dashboard-chip,
+.request-date-cell strong,
+.sidebar-section-count,
+.sidebar-section-toggle {
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.dashboard-chip:hover,
+.request-date-cell strong:hover,
+.sidebar-section-count:hover,
+.sidebar-section-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.primary-btn,
+.secondary-btn,
+.save-settings-btn,
+.login-button,
+.request-refresh-btn,
+.dashboard-refresh-btn,
+.pdf-btn,
+.approve-btn,
+.reject-btn,
+.edit-btn,
+.delete-btn {
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.primary-btn:hover:not(:disabled),
+.secondary-btn:hover:not(:disabled),
+.save-settings-btn:hover:not(:disabled),
+.login-button:hover:not(:disabled),
+.request-refresh-btn:hover:not(:disabled),
+.dashboard-refresh-btn:hover:not(:disabled),
+.pdf-btn:hover:not(:disabled),
+.approve-btn:hover:not(:disabled),
+.reject-btn:hover:not(:disabled),
+.edit-btn:hover:not(:disabled),
+.delete-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.1);
+}
+
+.modal-content,
+.large-modal,
+.user-management-modal,
+.edit-modal,
+.affiliate-edit-modal {
+  animation: ftms-page-rise 180ms ease-out both;
+}
+
+.notice-success,
+.notice-error,
+.login-success,
+.login-error,
+.form-notice {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+}
+
+/* ============================================================
    RESPONSIVE SAFETY
 ============================================================ */
 
 @media (max-width: 1100px) {
   .sidebar {
     width: 270px;
+  }
+
+  .main-content::before {
+    left: 270px;
   }
 }
 
@@ -637,12 +973,31 @@ table tbody tr:hover {
 
   .topbar {
     position: relative;
+    flex-wrap: wrap;
   }
 
   .sidebar {
     width: 100%;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .main-content::before {
+    inset: 72px 0 0 0;
+    background-size: min(78vw, 520px);
+    opacity: 0.05;
+  }
+
+  .login-page::before {
+    background-position: center 58%;
+    background-size: min(76vw, 520px);
+    opacity: 0.055;
+  }
+
+  .login-left::before {
+    background-position: center;
+    background-size: min(82vw, 500px);
+    opacity: 0.07;
   }
 }
 
@@ -666,6 +1021,11 @@ table tbody tr:hover {
 
   .topbar {
     padding: 12px;
+  }
+
+  .topbar-logo-tile {
+    width: 40px;
+    height: 40px;
   }
 
   .topbar-right,
@@ -707,5 +1067,2667 @@ table tbody tr:hover {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+/* ============================================================
+   MOBILE FIT OVERRIDES
+============================================================ */
+
+@media (max-width: 640px) {
+  html,
+  body,
+  #root,
+  .layout,
+  .main-content {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .layout {
+    display: block;
+  }
+
+  .main-content {
+    min-width: 0;
+  }
+
+  .form-container,
+  .page-container,
+  .dashboard-page,
+  .request-table-page,
+  .organization-settings-page,
+  .user-management-page,
+  .pending-users-page,
+  .audit-trail-page,
+  .travel-status-page,
+  .reports-page,
+  .ministry-page {
+    padding: 10px !important;
+  }
+
+  .topbar {
+    position: relative;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .system-title {
+    font-size: 18px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .system-subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .topbar-right,
+  .user-profile {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .user-details,
+  .user-name,
+  .user-role {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .logout-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .sidebar {
+    width: 100%;
+    max-height: 58vh;
+    min-height: auto;
+    position: relative;
+    overflow-y: auto;
+    padding: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    box-shadow: none;
+  }
+
+  .sidebar-title-group,
+  .sidebar-user-info,
+  .sidebar-menu-text {
+    min-width: 0;
+  }
+
+  .sidebar-menu-label {
+    white-space: normal;
+  }
+
+  .sidebar-menu-description {
+    -webkit-line-clamp: 1;
+  }
+
+  .sidebar-profile-panel,
+  .sidebar-role-note,
+  .sidebar-current-page,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .sidebar-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-header,
+  .dashboard-panel-header,
+  .reports-hero,
+  .request-table-header,
+  .request-history-header,
+  .organization-settings-header,
+  .travel-status-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dashboard-kpi-grid,
+  .dashboard-context-grid,
+  .dashboard-decision-summary,
+  .request-summary-grid,
+  .organization-settings-summary-grid,
+  .reports-summary-grid,
+  .reports-forecast-strip,
+  .travel-status-summary-grid,
+  .travel-status-controls,
+  .dashboard-analytics-grid,
+  .reports-grid,
+  .reports-chart-pair,
+  .travel-status-layout,
+  .workflow-approver-grid,
+  .affiliate-institution-grid,
+  .moa-structure-grid,
+  .lead-executive-office-grid,
+  .user-management-grid,
+  .traveler-split-grid,
+  .trip-details-panels,
+  .trip-support-grid,
+  .date-range-grid,
+  .review-grid,
+  .request-context-grid,
+  .stepper-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .request-table-controls,
+  .settings-table-filter,
+  .settings-simple-nav {
+    display: grid;
+    grid-template-columns: 1fr !important;
+  }
+
+  .request-table-controls .search-input,
+  .request-filter-select,
+  .settings-table-filter select,
+  .settings-simple-nav button,
+  .dashboard-refresh-btn,
+  .travel-status-refresh,
+  .reports-hero button,
+  .save-settings-btn,
+  .primary-btn,
+  .secondary-btn {
+    width: 100%;
+  }
+
+  .table-container,
+  .report-table-container,
+  .request-table-scroll {
+    max-width: 100%;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-container table,
+  .report-table-container table,
+  .request-table-page table {
+    min-width: 680px;
+  }
+
+  .request-action-group {
+    max-width: none;
+    gap: 6px;
+  }
+
+  .request-action-group .action-icon-btn,
+  .request-action-group .action-wide-btn {
+    min-height: 34px;
+    padding: 7px 9px;
+    font-size: 12px;
+  }
+
+  .modal-overlay {
+    align-items: stretch;
+    padding: 10px;
+  }
+
+  .modal-content,
+  .large-modal,
+  .user-management-modal,
+  .edit-modal,
+  .affiliate-edit-modal,
+  .delete-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(100vh - 20px);
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .sidebar-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar-right {
+    align-items: stretch;
+  }
+
+  .logout-btn {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .table-container table,
+  .report-table-container table,
+  .request-table-page table {
+    min-width: 620px;
+  }
+}
+
+/* ============================================================
+   FTMS MAJOR UI REFRESH
+   A clearer, more beautiful, easier-to-scan operating workspace.
+============================================================ */
+
+:root {
+  --ui-bg: #eef4f2;
+  --ui-bg-soft: #f7faf9;
+  --ui-card: rgba(255, 255, 255, 0.94);
+  --ui-card-strong: #ffffff;
+  --ui-border: rgba(148, 163, 184, 0.28);
+  --ui-border-strong: rgba(15, 118, 110, 0.24);
+  --ui-text: #102033;
+  --ui-muted: #617085;
+  --ui-green: #0b6b5b;
+  --ui-green-dark: #073f35;
+  --ui-gold: #d6a72f;
+  --ui-blue: #2563eb;
+  --ui-red: #dc2626;
+  --ui-radius: 14px;
+  --ui-radius-sm: 10px;
+  --ui-shadow: 0 18px 44px rgba(15, 23, 42, 0.09);
+  --ui-shadow-soft: 0 8px 22px rgba(15, 23, 42, 0.07);
+}
+
+body {
+  background:
+    radial-gradient(circle at 22% 0%, rgba(15, 118, 110, 0.12), transparent 34%),
+    radial-gradient(circle at 82% 8%, rgba(37, 99, 235, 0.08), transparent 28%),
+    linear-gradient(180deg, #fbfdfc 0%, var(--ui-bg) 100%);
+  color: var(--ui-text);
+}
+
+.layout {
+  background: transparent;
+}
+
+.main-content {
+  background: transparent;
+}
+
+.main-content::before {
+  opacity: 0.045;
+  filter: saturate(0.72);
+}
+
+/* App shell */
+.topbar {
+  min-height: 74px;
+  margin: 0;
+  padding: 14px 24px;
+  background:
+    linear-gradient(120deg, rgba(7, 63, 53, 0.98), rgba(11, 107, 91, 0.98)),
+    radial-gradient(circle at 80% 20%, rgba(214, 167, 47, 0.22), transparent 30%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 34px rgba(7, 63, 53, 0.22);
+}
+
+.topbar-logo-tile,
+.sidebar-logo-box {
+  border-radius: 14px;
+}
+
+.system-title {
+  font-size: clamp(1.05rem, 1.6vw, 1.35rem);
+  font-weight: 820;
+}
+
+.system-subtitle {
+  max-width: 720px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.user-profile {
+  min-height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 5px 10px 5px 5px;
+}
+
+.logout-btn {
+  min-height: 42px;
+  border-radius: 999px;
+}
+
+.sidebar {
+  width: 304px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(242, 250, 246, 0.96)),
+    radial-gradient(circle at 50% 0%, rgba(15, 118, 110, 0.12), transparent 34%);
+  border-right: 1px solid rgba(15, 118, 110, 0.14);
+  box-shadow: 18px 0 40px rgba(15, 23, 42, 0.07);
+}
+
+.sidebar-header {
+  border-bottom-color: rgba(15, 118, 110, 0.14);
+}
+
+.sidebar-user-card,
+.sidebar-profile-panel,
+.sidebar-role-note,
+.sidebar-summary-card,
+.sidebar-current-page {
+  border-color: rgba(15, 118, 110, 0.18);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.045);
+}
+
+.sidebar-current-page {
+  background:
+    linear-gradient(135deg, rgba(236, 253, 245, 0.98), #ffffff);
+}
+
+.sidebar-section-toggle {
+  border-radius: 10px;
+}
+
+.sidebar-section-toggle:hover {
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.sidebar-menu-btn {
+  min-height: 54px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.sidebar-menu-btn:hover {
+  transform: translateX(0);
+  border-color: rgba(15, 118, 110, 0.28);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07);
+}
+
+.sidebar-menu-btn.active {
+  background:
+    linear-gradient(135deg, var(--ui-green), #14876f);
+  border-color: transparent;
+  box-shadow: 0 14px 26px rgba(15, 118, 110, 0.22);
+}
+
+.sidebar-menu-icon {
+  border-radius: 10px;
+}
+
+/* Page headers and hero areas */
+.dashboard-header,
+.reports-hero,
+.request-table-header,
+.travel-status-header,
+.organization-settings-header,
+.user-management-header,
+.pending-users-header,
+.audit-trail-header,
+.request-hero {
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(240, 253, 250, 0.94)),
+    radial-gradient(circle at 92% 10%, rgba(214, 167, 47, 0.16), transparent 26%);
+  box-shadow: var(--ui-shadow-soft);
+  padding: 18px;
+}
+
+.dashboard-header {
+  align-items: stretch;
+}
+
+.dashboard-header > div:first-child {
+  display: grid;
+  align-content: center;
+}
+
+.dashboard-header h2,
+.reports-title,
+.request-table-header h2,
+.travel-status-header h2,
+.organization-settings-header h2,
+.request-hero-content h1 {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: clamp(1.45rem, 2.15vw, 2rem);
+  font-weight: 860;
+}
+
+.dashboard-header p,
+.reports-hero p,
+.request-table-header p,
+.travel-status-header p,
+.organization-settings-header p,
+.request-hero-content p {
+  color: var(--ui-muted);
+  font-size: 0.93rem;
+}
+
+.dashboard-eyebrow,
+.reports-hero span,
+.request-table-kicker,
+.organization-settings-kicker,
+.auth-kicker,
+.request-hero-badge span,
+.request-section-title span {
+  width: fit-content;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 999px;
+  background: rgba(236, 253, 245, 0.9);
+  color: var(--ui-green);
+  padding: 4px 9px;
+  letter-spacing: 0.075em;
+}
+
+/* Cards and sections */
+.dashboard-command-center {
+  grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.22fr);
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(6, 63, 53, 0.98), rgba(15, 118, 110, 0.95)),
+    radial-gradient(circle at 82% 18%, rgba(214, 167, 47, 0.28), transparent 32%);
+  color: #ffffff;
+  padding: 16px;
+  box-shadow: 0 20px 44px rgba(7, 63, 53, 0.22);
+}
+
+.dashboard-command-copy span,
+.dashboard-command-copy strong,
+.dashboard-command-copy p {
+  color: #ffffff;
+}
+
+.dashboard-command-copy p {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.dashboard-command-copy small {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.dashboard-action-tile {
+  min-height: 104px;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  backdrop-filter: blur(12px);
+}
+
+.dashboard-action-tile:hover,
+.dashboard-action-tile:focus-visible {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.16);
+}
+
+.dashboard-action-tile span {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.dashboard-action-tile strong,
+.dashboard-action-tile small {
+  color: #ffffff;
+}
+
+.dashboard-action-tile small {
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.dashboard-focus-strip div,
+.dashboard-context-card,
+.dashboard-kpi-card,
+.dashboard-panel,
+.reports-card,
+.reports-stat-card,
+.reports-abroad-summary,
+.reports-forecast-strip > div,
+.request-summary-card,
+.settings-container,
+.ministry-card,
+.travel-form,
+.request-section-card,
+.modal-content,
+.login-card,
+.report-table-container,
+.table-container {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-card);
+  box-shadow: var(--ui-shadow-soft);
+}
+
+.dashboard-kpi-card,
+.reports-stat-card,
+.request-summary-card,
+.organization-settings-summary-card {
+  min-height: 116px;
+  padding: 15px;
+}
+
+.dashboard-kpi-card strong,
+.reports-stat-card p,
+.request-summary-card strong {
+  font-size: clamp(1.75rem, 2.4vw, 2.35rem);
+}
+
+.dashboard-kpi-card::before,
+.reports-stat-card::before,
+.request-summary-card::before,
+.ministry-card::before {
+  height: 5px;
+  background: linear-gradient(90deg, var(--ui-green), var(--ui-blue));
+}
+
+.dashboard-kpi-meter,
+.dashboard-meter-track {
+  height: 7px;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.dashboard-panel,
+.reports-card {
+  padding: 20px;
+}
+
+.dashboard-panel-header h3,
+.reports-card-header h3 {
+  font-size: 1.02rem;
+}
+
+.dashboard-empty,
+.reports-empty,
+.request-empty-cell {
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, #ffffff, #f8fbfa);
+  border-color: rgba(15, 118, 110, 0.18);
+}
+
+/* Forms */
+input,
+select,
+textarea,
+.ministry-input,
+.search-input,
+.request-filter-select,
+.form-group input,
+.form-group select,
+.form-group textarea,
+.settings-group input,
+.settings-group select,
+.settings-group textarea {
+  border-radius: 12px;
+  border-color: rgba(148, 163, 184, 0.45);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.ministry-input:focus,
+.search-input:focus,
+.request-filter-select:focus {
+  border-color: var(--ui-green);
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.14);
+}
+
+.radio-cards {
+  border-radius: 14px;
+  background: rgba(241, 245, 249, 0.72);
+}
+
+.radio-card {
+  min-height: 54px;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.radio-card.selected {
+  border-color: var(--ui-green);
+  background: linear-gradient(135deg, #ecfdf5, #ffffff);
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.16), var(--ui-shadow-soft);
+}
+
+.step-btn {
+  border-radius: 12px;
+}
+
+.step-btn.active {
+  background: linear-gradient(135deg, var(--ui-green), #12806d);
+}
+
+/* Tables */
+.table-container,
+.report-table-container,
+.request-table-scroll,
+.reports-table-wrap {
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: var(--ui-shadow-soft);
+}
+
+table th,
+.reports-data-table th {
+  background: #f1f7f5;
+  color: #315348;
+  font-size: 0.72rem;
+  letter-spacing: 0.055em;
+}
+
+table td,
+.reports-data-table td {
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+}
+
+table tbody tr:hover,
+.reports-data-table tbody tr:hover {
+  background: #f5fbf8;
+}
+
+/* Buttons */
+.primary-btn,
+.save-settings-btn,
+.login-button,
+.travel-form button,
+.login-form button,
+.request-refresh-btn,
+.dashboard-refresh-btn {
+  min-height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--ui-green), #12806d);
+  border-color: transparent;
+  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.16);
+}
+
+.secondary-btn,
+.request-history-toggle,
+.request-bulk-select,
+.reports-hero button {
+  min-height: 42px;
+  border-radius: 12px;
+}
+
+.pdf-btn,
+.approve-btn,
+.reject-btn,
+.edit-btn,
+.delete-btn,
+.action-icon-btn {
+  border-radius: 10px;
+}
+
+/* Reports and visual data */
+.reports-forecast-strip > div {
+  background:
+    linear-gradient(135deg, #fff8e5, #ffffff);
+}
+
+.reports-abroad-summary {
+  background:
+    linear-gradient(135deg, #ecfdf5, #ffffff);
+}
+
+.dashboard-chart-panel .recharts-wrapper,
+.reports-card .recharts-wrapper {
+  padding: 6px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.75), rgba(255, 255, 255, 0.95));
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+/* Mobile web */
+.mobile-workspace-home {
+  min-height: calc(100vh - 78px);
+  background:
+    radial-gradient(circle at 78% 0%, rgba(15, 118, 110, 0.12), transparent 28%),
+    transparent;
+}
+
+.mobile-home-actions button,
+.mobile-bottom-nav {
+  border-radius: 18px;
+}
+
+.mobile-home-actions button {
+  min-height: 92px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--ui-shadow-soft);
+}
+
+.mobile-bottom-nav {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(15, 118, 110, 0.16);
+}
+
+@media (max-width: 1200px) {
+  .dashboard-command-center {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-next-action-buttons {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    width: 100%;
+  }
+
+  .topbar {
+    border-radius: 0;
+  }
+
+  .dashboard-header,
+  .reports-hero,
+  .request-table-header,
+  .travel-status-header,
+  .organization-settings-header,
+  .user-management-header,
+  .pending-users-header,
+  .audit-trail-header,
+  .request-hero {
+    border-radius: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-next-action-buttons,
+  .dashboard-focus-strip,
+  .dashboard-kpi-grid,
+  .reports-summary-grid,
+  .request-summary-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-command-center,
+  .dashboard-panel,
+  .reports-card,
+  .settings-container,
+  .ministry-card,
+  .travel-form,
+  .request-section-card {
+    border-radius: 16px;
+  }
+
+  .dashboard-action-tile {
+    min-height: 86px;
+  }
+}
+
+/* Compact dashboard header after the major refresh. */
+.dashboard-page .dashboard-header {
+  min-height: auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 13px;
+  border-radius: 12px;
+}
+
+.dashboard-page .dashboard-header > div:first-child {
+  align-content: center;
+}
+
+.dashboard-page .dashboard-eyebrow {
+  margin-bottom: 5px;
+  padding: 2px 8px;
+  font-size: 0.58rem;
+}
+
+.dashboard-page .dashboard-header h2 {
+  font-size: clamp(1.18rem, 1.55vw, 1.45rem);
+  line-height: 1.12;
+}
+
+.dashboard-page .dashboard-header p {
+  margin-top: 4px;
+  margin-bottom: 0;
+  font-size: 0.78rem;
+}
+
+.dashboard-page .dashboard-refresh-btn {
+  align-self: center;
+  width: auto;
+  min-width: 74px;
+  min-height: 32px;
+  padding: 6px 11px;
+  border-radius: 9px;
+  box-shadow: 0 4px 10px rgba(15, 118, 110, 0.12);
+  font-size: 0.76rem;
+  color: white;
+}
+
+@media (max-width: 900px) {
+  .dashboard-page .dashboard-header {
+    align-items: stretch;
+  }
+
+  .dashboard-page .dashboard-refresh-btn {
+    width: 100%;
+  }
+}
+
+/* Compact dashboard action center. */
+.dashboard-page .dashboard-command-center {
+  grid-template-columns: minmax(210px, 0.52fr) minmax(0, 1.48fr);
+  gap: 9px;
+  margin-bottom: 10px;
+  padding: 10px 11px;
+  border-radius: 13px;
+  box-shadow: 0 10px 24px rgba(7, 63, 53, 0.16);
+}
+
+.dashboard-page .dashboard-command-copy {
+  display: flex;
+  min-height: 74px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0;
+}
+
+.dashboard-page .dashboard-command-copy span {
+  font-size: 0.58rem;
+}
+
+.dashboard-page .dashboard-command-copy strong {
+  margin-top: 4px;
+  font-size: clamp(0.96rem, 1.05vw, 1.08rem);
+  line-height: 1.16;
+}
+
+.dashboard-page .dashboard-command-copy p {
+  margin-top: 4px;
+  font-size: 0.74rem;
+  line-height: 1.32;
+}
+
+.dashboard-page .dashboard-command-copy small {
+  margin-top: 7px;
+  padding: 3px 7px;
+  font-size: 0.64rem;
+}
+
+.dashboard-page .dashboard-next-action-buttons {
+  gap: 8px;
+  align-items: stretch;
+}
+
+.dashboard-page .dashboard-action-tile {
+  min-height: 74px;
+  padding: 9px 10px;
+  border-radius: 10px;
+}
+
+.dashboard-page .dashboard-action-tile span {
+  padding: 3px 7px;
+  font-size: 0.58rem;
+}
+
+.dashboard-page .dashboard-action-tile strong {
+  margin-top: 7px;
+  font-size: 0.78rem;
+  line-height: 1.18;
+}
+
+.dashboard-page .dashboard-action-tile small {
+  margin-top: 4px;
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+
+.dashboard-page .dashboard-structure-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dashboard-page .dashboard-structure-chip {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "label value"
+    "detail value"
+    "meter meter";
+  gap: 3px 10px;
+  min-height: 72px;
+  padding: 10px 11px;
+  border: 1px solid rgba(122, 142, 164, 0.26);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #122033;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.055);
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.dashboard-page .dashboard-structure-chip:hover:not(:disabled),
+.dashboard-page .dashboard-structure-chip:focus-visible:not(:disabled) {
+  border-color: rgba(15, 118, 110, 0.32);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.09);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.dashboard-page .dashboard-structure-chip:disabled {
+  cursor: default;
+}
+
+.dashboard-page .dashboard-structure-chip::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  border-radius: 11px 11px 0 0;
+  content: "";
+  background: linear-gradient(90deg, #0f766e, #2563eb);
+}
+
+.dashboard-page .dashboard-structure-chip.green::before {
+  background: linear-gradient(90deg, #0f766e, #22c55e);
+}
+
+.dashboard-page .dashboard-structure-chip.amber::before {
+  background: linear-gradient(90deg, #b45309, #f59e0b);
+}
+
+.dashboard-page .dashboard-structure-chip.rose::before {
+  background: linear-gradient(90deg, #be123c, #fb7185);
+}
+
+.dashboard-page .dashboard-structure-chip span {
+  grid-area: label;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 780;
+  line-height: 1.18;
+}
+
+.dashboard-page .dashboard-structure-chip strong {
+  grid-area: value;
+  align-self: center;
+  color: #0f172a;
+  font-size: 1.55rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.dashboard-page .dashboard-structure-chip small {
+  grid-area: detail;
+  color: #64748b;
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+
+.dashboard-page .dashboard-structure-chip i {
+  grid-area: meter;
+  display: block;
+  height: 5px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5edf0;
+}
+
+.dashboard-page .dashboard-structure-chip i b {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f766e, #2563eb);
+}
+
+.dashboard-page .dashboard-structure-chip.green i b {
+  background: linear-gradient(90deg, #0f766e, #22c55e);
+}
+
+.dashboard-page .dashboard-structure-chip.amber i b {
+  background: linear-gradient(90deg, #b45309, #f59e0b);
+}
+
+.dashboard-page .dashboard-structure-chip.rose i b {
+  background: linear-gradient(90deg, #be123c, #fb7185);
+}
+
+.dashboard-page > .dashboard-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-card {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 104px;
+  padding: 12px 13px 11px;
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 250, 0.96));
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-card::before {
+  height: 4px;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-topline {
+  align-items: center;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-topline span {
+  color: #526176;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-topline em {
+  opacity: 1;
+  transform: none;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  background: #f0fdfa;
+  color: #0f766e;
+  font-size: 0.62rem;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-main {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-main strong {
+  margin: 0;
+  color: #08111f;
+  font-size: clamp(1.9rem, 2.45vw, 2.45rem);
+  font-weight: 880;
+  letter-spacing: 0;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-main small {
+  min-height: auto;
+  margin: 0;
+  color: #5f6f84;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-meter {
+  height: 6px;
+  margin-top: 8px;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-card.interactive:hover,
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-card.interactive:focus-visible {
+  border-color: rgba(15, 118, 110, 0.28);
+  transform: translateY(-1px);
+}
+
+.dashboard-page .dashboard-smart-panel {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(320px, 1.1fr) minmax(280px, 0.95fr);
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(6, 78, 59, 0.98), rgba(15, 118, 110, 0.95)),
+    radial-gradient(circle at 84% 18%, rgba(214, 167, 47, 0.22), transparent 32%);
+  box-shadow: 0 16px 36px rgba(7, 63, 53, 0.18);
+}
+
+.dashboard-page .dashboard-smart-main {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  padding: 4px 6px;
+}
+
+.dashboard-page .dashboard-smart-main span {
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.6rem;
+  font-weight: 820;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.dashboard-page .dashboard-smart-main h3 {
+  margin: 8px 0 5px;
+  color: #ffffff;
+  font-size: clamp(1.05rem, 1.25vw, 1.25rem);
+  font-weight: 850;
+  line-height: 1.15;
+}
+
+.dashboard-page .dashboard-smart-main p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.dashboard-page .dashboard-smart-main small {
+  width: fit-content;
+  margin-top: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.dashboard-page .dashboard-smart-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dashboard-page .dashboard-smart-metrics div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+}
+
+.dashboard-page .dashboard-smart-metrics span,
+.dashboard-page .dashboard-smart-metrics strong,
+.dashboard-page .dashboard-smart-metrics small {
+  display: block;
+}
+
+.dashboard-page .dashboard-smart-metrics span {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.62rem;
+  font-weight: 820;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.dashboard-page .dashboard-smart-metrics strong {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: clamp(1.1rem, 1.55vw, 1.45rem);
+  font-weight: 860;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-page .dashboard-smart-metrics small {
+  margin-top: 5px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.66rem;
+  line-height: 1.22;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-page .dashboard-smart-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile {
+  min-height: 64px;
+  padding: 9px 10px;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.13);
+  color: #ffffff;
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+}
+
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile:hover,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile:focus-visible {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile span {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile strong,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile small {
+  color: #ffffff;
+}
+
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile small {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 1100px) {
+  .dashboard-page .dashboard-command-center {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-page .dashboard-command-copy {
+    min-height: auto;
+  }
+
+  .dashboard-page .dashboard-structure-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-page > .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-page .dashboard-smart-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-page .dashboard-smart-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-page .dashboard-next-action-buttons {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-page .dashboard-command-center {
+    padding: 10px;
+  }
+
+  .dashboard-page .dashboard-structure-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-page > .dashboard-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-page .dashboard-smart-panel {
+    padding: 10px;
+  }
+
+  .dashboard-page .dashboard-smart-metrics,
+  .dashboard-page .dashboard-smart-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   FTMS FINAL PROFESSIONAL UI PASS
+   Consistent, calmer, easier-to-use screens across the system.
+============================================================ */
+
+:root {
+  --final-bg: #f3f7f6;
+  --final-panel: rgba(255, 255, 255, 0.96);
+  --final-panel-soft: #f8fbfa;
+  --final-border: rgba(122, 142, 164, 0.26);
+  --final-border-strong: rgba(15, 118, 110, 0.28);
+  --final-text: #122033;
+  --final-muted: #5f6f84;
+  --final-green: #0f766e;
+  --final-green-dark: #064e3b;
+  --final-blue: #2563eb;
+  --final-amber: #b45309;
+  --final-red: #b91c1c;
+  --final-radius: 12px;
+  --final-shadow: 0 12px 30px rgba(15, 23, 42, 0.075);
+  --final-shadow-hover: 0 18px 38px rgba(15, 23, 42, 0.11);
+}
+
+body {
+  background:
+    linear-gradient(180deg, #fbfdfc 0%, var(--final-bg) 100%);
+  color: var(--final-text);
+}
+
+.main-content::before {
+  opacity: 0.035;
+}
+
+.form-container,
+.page-container,
+.dashboard-page,
+.request-table-page,
+.organization-settings-page,
+.user-management-page,
+.pending-users-page,
+.audit-trail-page,
+.travel-status-page,
+.reports-page {
+  padding: 16px;
+}
+
+.dashboard-header,
+.reports-hero,
+.request-table-header,
+.travel-status-header,
+.organization-settings-header,
+.user-management-header,
+.pending-users-header,
+.audit-trail-header,
+.request-hero {
+  margin-bottom: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: var(--final-radius);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(240, 253, 250, 0.92));
+  box-shadow: var(--final-shadow);
+  padding: 14px 16px;
+}
+
+.dashboard-header h2,
+.reports-title,
+.request-table-header h2,
+.travel-status-header h2,
+.organization-settings-header h2,
+.user-management-header h2,
+.pending-users-header h2,
+.audit-trail-header h2,
+.request-hero-content h1 {
+  margin-bottom: 4px;
+  color: var(--final-text);
+  font-size: clamp(1.22rem, 1.7vw, 1.62rem);
+  font-weight: 820;
+  line-height: 1.15;
+}
+
+.dashboard-header p,
+.reports-hero p,
+.request-table-header p,
+.travel-status-header p,
+.organization-settings-header p,
+.user-management-header p,
+.pending-users-header p,
+.audit-trail-header p,
+.request-hero-content p {
+  color: var(--final-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.dashboard-eyebrow,
+.reports-hero span,
+.request-table-kicker,
+.organization-settings-kicker,
+.auth-kicker,
+.request-section-title span {
+  padding: 3px 8px;
+  border-color: rgba(15, 118, 110, 0.22);
+  background: #ecfdf5;
+  color: var(--final-green-dark);
+  font-size: 0.6rem;
+  font-weight: 820;
+  letter-spacing: 0.06em;
+}
+
+.dashboard-context-grid,
+.dashboard-kpi-grid,
+.request-summary-grid,
+.reports-summary-grid,
+.organization-settings-summary-grid,
+.user-management-summary-grid,
+.pending-users-summary-grid,
+.travel-status-summary-grid {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dashboard-context-card,
+.dashboard-kpi-card,
+.request-summary-card,
+.reports-stat-card,
+.reports-abroad-summary,
+.organization-settings-summary-card,
+.user-management-summary-card,
+.pending-users-summary-card,
+.travel-status-summary-card,
+.dashboard-panel,
+.reports-card,
+.travel-status-request-panel,
+.travel-status-diagram-card,
+.travel-status-detail-card,
+.request-section-card,
+.settings-container,
+.ministry-card,
+.travel-form,
+.table-container,
+.report-table-container,
+.request-table-scroll,
+.modal-content {
+  border: 1px solid var(--final-border);
+  border-radius: var(--final-radius);
+  background: var(--final-panel);
+  box-shadow: var(--final-shadow);
+}
+
+.dashboard-kpi-card,
+.request-summary-card,
+.reports-stat-card,
+.travel-status-summary-card,
+.organization-settings-summary-card {
+  min-height: 94px;
+  padding: 12px 13px;
+}
+
+.dashboard-kpi-card strong,
+.request-summary-card strong,
+.reports-stat-card p,
+.travel-status-summary-card strong,
+.organization-settings-summary-card strong {
+  font-size: clamp(1.45rem, 2vw, 1.95rem);
+  font-weight: 830;
+}
+
+.dashboard-panel,
+.reports-card,
+.request-section-card,
+.settings-container,
+.travel-form {
+  padding: 16px;
+}
+
+.dashboard-panel:hover,
+.reports-card:hover,
+.request-section-card:hover,
+.settings-container:hover,
+.ministry-card:hover {
+  border-color: var(--final-border-strong);
+  box-shadow: var(--final-shadow-hover);
+}
+
+.dashboard-command-center {
+  border-radius: var(--final-radius);
+  background:
+    linear-gradient(135deg, #064e3b, #0f766e);
+}
+
+.dashboard-action-tile {
+  border-radius: 10px;
+}
+
+input,
+select,
+textarea,
+.ministry-input,
+.ministry-select,
+.search-input,
+.request-filter-select,
+.form-group input,
+.form-group select,
+.form-group textarea,
+.settings-group input,
+.settings-group select,
+.settings-group textarea {
+  min-height: 40px;
+  border-radius: 10px;
+  border-color: rgba(122, 142, 164, 0.42);
+  color: var(--final-text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #8a9aad;
+}
+
+label,
+.ministry-label,
+.settings-group label,
+.form-group label {
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 720;
+}
+
+.primary-btn,
+.save-settings-btn,
+.login-button,
+.travel-form button,
+.login-form button,
+.request-refresh-btn,
+.dashboard-refresh-btn,
+.travel-status-refresh,
+.reports-hero button {
+  min-height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--final-green-dark), var(--final-green));
+  color: #ffffff;
+  font-weight: 760;
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.16);
+}
+
+.secondary-btn,
+.request-history-toggle,
+.request-bulk-select {
+  min-height: 38px;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+}
+
+.pdf-btn,
+.approve-btn,
+.reject-btn,
+.edit-btn,
+.delete-btn,
+.action-icon-btn,
+.table-action-group button {
+  min-height: 30px;
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.table-container,
+.report-table-container,
+.request-table-scroll,
+.reports-table-wrap {
+  overflow: hidden;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+table th,
+.reports-data-table th {
+  padding: 10px 11px;
+  background: #f3f8f6;
+  color: #395064;
+  font-size: 0.68rem;
+  font-weight: 820;
+  letter-spacing: 0.045em;
+}
+
+table td,
+.reports-data-table td {
+  padding: 10px 11px;
+  color: #334155;
+  font-size: 0.79rem;
+}
+
+table tbody tr {
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+table tbody tr:hover {
+  background: #f6fbf9;
+  box-shadow: inset 3px 0 0 var(--final-green);
+}
+
+.request-table-page table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.request-table-page table th,
+.request-table-page table td {
+  border-right: 1px solid rgba(122, 142, 164, 0.22);
+}
+
+.request-table-page table th {
+  border-bottom: 1px solid rgba(122, 142, 164, 0.32);
+}
+
+.request-table-page table td {
+  border-bottom: 1px solid rgba(122, 142, 164, 0.18);
+}
+
+.request-table-page table th:last-child,
+.request-table-page table td:last-child {
+  border-right: 0;
+}
+
+.status-badge,
+.dashboard-chip,
+.request-history-count,
+.travel-status-state-chip {
+  border-radius: 999px;
+  font-weight: 760;
+}
+
+.modal-overlay {
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(5px);
+}
+
+.modal-content,
+.large-modal,
+.user-management-modal,
+.edit-modal,
+.affiliate-edit-modal {
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+}
+
+.request-detail-grid div,
+.review-grid > div,
+.travel-status-detail-list div {
+  border-radius: 10px;
+  background: #f8fbfa;
+}
+
+.reports-card .recharts-wrapper,
+.dashboard-chart-panel .recharts-wrapper {
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.reports-card .recharts-cartesian-axis-tick text,
+.dashboard-chart-panel .recharts-cartesian-axis-tick text {
+  fill: #526176;
+  font-size: 11px;
+}
+
+.reports-card .recharts-legend-item-text,
+.dashboard-chart-panel .recharts-legend-item-text {
+  color: #526176 !important;
+}
+
+.travel-status-layout {
+  gap: 12px;
+}
+
+.travel-status-hero {
+  border-radius: 0;
+}
+
+.travel-status-step {
+  border-radius: 12px;
+}
+
+.travel-status-request-card {
+  border-radius: 10px;
+}
+
+@media (max-width: 900px) {
+  .form-container,
+  .page-container,
+  .dashboard-page,
+  .request-table-page,
+  .organization-settings-page,
+  .user-management-page,
+  .pending-users-page,
+  .audit-trail-page,
+  .travel-status-page,
+  .reports-page {
+    padding: 10px !important;
+  }
+
+  .dashboard-header,
+  .reports-hero,
+  .request-table-header,
+  .travel-status-header,
+  .organization-settings-header,
+  .user-management-header,
+  .pending-users-header,
+  .audit-trail-header,
+  .request-hero {
+    padding: 12px;
+  }
+
+  .dashboard-header h2,
+  .reports-title,
+  .request-table-header h2,
+  .travel-status-header h2,
+  .organization-settings-header h2,
+  .request-hero-content h1 {
+    font-size: 1.18rem;
+  }
+
+  .dashboard-context-grid,
+  .dashboard-kpi-grid,
+  .request-summary-grid,
+  .reports-summary-grid,
+  .organization-settings-summary-grid,
+  .travel-status-summary-grid,
+  .travel-status-hero-metrics {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-panel,
+  .reports-card,
+  .request-section-card,
+  .settings-container,
+  .travel-form {
+    padding: 12px;
+  }
+
+  .travel-status-request-panel,
+  .travel-status-detail-card {
+    position: static;
+  }
+
+  .travel-status-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar-logo-tile {
+    width: 40px;
+    height: 40px;
+  }
+
+  .system-title {
+    font-size: 1rem;
+  }
+
+  .system-subtitle {
+    font-size: 0.72rem;
+  }
+
+  .mobile-bottom-nav {
+    border-radius: 14px;
+  }
+
+  .mobile-bottom-nav button.active {
+    background: var(--final-green);
+  }
+
+  table th,
+  table td,
+  .reports-data-table th,
+  .reports-data-table td {
+    padding: 9px;
+    font-size: 0.76rem;
+  }
+
+  .request-table-page table td {
+    border-right: 0;
+  }
+}
+
+/* ============================================================
+   SIMPLE USE PASS
+   Keeps daily screens lighter, clearer, and easier to scan.
+============================================================ */
+
+.dashboard-header,
+.reports-hero,
+.request-table-header,
+.travel-status-header,
+.organization-settings-header,
+.user-management-header,
+.pending-users-header,
+.audit-trail-header,
+.request-hero {
+  min-height: auto;
+  padding: 12px 14px;
+}
+
+.dashboard-header h2,
+.reports-title,
+.request-table-header h2,
+.travel-status-header h2,
+.organization-settings-header h2,
+.user-management-header h2,
+.pending-users-header h2,
+.audit-trail-header h2,
+.request-hero-content h1 {
+  font-size: clamp(1.18rem, 1.45vw, 1.45rem);
+}
+
+.dashboard-eyebrow,
+.reports-hero span,
+.request-table-kicker,
+.organization-settings-kicker,
+.auth-kicker,
+.travel-status-kicker {
+  text-transform: uppercase;
+}
+
+.dashboard-page .dashboard-smart-panel {
+  grid-template-columns: minmax(220px, 0.85fr) minmax(300px, 1fr) minmax(260px, 0.9fr);
+  padding: 10px;
+}
+
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile,
+.dashboard-page .dashboard-smart-metrics div {
+  min-height: 58px;
+  padding: 9px;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-card,
+.request-summary-card,
+.reports-stat-card,
+.travel-status-summary-card {
+  min-height: 82px;
+}
+
+.request-table-controls,
+.travel-status-controls,
+.user-management-toolbar,
+.pending-toolbar,
+.audit-controls {
+  align-items: end;
+  padding: 10px;
+  border: 1px solid rgba(122, 142, 164, 0.22);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.request-table-controls .search-input,
+.travel-status-controls input,
+.travel-status-controls select {
+  min-height: 36px;
+}
+
+.request-section-header,
+.user-management-section-header,
+.reports-card-header,
+.travel-status-card-header {
+  padding: 11px 12px;
+}
+
+.request-section-header h3,
+.user-management-section-header h3,
+.reports-card-header h3,
+.travel-status-card-header h3,
+.dashboard-panel-header h3 {
+  font-size: 0.98rem;
+}
+
+.request-section-header p,
+.user-management-section-header p,
+.reports-card-header p,
+.travel-status-card-header p,
+.dashboard-panel-header p {
+  font-size: 0.76rem;
+}
+
+.request-table-page table th {
+  background: #f6faf9;
+  color: #30465c;
+}
+
+.request-table-page table td {
+  line-height: 1.35;
+}
+
+.request-action-group .action-icon-btn {
+  min-height: 31px;
+}
+
+.sidebar-profile-panel,
+.sidebar-role-note,
+.sidebar-current-page,
+.sidebar-summary-card {
+  border-radius: 10px;
+}
+
+.sidebar-menu-btn {
+  min-height: 48px;
+}
+
+.sidebar-menu-btn strong {
+  font-size: 0.82rem;
+}
+
+.sidebar-menu-btn small,
+.sidebar-section-title small,
+.sidebar-current-page small {
+  line-height: 1.25;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-page .dashboard-smart-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   SYSTEM-WIDE RESPONSIVE COMPATIBILITY
+   Final layer for desktop, large screen, tablet, and mobile.
+============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+.main-content,
+.dashboard-page,
+.reports-page,
+.request-table-page,
+.travel-status-page,
+.form-container,
+.organization-settings-page,
+.user-management-page,
+.pending-users-page,
+.audit-trail-page,
+.notifications-page,
+.reset-password-page {
+  min-width: 0;
+}
+
+.dashboard-page,
+.reports-page,
+.request-table-page,
+.travel-status-page,
+.organization-settings-page,
+.user-management-page,
+.pending-users-page,
+.audit-trail-page,
+.notifications-page,
+.reset-password-page,
+.form-container {
+  width: min(100%, 1920px);
+  margin-inline: auto;
+}
+
+.dashboard-panel,
+.reports-card,
+.request-section-card,
+.travel-status-request-panel,
+.travel-status-diagram-card,
+.travel-status-detail-card,
+.organization-settings-page .settings-container,
+.user-management-section,
+.pending-users-section,
+.audit-trail-section,
+.notifications-panel,
+.reset-password-card,
+.ministry-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-kpi-grid,
+.dashboard-structure-strip,
+.reports-summary-grid,
+.reports-currently-abroad,
+.reports-grid,
+.reports-leadership-grid,
+.reports-leadership-summary,
+.travel-status-summary-grid,
+.travel-status-layout,
+.travel-status-controls,
+.request-summary-grid,
+.request-table-controls,
+.organization-settings-summary-grid,
+.user-management-grid,
+.pending-users-grid,
+.workflow-approver-grid,
+.affiliate-institution-grid,
+.moa-structure-grid,
+.lead-executive-office-grid {
+  min-width: 0;
+}
+
+.table-container,
+.report-table-container,
+.request-table-scroll,
+.reports-table-wrap,
+.settings-table-wrap,
+.user-management-table-wrap,
+.pending-users-table-wrap,
+.audit-trail-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-container table,
+.report-table-container table,
+.request-table-scroll table,
+.reports-data-table {
+  width: 100%;
+}
+
+.modal-content,
+.large-modal,
+.user-management-modal,
+.edit-modal,
+.affiliate-edit-modal,
+.delete-modal {
+  width: min(96vw, 980px);
+  max-height: min(88vh, 920px);
+  overflow: auto;
+}
+
+@media (min-width: 1600px) {
+  .main-content {
+    padding-inline: 22px;
+  }
+
+  .dashboard-page,
+  .reports-page,
+  .request-table-page,
+  .travel-status-page,
+  .organization-settings-page,
+  .user-management-page,
+  .pending-users-page,
+  .audit-trail-page,
+  .notifications-page,
+  .reset-password-page,
+  .form-container {
+    padding-inline: 24px;
+  }
+
+  .dashboard-kpi-grid,
+  .reports-summary-grid,
+  .request-summary-grid,
+  .travel-status-summary-grid,
+  .organization-settings-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1280px) {
+  .dashboard-page .dashboard-smart-panel,
+  .travel-status-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-page .dashboard-smart-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .reports-currently-abroad,
+  .user-management-grid,
+  .workflow-approver-grid,
+  .affiliate-institution-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .request-table-page table.active-request-table {
+    min-width: 980px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .main-content {
+    padding: 12px;
+  }
+
+  .dashboard-page,
+  .reports-page,
+  .request-table-page,
+  .travel-status-page,
+  .organization-settings-page,
+  .user-management-page,
+  .pending-users-page,
+  .audit-trail-page,
+  .notifications-page,
+  .reset-password-page,
+  .form-container {
+    padding: 14px;
+  }
+
+  .dashboard-header,
+  .reports-hero,
+  .request-table-header,
+  .travel-status-header,
+  .organization-settings-header,
+  .user-management-header,
+  .pending-users-header,
+  .audit-trail-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .dashboard-kpi-grid,
+  .dashboard-structure-strip,
+  .reports-summary-grid,
+  .reports-leadership-summary,
+  .request-summary-grid,
+  .travel-status-summary-grid,
+  .organization-settings-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reports-grid,
+  .reports-leadership-grid,
+  .travel-status-controls,
+  .request-table-controls,
+  .settings-table-filter {
+    grid-template-columns: 1fr;
+  }
+
+  .travel-status-search-field {
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .dashboard-refresh-btn,
+  .reports-hero button,
+  .travel-status-refresh,
+  .request-refresh-btn,
+  .request-history-toggle {
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-size: 13px;
+  }
+
+  .main-content {
+    padding: 8px;
+  }
+
+  .dashboard-page,
+  .reports-page,
+  .request-table-page,
+  .travel-status-page,
+  .organization-settings-page,
+  .user-management-page,
+  .pending-users-page,
+  .audit-trail-page,
+  .notifications-page,
+  .reset-password-page,
+  .form-container {
+    padding: 10px;
+  }
+
+  .dashboard-header h2,
+  .reports-title,
+  .request-table-header h2,
+  .travel-status-header h2,
+  .organization-settings-header h2,
+  .user-management-header h2,
+  .pending-users-header h2,
+  .audit-trail-header h2,
+  .request-hero-content h1 {
+    font-size: clamp(1.12rem, 5vw, 1.35rem);
+    line-height: 1.18;
+  }
+
+  .dashboard-header p,
+  .reports-hero p,
+  .request-table-header p,
+  .travel-status-header p,
+  .organization-settings-header p,
+  .user-management-header p,
+  .pending-users-header p,
+  .audit-trail-header p {
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+
+  .dashboard-kpi-grid,
+  .dashboard-structure-strip,
+  .reports-summary-grid,
+  .reports-leadership-summary,
+  .request-summary-grid,
+  .travel-status-summary-grid,
+  .organization-settings-summary-grid,
+  .dashboard-page .dashboard-smart-metrics,
+  .dashboard-page .dashboard-smart-actions,
+  .reports-status-graphic,
+  .travel-status-filter-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-panel,
+  .reports-card,
+  .request-section-card,
+  .travel-status-request-panel,
+  .travel-status-diagram-card,
+  .travel-status-detail-card,
+  .organization-settings-page .settings-container,
+  .user-management-section,
+  .pending-users-section,
+  .audit-trail-section,
+  .notifications-panel,
+  .reset-password-card,
+  .ministry-card {
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .request-section-header,
+  .reports-card-header,
+  .travel-status-card-header,
+  .dashboard-panel-header,
+  .user-management-section-header,
+  .pending-users-section-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  button,
+  input,
+  select,
+  textarea,
+  .action-icon-btn,
+  .dashboard-action-tile,
+  .travel-status-filter-card {
+    min-height: 40px;
+  }
+
+  .request-action-group,
+  .table-action-group,
+  .workflow-approver-actions,
+  .modal-actions,
+  .request-header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .request-action-group button,
+  .table-action-group button,
+  .workflow-approver-actions button,
+  .modal-actions button,
+  .request-header-actions button {
+    width: 100%;
+  }
+
+  .request-table-page table.active-request-table,
+  .reports-data-table,
+  .table-container table,
+  .report-table-container table {
+    min-width: 720px;
+  }
+
+  .modal-overlay {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .modal-content,
+  .large-modal,
+  .user-management-modal,
+  .edit-modal,
+  .affiliate-edit-modal,
+  .delete-modal {
+    width: 100%;
+    max-height: calc(100vh - 20px);
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: 6px;
+  }
+
+  .dashboard-page,
+  .reports-page,
+  .request-table-page,
+  .travel-status-page,
+  .organization-settings-page,
+  .user-management-page,
+  .pending-users-page,
+  .audit-trail-page,
+  .notifications-page,
+  .reset-password-page,
+  .form-container {
+    padding: 8px 6px;
+  }
+
+  .dashboard-panel,
+  .reports-card,
+  .request-section-card,
+  .travel-status-request-panel,
+  .travel-status-diagram-card,
+  .travel-status-detail-card,
+  .organization-settings-page .settings-container,
+  .user-management-section,
+  .pending-users-section,
+  .audit-trail-section,
+  .notifications-panel,
+  .reset-password-card,
+  .ministry-card,
+  .reports-hero,
+  .dashboard-header {
+    padding: 10px;
+  }
+
+  .dashboard-page .dashboard-smart-panel {
+    padding: 6px;
+  }
+
+  .dashboard-page .dashboard-smart-main,
+  .dashboard-page .dashboard-smart-metrics div,
+  .dashboard-page .dashboard-smart-actions .dashboard-action-tile,
+  .reports-stat-card,
+  .reports-leadership-summary div,
+  .reports-status-row,
+  .travel-status-summary-card,
+  .request-summary-card {
+    padding: 9px;
+  }
+
+  .request-table-page table.active-request-table,
+  .reports-data-table,
+  .table-container table,
+  .report-table-container table {
+    min-width: 640px;
+  }
+
+  .sidebar-menu-btn,
+  .mobile-home-actions button,
+  .mobile-bottom-nav button {
+    min-height: 44px;
+  }
+}
+
+/* Final compact dashboard workspace panel */
+.dashboard-page .dashboard-smart-panel {
+  grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1fr) minmax(420px, 1.25fr);
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 7px;
+}
+
+.dashboard-page .dashboard-smart-main {
+  padding: 6px 8px;
+}
+
+.dashboard-page .dashboard-smart-main span {
+  padding: 3px 7px;
+  font-size: 0.54rem;
+}
+
+.dashboard-page .dashboard-smart-main h3 {
+  margin: 6px 0 3px;
+  font-size: clamp(0.95rem, 1vw, 1.08rem);
+}
+
+.dashboard-page .dashboard-smart-main p {
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+
+.dashboard-page .dashboard-smart-main small {
+  margin-top: 6px;
+  padding: 3px 7px;
+  font-size: 0.58rem;
+}
+
+.dashboard-page .dashboard-smart-metrics {
+  gap: 6px;
+}
+
+.dashboard-page .dashboard-smart-metrics div {
+  min-height: 42px;
+  padding: 6px 7px;
+}
+
+.dashboard-page .dashboard-smart-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile {
+  min-height: 42px;
+  padding: 6px 7px;
+}
+
+.dashboard-page .dashboard-smart-metrics span,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile span {
+  font-size: 0.5rem;
+}
+
+.dashboard-page .dashboard-smart-metrics strong,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile strong {
+  margin-top: 3px;
+  font-size: clamp(0.86rem, 0.95vw, 1rem);
+  line-height: 1.05;
+}
+
+.dashboard-page .dashboard-smart-metrics small,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile small {
+  margin-top: 2px;
+  font-size: 0.56rem;
+  line-height: 1.15;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-card {
+  min-height: 72px;
+  padding: 7px 8px;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-main strong {
+  font-size: clamp(1.25rem, 1.55vw, 1.6rem);
+}
+
+.dashboard-page .dashboard-structure-chip {
+  min-height: 50px;
+  padding: 6px 7px;
+}
+
+.dashboard-page .dashboard-structure-chip strong {
+  font-size: 1.1rem;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-page .dashboard-smart-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-page .dashboard-smart-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Compact dashboard cards for every role */
+.dashboard-page .dashboard-smart-panel {
+  gap: 8px;
+  padding: 7px;
+}
+
+.dashboard-page .dashboard-smart-main {
+  padding: 7px 9px;
+}
+
+.dashboard-page .dashboard-smart-main h3 {
+  font-size: clamp(0.96rem, 1.05vw, 1.1rem);
+}
+
+.dashboard-page .dashboard-smart-main p {
+  font-size: 0.7rem;
+}
+
+.dashboard-page .dashboard-smart-main small {
+  font-size: 0.62rem;
+}
+
+.dashboard-page .dashboard-smart-metrics,
+.dashboard-page .dashboard-smart-actions {
+  gap: 6px;
+}
+
+.dashboard-page .dashboard-smart-metrics div,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile {
+  min-height: 46px;
+  padding: 6px 7px;
+}
+
+.dashboard-page .dashboard-smart-metrics span,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile span,
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-topline span {
+  font-size: 0.54rem;
+}
+
+.dashboard-page .dashboard-smart-metrics strong,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile strong {
+  font-size: clamp(0.9rem, 1.05vw, 1.08rem);
+}
+
+.dashboard-page .dashboard-smart-metrics small,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile small {
+  margin-top: 2px;
+  font-size: 0.58rem;
+}
+
+.dashboard-page > .dashboard-kpi-grid {
+  gap: 9px;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-card {
+  min-height: 76px;
+  padding: 8px 9px 7px;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-main {
+  gap: 2px;
+  margin: 5px 0 7px;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-main strong {
+  font-size: clamp(1.35rem, 1.7vw, 1.72rem);
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-main small {
+  font-size: 0.66rem;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-meter {
+  height: 5px;
+}
+
+.dashboard-page .dashboard-panel {
+  padding: 10px;
+}
+
+.dashboard-page .dashboard-structure-strip {
+  gap: 9px;
+}
+
+.dashboard-page .dashboard-structure-chip {
+  min-height: 54px;
+  padding: 7px 8px;
+}
+
+.dashboard-page .dashboard-structure-chip span {
+  font-size: 0.7rem;
+}
+
+.dashboard-page .dashboard-structure-chip strong {
+  font-size: 1.18rem;
+}
+
+.dashboard-page .dashboard-structure-chip small {
+  font-size: 0.64rem;
+}
+
+/* Slightly smaller dashboard cards */
+.dashboard-page .dashboard-smart-panel {
+  padding: 8px;
+}
+
+.dashboard-page .dashboard-smart-metrics {
+  gap: 7px;
+}
+
+.dashboard-page .dashboard-smart-actions {
+  gap: 7px;
+}
+
+.dashboard-page .dashboard-smart-metrics div,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile {
+  min-height: 50px;
+  padding: 7px 8px;
+}
+
+.dashboard-page .dashboard-smart-metrics span,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile span {
+  font-size: 0.56rem;
+}
+
+.dashboard-page .dashboard-smart-metrics strong,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile strong {
+  font-size: clamp(0.95rem, 1.18vw, 1.15rem);
+}
+
+.dashboard-page .dashboard-smart-metrics small,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile small {
+  margin-top: 3px;
+  font-size: 0.6rem;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-card {
+  min-height: 90px;
+  padding: 10px 11px 9px;
+}
+
+.dashboard-page > .dashboard-kpi-grid .dashboard-kpi-main strong {
+  font-size: clamp(1.6rem, 2.1vw, 2.05rem);
+}
+
+.dashboard-page .dashboard-structure-chip {
+  min-height: 62px;
+  padding: 8px 9px;
+}
+
+.dashboard-page .dashboard-structure-chip strong {
+  font-size: 1.35rem;
+}
+
+@media (max-width: 768px) {
+  .request-table-controls,
+  .travel-status-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .request-section-header,
+  .travel-status-card-header {
+    gap: 8px;
+  }
+}
+
+/* Friendly dashboard action panel typography */
+.dashboard-page .dashboard-smart-panel {
+  gap: 10px;
+}
+
+.dashboard-page .dashboard-smart-main {
+  padding: 8px 10px;
+}
+
+.dashboard-page .dashboard-smart-main h3 {
+  font-size: clamp(1rem, 1.15vw, 1.18rem);
+}
+
+.dashboard-page .dashboard-smart-main p {
+  font-size: 0.74rem;
+}
+
+.dashboard-page .dashboard-smart-metrics strong,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile strong {
+  font-size: clamp(1rem, 1.35vw, 1.28rem);
+}
+
+.dashboard-page .dashboard-smart-metrics small,
+.dashboard-page .dashboard-smart-actions .dashboard-action-tile small {
+  font-size: 0.64rem;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-page .dashboard-smart-panel {
+    grid-template-columns: 1fr;
   }
 }

@@ -372,6 +372,24 @@
   cursor: not-allowed;
 }
 
+.forgot-password-link {
+  display: inline-flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin: -4px 0 14px;
+  border: 0;
+  background: transparent;
+  color: #0f766e;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 720;
+  text-align: right;
+}
+
+.forgot-password-link:hover {
+  text-decoration: underline;
+}
+
 .login-error,
 .login-success,
 .login-info {
@@ -398,6 +416,100 @@
   border: 1px solid #bfdbfe;
   background: #eff6ff;
   color: #1d4ed8;
+}
+
+.auth-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.auth-modal-card {
+  width: min(460px, 100%);
+  border: 1px solid #dbe7e4;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.25);
+  padding: 24px;
+}
+
+.auth-modal-kicker {
+  display: inline-flex;
+  margin-bottom: 10px;
+  border-radius: 999px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 5px 10px;
+  text-transform: uppercase;
+}
+
+.auth-modal-card h2 {
+  margin: 0;
+  color: #10201c;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.auth-modal-card p {
+  margin: 10px 0 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.auth-modal-email {
+  margin-top: 14px;
+  border: 1px solid #d9e7e4;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 10px 12px;
+  word-break: break-word;
+}
+
+.auth-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.auth-modal-primary,
+.auth-modal-secondary {
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 10px 14px;
+}
+
+.auth-modal-primary {
+  border: 1px solid #0f766e;
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.auth-modal-secondary {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.auth-modal-primary:disabled,
+.auth-modal-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .register-link {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import API from "../services/api";
 import "./request-form.css";
 
@@ -26,18 +26,31 @@ const workflowPath = {
   office_head_structure: [
     "Expert",
     "Lead Executive Officer",
-    "Office Head",
     "Protocol for Clearance",
     "Office Head",
+    "Protocol PM Submission",
+    "PM Office",
+  ],
+  minister_structure: [
+    "Expert",
     "Minister",
     "Protocol PM Submission",
     "PM Office",
   ],
   affiliate_institution: [
     "Expert",
+    "Director General",
     "Protocol for Clearance",
     "Office Head",
-    "Minister",
+    "Protocol PM Submission",
+    "PM Office",
+  ],
+  project: [
+    "Project Staff",
+    "Project Coordinator",
+    "Parent Structure Approver",
+    "Protocol for Clearance",
+    "Office Head",
     "Protocol PM Submission",
     "PM Office",
   ],
@@ -59,7 +72,134 @@ const moaStructureTypes = [
     label: "Head of the Minister's Office",
     ownerLabel: "Head of the Minister's Office",
   },
+  {
+    value: "minister_structure",
+    label: "Minister",
+    ownerLabel: "Minister",
+  },
 ];
+
+const fallbackCountries = [
+  "Afghanistan",
+  "Albania",
+  "Algeria",
+  "Angola",
+  "Argentina",
+  "Armenia",
+  "Australia",
+  "Austria",
+  "Azerbaijan",
+  "Bahrain",
+  "Bangladesh",
+  "Belgium",
+  "Benin",
+  "Botswana",
+  "Brazil",
+  "Bulgaria",
+  "Burkina Faso",
+  "Burundi",
+  "Cambodia",
+  "Cameroon",
+  "Canada",
+  "Chad",
+  "Chile",
+  "China",
+  "Colombia",
+  "Congo",
+  "Cote d'Ivoire",
+  "Cuba",
+  "Cyprus",
+  "Czechia",
+  "Democratic Republic of the Congo",
+  "Denmark",
+  "Djibouti",
+  "Egypt",
+  "Eritrea",
+  "Estonia",
+  "Eswatini",
+  "Ethiopia",
+  "Finland",
+  "France",
+  "Gabon",
+  "Gambia",
+  "Georgia",
+  "Germany",
+  "Ghana",
+  "Greece",
+  "Guinea",
+  "Hungary",
+  "India",
+  "Indonesia",
+  "Iran",
+  "Iraq",
+  "Ireland",
+  "Israel",
+  "Italy",
+  "Japan",
+  "Jordan",
+  "Kazakhstan",
+  "Kenya",
+  "Kuwait",
+  "Laos",
+  "Lebanon",
+  "Liberia",
+  "Libya",
+  "Madagascar",
+  "Malawi",
+  "Malaysia",
+  "Mali",
+  "Mauritania",
+  "Mauritius",
+  "Mexico",
+  "Morocco",
+  "Mozambique",
+  "Namibia",
+  "Nepal",
+  "Netherlands",
+  "New Zealand",
+  "Niger",
+  "Nigeria",
+  "Norway",
+  "Oman",
+  "Pakistan",
+  "Philippines",
+  "Poland",
+  "Portugal",
+  "Qatar",
+  "Romania",
+  "Russia",
+  "Rwanda",
+  "Saudi Arabia",
+  "Senegal",
+  "Serbia",
+  "Seychelles",
+  "Sierra Leone",
+  "Singapore",
+  "Somalia",
+  "South Africa",
+  "South Korea",
+  "South Sudan",
+  "Spain",
+  "Sri Lanka",
+  "Sudan",
+  "Sweden",
+  "Switzerland",
+  "Syria",
+  "Tanzania",
+  "Thailand",
+  "Togo",
+  "Tunisia",
+  "Turkey",
+  "Uganda",
+  "Ukraine",
+  "United Arab Emirates",
+  "United Kingdom",
+  "United States",
+  "Vietnam",
+  "Yemen",
+  "Zambia",
+  "Zimbabwe",
+].sort((a, b) => a.localeCompare(b));
 
 const getTripDuration = (startDate, endDate) => {
   if (!startDate || !endDate || endDate < startDate) return null;
@@ -190,7 +330,10 @@ const FileBox = ({ label, name, file, setFormData, handleFileChange }) => (
 const RadioCards = ({ name, value, onChange, options, cols = 2 }) => (
   <div className={`radio-cards cols-${cols}`}>
     {options.map((opt) => (
-      <label key={opt.value} className={`radio-card ${value === opt.value ? "selected" : ""}`}>
+      <label
+        key={opt.value}
+        className={`radio-card ${opt.route ? "with-route" : ""} ${value === opt.value ? "selected" : ""}`}
+      >
         <input
           type="radio"
           name={name}
@@ -201,6 +344,14 @@ const RadioCards = ({ name, value, onChange, options, cols = 2 }) => (
         />
         <span className="radio-card-title">{opt.label}</span>
         {opt.description && <span className="radio-card-desc">{opt.description}</span>}
+        {opt.route && (
+          <span className="radio-card-flow" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
+        )}
       </label>
     ))}
   </div>
@@ -222,16 +373,48 @@ const SectionHeader = ({ eyebrow, title, subtitle }) => (
   </div>
 );
 
+const ChoicePanel = ({ title, description, children }) => (
+  <div className="choice-panel">
+    <div className="choice-panel-heading">
+      <span>{title}</span>
+      {description && <small>{description}</small>}
+    </div>
+    {children}
+  </div>
+);
+
 export default function RequestForm() {
   const travelerTypeOptions = [
-    { value: "higher_official", label: "Higher Official", description: "Senior leadership and above" },
-    { value: "expert", label: "Expert", description: "Technical / programme staff" },
+    {
+      value: "higher_official",
+      label: "Higher Official",
+      description: "Senior leadership",
+      route: "Leadership route",
+    },
+    {
+      value: "advisor",
+      label: "Advisor",
+      description: "Advisory office",
+      route: "Advisor route",
+    },
+    {
+      value: "project",
+      label: "Project Staff",
+      description: "Staff under project coordinator",
+      route: "Project route",
+    },
+    {
+      value: "expert",
+      label: "Expert",
+      description: "Technical staff",
+      route: "Expert route",
+    },
   ];
 
-  const workflowOptions = [
+  const allWorkflowOptions = [
     ...moaStructureTypes.map((item) => ({
       ...item,
-      description: `${item.ownerLabel} area with Lead Executive Offices`,
+      description: `${item.ownerLabel} route`,
       route: workflowPath[item.value].join(" -> "),
     })),
   ];
@@ -253,6 +436,7 @@ export default function RequestForm() {
       startDate: "",
       endDate: "",
       purpose: "",
+      fundingSourceType: "",
       sponsor: "",
       passportNumber: "",
       passportFile: null,
@@ -267,15 +451,20 @@ export default function RequestForm() {
   const [organizations, setOrganizations] = useState([]);
   const [moaSectors, setMoaSectors] = useState([]);
   const [leadExecutiveOffices, setLeadExecutiveOffices] = useState([]);
+  const [moaProjects, setMoaProjects] = useState([]);
   const [step, setStep] = useState(1);
   const [touched, setTouched] = useState({});
   const [notice, setNotice] = useState({ type: "", message: "" });
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false);
+  const submitInFlightRef = useRef(false);
   const [loading, setLoading] = useState({
     countries: false,
     organizations: false,
     moaSectors: false,
     leadExecutiveOffices: false,
+    moaProjects: false,
     submitting: false,
+    drafting: false,
   });
 
   const isMoA = formData.organizationType === "moa";
@@ -294,11 +483,22 @@ export default function RequestForm() {
     [formData.startDate, formData.endDate]
   );
 
+  const workflowOptions = allWorkflowOptions.filter(
+    (item) => item.value !== "minister_structure" || formData.travelerType === "advisor"
+  );
+
   const selectedWorkflow = workflowOptions.find(
     (item) => item.value === formData.workflowType
   );
   const selectedStructureTypeLabel = selectedWorkflow?.label || "MoA Structure";
   const selectedOwnerLabel = selectedWorkflow?.ownerLabel || "Approver";
+  const advisorRoutesThroughProtocol = [
+    "office_head_structure",
+    "minister_structure",
+  ].includes(formData.workflowType);
+  const advisorRouteHint = advisorRoutesThroughProtocol
+    ? "Advisor travel skips Lead Executive Office and starts at Protocol for Clearance."
+    : `Advisor travel is routed directly to the ${selectedOwnerLabel}.`;
 
   const normalizedPhone = normalizePhonePreview(formData.phone);
 
@@ -309,6 +509,128 @@ export default function RequestForm() {
 
   const assignedSector = String(currentUser?.sector || "").trim();
   const assignedLeadExecutiveOffice = String(currentUser?.department || "").trim();
+  const isStateMinisterSectorTraveler =
+    currentUser?.role === "state_minister" &&
+    formData.workflowType === "sector_structure";
+  const isAdvisorTraveler = isMoA && formData.travelerType === "advisor";
+  const isProjectTraveler = isMoA && formData.travelerType === "project";
+  const isProjectCoordinatorOwnProject =
+    currentUser?.role === "project_coordinator" &&
+    isProjectTraveler &&
+    normalizeComparable(currentUser?.sector) ===
+      normalizeComparable(formData.sector) &&
+    normalizeComparable(currentUser?.department) ===
+      normalizeComparable(formData.leadExecutiveOffice);
+  const isAffiliateDirectorGeneralTraveler =
+    ["director_general", "office_head"].includes(currentUser?.role) &&
+    isAffiliate &&
+    normalizeComparable(currentUser?.sector) ===
+      normalizeComparable(formData.organizationName);
+  const displayedWorkflowPath = isProjectTraveler
+    ? isProjectCoordinatorOwnProject && formData.workflowType === "sector_structure"
+      ? [
+          "Project Coordinator",
+          "State Minister",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : isProjectCoordinatorOwnProject && formData.workflowType === "ceo_structure"
+      ? [
+          "Project Coordinator",
+          "CEO",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : isProjectCoordinatorOwnProject
+      ? [
+          "Project Coordinator",
+          "Protocol for Clearance",
+          "Office Head",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : formData.workflowType === "sector_structure"
+      ? [
+          "Project Staff",
+          "Project Coordinator",
+          "State Minister",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : formData.workflowType === "ceo_structure"
+      ? [
+          "Project Staff",
+          "Project Coordinator",
+          "CEO",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : [
+          "Project Staff",
+          "Project Coordinator",
+          "Protocol for Clearance",
+          "Office Head",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+    : isAdvisorTraveler
+    ? formData.workflowType === "sector_structure"
+      ? [
+          "Advisor",
+          "State Minister",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : formData.workflowType === "ceo_structure"
+      ? [
+          "Advisor",
+          "CEO",
+          "Protocol for Clearance",
+          "Office Head",
+          "Minister",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : formData.workflowType === "minister_structure"
+      ? [
+          "Advisor",
+          "Protocol for Clearance",
+          "Office Head",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+      : [
+          "Advisor",
+          "Protocol for Clearance",
+          "Office Head",
+          "Protocol PM Submission",
+          "PM Office",
+        ]
+    : isStateMinisterSectorTraveler
+    ? [
+        "State Minister",
+        "Protocol for Clearance",
+        "Office Head",
+        "Minister",
+        "Protocol PM Submission",
+        "PM Office",
+      ]
+    : workflowPath[formData.workflowType] || [];
 
   const sectorOptions = useMemo(
     () =>
@@ -332,9 +654,23 @@ export default function RequestForm() {
     [assignedLeadExecutiveOffice, formData.sector, leadExecutiveOffices, normalizeComparable]
   );
 
+  const projectOptions = useMemo(
+    () =>
+      moaProjects
+        .filter((project) => project.parent_structure_name === formData.sector)
+        .filter((project) => {
+          if (!assignedLeadExecutiveOffice) return true;
+          return normalizeComparable(project.project_name) === normalizeComparable(assignedLeadExecutiveOffice);
+        }),
+    [assignedLeadExecutiveOffice, formData.sector, moaProjects, normalizeComparable]
+  );
+
   const hasAssignedSectorOption = Boolean(assignedSector && sectorOptions.length === 1);
   const hasAssignedLeadExecutiveOfficeOption = Boolean(
     assignedLeadExecutiveOffice && leadExecutiveOfficeOptions.length === 1
+  );
+  const hasAssignedProjectOption = Boolean(
+    assignedLeadExecutiveOffice && projectOptions.length === 1
   );
 
   const markTouched = (name) => setTouched((p) => ({ ...p, [name]: true }));
@@ -392,6 +728,10 @@ export default function RequestForm() {
         next.leadExecutiveOffice = "";
       }
 
+      if (name === "fundingSourceType" && value === "government") {
+        next.sponsor = "";
+      }
+
       return next;
     });
   };
@@ -410,8 +750,10 @@ export default function RequestForm() {
       if (!formData.travelerType) e.travelerType = "Select traveler type.";
       if (!formData.workflowType) e.workflowType = "Select the MoA structure type.";
       if (!formData.sector.trim()) e.sector = "MoA Structure is required.";
-      if (!formData.leadExecutiveOffice.trim()) {
-        e.leadExecutiveOffice = "Lead Executive Office is required.";
+      if (!isStateMinisterSectorTraveler && !isAdvisorTraveler && !formData.leadExecutiveOffice.trim()) {
+        e.leadExecutiveOffice = isProjectTraveler
+          ? "Project / Coordinator Office is required."
+          : "Lead Executive Office is required.";
       }
     }
 
@@ -421,7 +763,9 @@ export default function RequestForm() {
 
     if (!formData.fullName.trim()) e.fullName = "Full name is required.";
     if (!formData.position.trim()) e.position = "Position is required.";
-    if (!formData.department.trim()) e.department = "Department is required.";
+    if (!isAffiliateDirectorGeneralTraveler && !formData.department.trim()) {
+      e.department = "Department is required.";
+    }
 
     const email = (formData.email || "").trim();
     if (!email) e.email = "Email is required.";
@@ -438,10 +782,22 @@ export default function RequestForm() {
     if (formData.startDate && formData.endDate && formData.endDate < formData.startDate) {
       e.endDate = "End date must be on or after start date.";
     }
+    if (!formData.fundingSourceType) e.fundingSourceType = "Select funding source type.";
+    if (formData.fundingSourceType === "non_government" && !formData.sponsor.trim()) {
+      e.sponsor = "Enter the non-government funding source.";
+    }
     if (!formData.purpose.trim()) e.purpose = "Purpose is required.";
 
     return e;
-  }, [formData, isMoA, isAffiliate]);
+  }, [
+    formData,
+    isMoA,
+    isAffiliate,
+    isStateMinisterSectorTraveler,
+    isAdvisorTraveler,
+    isProjectTraveler,
+    isAffiliateDirectorGeneralTraveler,
+  ]);
 
   const step1Valid = ![
     "organizationType",
@@ -457,6 +813,9 @@ export default function RequestForm() {
     "phone",
   ].some((k) => {
     if (isAffiliate && ["travelerType", "workflowType", "sector", "leadExecutiveOffice"].includes(k)) return false;
+    if (isAffiliateDirectorGeneralTraveler && k === "department") return false;
+    if (isStateMinisterSectorTraveler && k === "leadExecutiveOffice") return false;
+    if (isAdvisorTraveler && k === "leadExecutiveOffice") return false;
     if (isMoA && k === "organizationName") return false;
     if (
       !formData.organizationType &&
@@ -467,8 +826,9 @@ export default function RequestForm() {
     return Boolean(errors[k]);
   });
 
-  const step2Valid = !["country", "startDate", "endDate", "purpose"].some((k) => errors[k]);
+  const step2Valid = !["country", "startDate", "endDate", "fundingSourceType", "sponsor", "purpose"].some((k) => errors[k]);
   const canSubmit = step1Valid && step2Valid;
+  const draftValid = !["fullName", "email", "country", "startDate", "endDate"].some((k) => errors[k]);
 
   const fetchOrganizations = useCallback(async () => {
     setLoading((p) => ({ ...p, organizations: true }));
@@ -506,19 +866,33 @@ export default function RequestForm() {
     }
   }, []);
 
+  const fetchMoaProjects = useCallback(async () => {
+    setLoading((p) => ({ ...p, moaProjects: true }));
+    try {
+      const res = await API.get("/moa-projects");
+      setMoaProjects(res.data || []);
+    } catch {
+      setNotice({ type: "error", message: "Unable to load MoA projects." });
+    } finally {
+      setLoading((p) => ({ ...p, moaProjects: false }));
+    }
+  }, []);
+
   const fetchCountries = useCallback(async () => {
     setLoading((p) => ({ ...p, countries: true }));
     try {
       const res = await fetch("https://restcountries.com/v3.1/all?fields=name");
+      if (!res.ok) throw new Error("Country service unavailable");
+
       const data = await res.json();
-      setCountries(
-        (data || [])
+      const countryNames = (data || [])
           .map((c) => c?.name?.common)
           .filter(Boolean)
-          .sort((a, b) => a.localeCompare(b))
-      );
+          .sort((a, b) => a.localeCompare(b));
+
+      setCountries(countryNames.length ? countryNames : fallbackCountries);
     } catch {
-      setNotice({ type: "error", message: "Unable to load countries." });
+      setCountries(fallbackCountries);
     } finally {
       setLoading((p) => ({ ...p, countries: false }));
     }
@@ -529,7 +903,8 @@ export default function RequestForm() {
     fetchCountries();
     fetchMoaSectors();
     fetchLeadExecutiveOffices();
-  }, [fetchOrganizations, fetchCountries, fetchMoaSectors, fetchLeadExecutiveOffices]);
+    fetchMoaProjects();
+  }, [fetchOrganizations, fetchCountries, fetchMoaSectors, fetchLeadExecutiveOffices, fetchMoaProjects]);
 
   useEffect(() => {
     if (!isMoA || !formData.workflowType || !sectorOptions.length) return;
@@ -558,6 +933,25 @@ export default function RequestForm() {
     isMoA,
     normalizeComparable,
     sectorOptions,
+  ]);
+
+  useEffect(() => {
+    if (!isProjectTraveler || !formData.sector || !projectOptions.length) return;
+
+    const nextProject =
+      projectOptions.length === 1 ? projectOptions[0].project_name : "";
+
+    if (nextProject && formData.leadExecutiveOffice !== nextProject) {
+      setFormData((prev) => ({
+        ...prev,
+        leadExecutiveOffice: nextProject,
+      }));
+    }
+  }, [
+    formData.leadExecutiveOffice,
+    formData.sector,
+    isProjectTraveler,
+    projectOptions,
   ]);
 
   useEffect(() => {
@@ -600,7 +994,14 @@ export default function RequestForm() {
         "position",
         "department",
         "email",
-        ...(isMoA ? ["travelerType", "workflowType", "sector", "leadExecutiveOffice"] : []),
+        ...(isMoA
+          ? [
+              "travelerType",
+              "workflowType",
+              "sector",
+              ...(isAdvisorTraveler ? [] : ["leadExecutiveOffice"]),
+            ]
+          : []),
         ...(isAffiliate ? ["organizationName"] : []),
       ]);
 
@@ -611,7 +1012,7 @@ export default function RequestForm() {
     }
 
     if (step === 2) {
-      touchMany(["country", "startDate", "endDate", "purpose"]);
+      touchMany(["country", "startDate", "endDate", "fundingSourceType", "sponsor", "purpose"]);
 
       if (!step2Valid) {
         setNotice({ type: "error", message: "Please fix the highlighted fields." });
@@ -631,8 +1032,7 @@ export default function RequestForm() {
     setStep(1);
   };
 
-  const submitRequest = async () => {
-    setNotice({ type: "", message: "" });
+  const touchSubmitFields = () => {
     touchMany([
       "organizationType",
       "travelerType",
@@ -648,46 +1048,116 @@ export default function RequestForm() {
       "country",
       "startDate",
       "endDate",
+      "fundingSourceType",
+      "sponsor",
       "purpose",
     ]);
+  };
+
+  const buildRequestPayload = () => {
+    const data = new FormData();
+
+    data.append("travelerCategory", isAffiliate ? "affiliate_institution" : formData.travelerType);
+    data.append("workflowType", isMoA ? formData.workflowType : "office_head_structure");
+    data.append("organizationName", isAffiliate ? formData.organizationName : "MoA");
+    data.append("fundingSourceType", formData.fundingSourceType);
+    data.append(
+      "department",
+      isMoA
+        ? isAdvisorTraveler
+          ? "Advisor"
+          : isStateMinisterSectorTraveler
+          ? "State Minister"
+          : formData.leadExecutiveOffice
+        : isAffiliateDirectorGeneralTraveler
+        ? "Director General"
+        : formData.department
+    );
+
+    [
+      "fullName",
+      "position",
+      "sector",
+      "email",
+      "phone",
+      "country",
+      "startDate",
+      "endDate",
+      "purpose",
+      "passportNumber",
+    ].forEach((k) => {
+      if (formData[k]) {
+        data.append(k, k === "phone" ? normalizedPhone : formData[k]);
+      }
+    });
+
+    data.append(
+      "sponsor",
+      formData.fundingSourceType === "government"
+        ? "Government"
+        : formData.sponsor
+    );
+
+    ["passportFile", "invitationLetter", "torFile"].forEach((k) => {
+      if (formData[k]) data.append(k, formData[k]);
+    });
+
+    return data;
+  };
+
+  const saveDraft = async () => {
+    if (submitInFlightRef.current || loading.submitting || loading.drafting) {
+      return;
+    }
+
+    setNotice({ type: "", message: "" });
+    touchMany(["fullName", "email", "country", "startDate", "endDate"]);
+
+    if (!draftValid) {
+      setNotice({ type: "error", message: "Please complete required fields before saving a draft." });
+      return;
+    }
+
+    submitInFlightRef.current = true;
+    setLoading((p) => ({ ...p, drafting: true }));
+    try {
+      await API.post("/requests", buildRequestPayload());
+
+      setNotice({
+        type: "success",
+        message: "Draft saved. You can continue it later from Submitted Requests.",
+      });
+      resetForm({ keepNotice: true });
+    } catch (error) {
+      const msg =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Error saving draft.";
+      setNotice({ type: "error", message: typeof msg === "string" ? msg : "Error saving draft." });
+    } finally {
+      submitInFlightRef.current = false;
+      setLoading((p) => ({ ...p, drafting: false }));
+    }
+  };
+
+  const submitRequest = async () => {
+    if (submitInFlightRef.current || loading.submitting || loading.drafting) {
+      return;
+    }
+
+    setNotice({ type: "", message: "" });
+    touchSubmitFields();
 
     if (!canSubmit) {
       setNotice({ type: "error", message: "Please complete all required fields." });
       return;
     }
 
+    submitInFlightRef.current = true;
     setLoading((p) => ({ ...p, submitting: true }));
     try {
-      const data = new FormData();
-
-      data.append("travelerCategory", isAffiliate ? "affiliate_institution" : formData.travelerType);
-      data.append("workflowType", isMoA ? formData.workflowType : "office_head_structure");
-      data.append("organizationName", isAffiliate ? formData.organizationName : "MoA");
-      data.append("department", isMoA ? formData.leadExecutiveOffice : formData.department);
-
-      [
-        "fullName",
-        "position",
-        "sector",
-        "email",
-        "phone",
-        "country",
-        "startDate",
-        "endDate",
-        "purpose",
-        "sponsor",
-        "passportNumber",
-      ].forEach((k) => {
-        if (formData[k]) {
-          data.append(k, k === "phone" ? normalizedPhone : formData[k]);
-        }
-      });
-
-      ["passportFile", "invitationLetter", "torFile"].forEach((k) => {
-        if (formData[k]) data.append(k, formData[k]);
-      });
-
-      const created = (await API.post("/requests", data)).data;
+      const created = (await API.post("/requests", buildRequestPayload())).data;
 
       if (created?.id) {
         await API.put(`/requests/${created.id}/status`, {
@@ -701,10 +1171,9 @@ export default function RequestForm() {
 
       setNotice({
         type: "success",
-        message: isAffiliate
-          ? "Travel request submitted and routed to Protocol Clearance."
-          : "Travel request submitted and routed to Lead Executive Officer Review.",
+        message: "Travel request submitted and routed to the next approver.",
       });
+      setSuccessDialogOpen(true);
       resetForm({ keepNotice: true });
     } catch (error) {
       const msg =
@@ -714,6 +1183,7 @@ export default function RequestForm() {
         "Error submitting request.";
       setNotice({ type: "error", message: typeof msg === "string" ? msg : "Error submitting request." });
     } finally {
+      submitInFlightRef.current = false;
       setLoading((p) => ({ ...p, submitting: false }));
     }
   };
@@ -727,7 +1197,7 @@ export default function RequestForm() {
             <div>
               <h1 className="text-2xl font-extrabold text-slate-900">New Travel Request</h1>
               <p className="mt-2 text-sm text-slate-600">
-                Prepare the traveler profile, trip plan, and optional supporting documents for approval routing.
+                Complete the traveler details, trip plan, and documents. FTMS will choose the approval route.
               </p>
             </div>
             <div className="request-hero-badge">
@@ -740,6 +1210,26 @@ export default function RequestForm() {
         {notice.message && (
           <div className={`mb-6 ${notice.type === "success" ? "notice-success" : "notice-error"}`}>
             {notice.message}
+          </div>
+        )}
+
+        {successDialogOpen && (
+          <div className="modal-overlay">
+            <div className="modal-content request-success-modal">
+              <h2>Travel Request Submitted</h2>
+              <p>
+                Your travel request has been routed to the next approver.
+              </p>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => setSuccessDialogOpen(false)}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -760,7 +1250,7 @@ export default function RequestForm() {
             <div>
               <span>Current Step</span>
               <strong>
-                {step === 1 ? "Traveler Information" : step === 2 ? "Trip Details" : "Attachments and Review"}
+                {step === 1 ? "Traveler" : step === 2 ? "Trip" : "Documents"}
               </strong>
             </div>
           </div>
@@ -773,48 +1263,57 @@ export default function RequestForm() {
                 <SectionHeader
                   eyebrow="Step 1"
                   title="Traveler Information"
-                  subtitle="Select the traveler source, then complete the structure and contact details."
+                  subtitle="Tell us who is traveling and where they belong."
                 />
-                <Field name="organizationType" label="Organization Type" required touched={touched} errors={errors}>
-                  <RadioCards
-                    name="organizationType"
-                    value={formData.organizationType}
-                    onChange={handleChange}
-                    cols={2}
-                    options={[
-                      {
-                        value: "moa",
-                        label: "Ministry of Agriculture",
-                        description: "Sector, CEO, or Head of Office structure",
-                      },
-                      {
-                        value: "affiliate",
-                        label: "Affiliate Institute",
-                        description: "Routes first to Protocol for clearance",
-                      },
-                    ]}
-                  />
-                </Field>
+                <ChoicePanel
+                  title="Request Source"
+                  description="Choose the traveler organization."
+                >
+                  <Field name="organizationType" label="Organization Type" required touched={touched} errors={errors}>
+                    <RadioCards
+                      name="organizationType"
+                      value={formData.organizationType}
+                      onChange={handleChange}
+                      cols={2}
+                      options={[
+                        {
+                          value: "moa",
+                          label: "Ministry of Agriculture",
+                          description: "MoA staff and leadership",
+                        },
+                        {
+                          value: "affiliate",
+                          label: "Affiliate Institute",
+                          description: "Affiliate institute traveler",
+                        },
+                      ]}
+                    />
+                  </Field>
+                </ChoicePanel>
               </div>
 
               {isMoA && (
                 <>
-                  <div>
-                    <Divider label="Traveler Type" />
+                  <ChoicePanel
+                    title="Traveler Role"
+                    description="Choose the role that best matches this traveler."
+                  >
                     <Field name="travelerType" label="Traveler Type" required touched={touched} errors={errors}>
                       <RadioCards
                         name="travelerType"
                         value={formData.travelerType}
                         onChange={handleChange}
-                        cols={2}
+                        cols={4}
                         options={travelerTypeOptions}
                       />
                     </Field>
-                  </div>
+                  </ChoicePanel>
 
                   {formData.travelerType && (
-                    <div>
-                      <Divider label="MoA Structure" />
+                    <ChoicePanel
+                      title="MoA Structure"
+                      description="Select the office responsible for this traveler."
+                    >
                       <Field
                         name="workflowType"
                         label="Structure Category"
@@ -827,28 +1326,40 @@ export default function RequestForm() {
                           name="workflowType"
                           value={formData.workflowType}
                           onChange={handleChange}
-                          cols={3}
+                          cols={4}
                           options={workflowOptions}
                         />
                       </Field>
-                    </div>
+                    </ChoicePanel>
                   )}
 
                   {formData.workflowType && (
-                    <>
+                    <ChoicePanel
+                      title={isAdvisorTraveler ? "Advisor Routing" : "Structure Assignment"}
+                      description={
+                        isAdvisorTraveler
+                          ? "Advisors go directly through their assigned structure."
+                          : isProjectTraveler
+                          ? "Select the project. The structure is linked automatically."
+                          : "Select the structure and lead office."
+                      }
+                    >
                       <div className="workflow-preview">
                         <span>Approval Workflow</span>
                         <div className="workflow-preview-path">
-                          {(workflowPath[formData.workflowType] || []).map((stage, index) => (
+                          {displayedWorkflowPath.map((stage, index) => (
                             <span key={`${stage}-${index}`}>{stage}</span>
                           ))}
                         </div>
-                        <small>{selectedOwnerLabel} decides this structure before the next workflow stage.</small>
+                        <small>
+                          {isStateMinisterSectorTraveler
+                            ? "State Minister self-approval is skipped and the request continues to the next stage."
+                            : `${selectedOwnerLabel} decides this structure before the next workflow stage.`}
+                        </small>
                       </div>
 
                     <div>
-                      <Divider label="Structure and Lead Executive Office" />
-                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                      <div className="structure-assignment-grid">
                         <Field
                           name="sector"
                           label={`${selectedStructureTypeLabel} Structure`}
@@ -882,50 +1393,114 @@ export default function RequestForm() {
 
                         <Field
                           name="leadExecutiveOffice"
-                          label="Lead Executive Office"
-                          required
+                          label={
+                            isAdvisorTraveler
+                              ? "Advisor Routing"
+                              : isProjectTraveler
+                              ? "Project / Coordinator Office"
+                              : isStateMinisterSectorTraveler
+                              ? "Approver Level"
+                              : "Lead Executive Office"
+                          }
+                          required={!isStateMinisterSectorTraveler && !isAdvisorTraveler}
                           touched={touched}
                           errors={errors}
-                          hint={`Select the Lead Executive Office under the selected ${selectedStructureTypeLabel} structure.`}
+                          hint={
+                            isAdvisorTraveler
+                              ? advisorRouteHint
+                              : isProjectTraveler
+                              ? `Enter the project or coordinator office accountable to the selected ${selectedStructureTypeLabel} structure.`
+                              : isStateMinisterSectorTraveler
+                              ? "State Minister travelers are routed directly to the next formal approver."
+                              : `Select the Lead Executive Office under the selected ${selectedStructureTypeLabel} structure.`
+                          }
                         >
-                          <select
-                            name="leadExecutiveOffice"
-                            value={formData.leadExecutiveOffice}
-                            onChange={handleChange}
-                            onBlur={() => markTouched("leadExecutiveOffice")}
-                            className="ministry-input"
-                            disabled={
-                              !formData.sector ||
-                              loading.leadExecutiveOffices ||
-                              hasAssignedLeadExecutiveOfficeOption
-                            }
-                          >
-                            <option value="">
-                              {!formData.sector
-                                ? `Select ${selectedStructureTypeLabel} Structure first`
-                                : loading.leadExecutiveOffices
-                                ? "Loading Lead Executive Offices..."
-                                : assignedLeadExecutiveOffice && !leadExecutiveOfficeOptions.length
-                                ? "No matching assigned office found"
-                                : "Select Lead Executive Office"}
-                            </option>
-                            {leadExecutiveOfficeOptions.map((office) => (
-                              <option key={office.id || office.name} value={office.name}>
-                                {office.name}
+                          {isAdvisorTraveler ? (
+                            <input
+                              className="ministry-input"
+                              value={
+                                advisorRoutesThroughProtocol
+                                  ? "Advisor via Protocol for Clearance"
+                                  : `Advisor to ${selectedOwnerLabel}`
+                              }
+                              disabled
+                              readOnly
+                            />
+                          ) : isProjectTraveler ? (
+                            <select
+                              name="leadExecutiveOffice"
+                              value={formData.leadExecutiveOffice}
+                              onChange={handleChange}
+                              onBlur={() => markTouched("leadExecutiveOffice")}
+                              className="ministry-input"
+                              disabled={
+                                !formData.sector ||
+                                loading.moaProjects ||
+                                hasAssignedProjectOption
+                              }
+                            >
+                              <option value="">
+                                {!formData.sector
+                                  ? `Select ${selectedStructureTypeLabel} Structure first`
+                                  : loading.moaProjects
+                                  ? "Loading projects..."
+                                  : "Select Project"}
                               </option>
-                            ))}
-                          </select>
+                              {projectOptions.map((project) => (
+                                <option key={project.id} value={project.project_name}>
+                                  {project.project_name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : isStateMinisterSectorTraveler ? (
+                            <input
+                              className="ministry-input"
+                              value="State Minister"
+                              disabled
+                              readOnly
+                            />
+                          ) : (
+                            <select
+                              name="leadExecutiveOffice"
+                              value={formData.leadExecutiveOffice}
+                              onChange={handleChange}
+                              onBlur={() => markTouched("leadExecutiveOffice")}
+                              className="ministry-input"
+                              disabled={
+                                !formData.sector ||
+                                loading.leadExecutiveOffices ||
+                                hasAssignedLeadExecutiveOfficeOption
+                              }
+                            >
+                              <option value="">
+                                {!formData.sector
+                                  ? `Select ${selectedStructureTypeLabel} Structure first`
+                                  : loading.leadExecutiveOffices
+                                  ? "Loading Lead Executive Offices..."
+                                  : assignedLeadExecutiveOffice && !leadExecutiveOfficeOptions.length
+                                  ? "No matching assigned office found"
+                                  : "Select Lead Executive Office"}
+                              </option>
+                              {leadExecutiveOfficeOptions.map((office) => (
+                                <option key={office.id || office.name} value={office.name}>
+                                  {office.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </Field>
                       </div>
                     </div>
-                    </>
+                    </ChoicePanel>
                   )}
                 </>
               )}
 
               {isAffiliate && (
-                <div>
-                  <Divider label="Affiliate Institution" />
+                <ChoicePanel
+                  title="Affiliate Institution"
+                  description="The Director General registered for this affiliate is the first approver."
+                >
                   <div className="workflow-preview">
                     <span>Approval Workflow</span>
                     <div className="workflow-preview-path">
@@ -934,8 +1509,8 @@ export default function RequestForm() {
                       ))}
                     </div>
                     <small>
-                      Affiliate Institute requests are first reviewed by Protocol
-                      for clearance or amendment, then sent to the Office Head.
+                      Affiliate Institute requests are first reviewed by the
+                      Director General, then continue through the formal route.
                     </small>
                   </div>
                   <Field name="organizationName" label="Affiliate Institution" required touched={touched} errors={errors}>
@@ -954,7 +1529,7 @@ export default function RequestForm() {
                       ))}
                     </select>
                   </Field>
-                </div>
+                </ChoicePanel>
               )}
 
               {formData.organizationType && (
@@ -989,18 +1564,33 @@ export default function RequestForm() {
 
                       <Field
                         name="department"
-                        label={isMoA ? "Requester Department / Unit" : "Department"}
-                        required
+                        label={
+                          isAffiliateDirectorGeneralTraveler
+                            ? "Approver Level"
+                            : isMoA
+                            ? "Requester Department / Unit"
+                            : "Department"
+                        }
+                        required={!isAffiliateDirectorGeneralTraveler}
                         touched={touched}
                         errors={errors}
                       >
-                        <input
-                          name="department"
-                          value={formData.department}
-                          onChange={handleChange}
-                          onBlur={() => markTouched("department")}
-                          className="ministry-input"
-                        />
+                        {isAffiliateDirectorGeneralTraveler ? (
+                          <input
+                            className="ministry-input"
+                            value="Director General"
+                            disabled
+                            readOnly
+                          />
+                        ) : (
+                          <input
+                            name="department"
+                            value={formData.department}
+                            onChange={handleChange}
+                            onBlur={() => markTouched("department")}
+                            className="ministry-input"
+                          />
+                        )}
                       </Field>
                     </div>
 
@@ -1084,7 +1674,7 @@ export default function RequestForm() {
                       list="countries-list"
                       className="ministry-input"
                       disabled={loading.countries}
-                      placeholder={loading.countries ? "Loading countries..." : "Type or select a country"}
+                      placeholder={loading.countries ? "Loading countries..." : "Start typing a country"}
                     />
                     <datalist id="countries-list">
                       {countries.map((c) => (
@@ -1129,13 +1719,36 @@ export default function RequestForm() {
                 <div className="trip-detail-panel">
                   <div className="traveler-detail-heading">
                     <span>Travel Support and Purpose</span>
-                    <small>Sponsor, passport, and purpose of travel</small>
+                    <small>Funding, passport, and purpose of travel</small>
                   </div>
 
                   <div className="trip-support-grid">
-                    <Field name="sponsor" label="Sponsor / Funding Source" hint="Optional" touched={touched} errors={errors}>
-                      <input name="sponsor" value={formData.sponsor} onChange={handleChange} className="ministry-input" />
+                    <Field name="fundingSourceType" label="Funding Source" required touched={touched} errors={errors}>
+                      <select
+                        name="fundingSourceType"
+                        value={formData.fundingSourceType}
+                        onChange={handleChange}
+                        onBlur={() => markTouched("fundingSourceType")}
+                        className="ministry-input"
+                      >
+                        <option value="">Select funding source</option>
+                        <option value="government">Government</option>
+                        <option value="non_government">Non-government</option>
+                      </select>
                     </Field>
+
+                    {formData.fundingSourceType === "non_government" && (
+                      <Field name="sponsor" label="Source of Fund" required touched={touched} errors={errors}>
+                        <input
+                          name="sponsor"
+                          value={formData.sponsor}
+                          onChange={handleChange}
+                          onBlur={() => markTouched("sponsor")}
+                          className="ministry-input"
+                          placeholder="Enter organization or sponsor name"
+                        />
+                      </Field>
+                    )}
 
                     <Field name="passportNumber" label="Passport Number" hint="Optional" touched={touched} errors={errors}>
                       <input
@@ -1223,8 +1836,16 @@ export default function RequestForm() {
                   )}
                   {isMoA && (
                     <div>
-                      <span>Lead Executive Office</span>
-                      <strong>{formData.leadExecutiveOffice || "-"}</strong>
+                      <span>
+                        {isStateMinisterSectorTraveler
+                          ? "Approver Level"
+                          : "Lead Executive Office"}
+                      </span>
+                      <strong>
+                        {isStateMinisterSectorTraveler
+                          ? "State Minister"
+                          : formData.leadExecutiveOffice || "-"}
+                      </strong>
                     </div>
                   )}
                   <div>
@@ -1237,11 +1858,21 @@ export default function RequestForm() {
                       {formData.startDate || "-"} to {formData.endDate || "-"}
                     </strong>
                   </div>
+                  <div>
+                    <span>Funding</span>
+                    <strong>
+                      {formData.fundingSourceType === "government"
+                        ? "Government"
+                        : formData.fundingSourceType === "non_government"
+                        ? formData.sponsor || "Non-government"
+                        : "-"}
+                    </strong>
+                  </div>
                 </div>
                 {isMoA && selectedWorkflow && (
                   <div className="review-route">
                     <span>Approval route</span>
-                    <strong>{selectedWorkflow.route}</strong>
+                    <strong>{displayedWorkflowPath.join(" -> ")}</strong>
                   </div>
                 )}
                 {isAffiliate && (
@@ -1254,27 +1885,36 @@ export default function RequestForm() {
             </div>
           )}
 
-          <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <button type="button" onClick={() => resetForm()} className="secondary-btn">
-              Reset
+          <div className="mt-10 flex flex-row flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={saveDraft}
+              className="secondary-btn"
+              disabled={loading.submitting || loading.drafting}
+            >
+              {loading.drafting ? "Saving Draft..." : "Save Draft"}
             </button>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              {step > 1 && (
-                <button type="button" onClick={goBack} className="secondary-btn">
-                  Back
-                </button>
-              )}
-              {step < 3 ? (
-                <button type="button" onClick={goNext} className="primary-btn">
-                  Continue
-                </button>
-              ) : (
-                <button type="button" onClick={submitRequest} className="primary-btn" disabled={loading.submitting}>
-                  {loading.submitting ? "Submitting..." : "Submit Request"}
-                </button>
-              )}
-            </div>
+            {step > 1 && (
+              <button type="button" onClick={goBack} className="secondary-btn">
+                Back
+              </button>
+            )}
+
+            {step < 3 ? (
+              <button type="button" onClick={goNext} className="primary-btn">
+                Continue
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submitRequest}
+                className="primary-btn"
+                disabled={loading.submitting || loading.drafting}
+              >
+                {loading.submitting ? "Submitting..." : "Submit Request"}
+              </button>
+            )}
           </div>
         </form>
       </div>

@@ -7,9 +7,11 @@ const jwt = require('jsonwebtoken');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const upload = require('./middleware/upload');
 const transporter = require('./config/email');
+const { sendSms } = require('./config/sms');
 const pool = require('./config/db');
 
 const app = express();
@@ -41,6 +43,7 @@ const STAGES = {
   CEO_REVIEW: 'ceo_review',
   OFFICE_HEAD_REVIEW: 'office_head_review',
   LEAD_EXECUTIVE_REVIEW: 'lead_executive_review',
+  PROJECT_COORDINATOR_REVIEW: 'project_coordinator_review',
   STATE_MINISTER_REVIEW: 'state_minister_review',
   PROTOCOL_CLEARANCE: 'protocol_clearance',
   OFFICE_HEAD_FINAL: 'office_head_final',
@@ -52,6 +55,7 @@ const STAGES = {
 
 const WORKFLOW = {
   CEO: 'ceo_structure',
+  MINISTER: 'minister_structure',
   OFFICE_HEAD: 'office_head_structure',
   SECTOR: 'sector_structure',
 };
@@ -69,6 +73,7 @@ const STAGE_NAMES = {
   ceo_review: 'CEO Review',
   office_head_review: 'Office Head Review',
   lead_executive_review: 'Lead Executive Officer Review',
+  project_coordinator_review: 'Project Coordinator Review',
   state_minister_review: 'State Minister Review',
   protocol_clearance: 'Protocol Clearance',
   office_head_final: 'Office Head Final Decision',
@@ -85,6 +90,7 @@ const STAGE_ROLES = {
   ceo_review: 'chief_executive_officer',
   office_head_review: 'office_head',
   lead_executive_review: 'lead_executive_officer',
+  project_coordinator_review: 'project_coordinator',
   state_minister_review: 'state_minister',
   protocol_clearance: 'protocol',
   office_head_final: 'office_head',
@@ -94,14 +100,32 @@ const STAGE_ROLES = {
   foreign_affairs_followup: 'pm_office',
 };
 
+const REMINDER_DECISION_STAGES = [
+  STAGES.LEAD_EXECUTIVE_REVIEW,
+  STAGES.PROJECT_COORDINATOR_REVIEW,
+  STAGES.STATE_MINISTER_REVIEW,
+  STAGES.CEO_REVIEW,
+  STAGES.OFFICE_HEAD_REVIEW,
+  STAGES.OFFICE_HEAD_FINAL,
+  STAGES.MINISTER_REVIEW,
+  STAGES.PM_OFFICE,
+  'foreign_affairs_followup',
+];
+
+const REMINDER_DECISION_STAGE_SQL = REMINDER_DECISION_STAGES
+  .map((stage) => `'${stage}'`)
+  .join(',');
+
 const ROLE_STAGES = {
   traveler: [STAGES.EXPERT_PREPARATION],
   expert: [STAGES.EXPERT_PREPARATION],
   chief_executive_officer: [STAGES.CEO_REVIEW],
   ceo: [STAGES.CEO_REVIEW],
+  director_general: [STAGES.OFFICE_HEAD_REVIEW],
   office_head: [STAGES.OFFICE_HEAD_REVIEW, STAGES.OFFICE_HEAD_FINAL],
   lead_executive_officer: [STAGES.LEAD_EXECUTIVE_REVIEW],
   lead_executive: [STAGES.LEAD_EXECUTIVE_REVIEW],
+  project_coordinator: [STAGES.PROJECT_COORDINATOR_REVIEW],
   state_minister: [STAGES.STATE_MINISTER_REVIEW],
   protocol: [STAGES.PROTOCOL_CLEARANCE, STAGES.PM_OFFICE_SUBMISSION],
   pm_office: [STAGES.PM_OFFICE],
@@ -114,8 +138,10 @@ ROLE_STAGES.super_admin = ADMIN_STAGES;
 
 const APPROVER_ROLES = [
   'state_minister',
+  'director_general',
   'lead_executive_officer',
   'lead_executive',
+  'project_coordinator',
   'office_head',
   'chief_executive_officer',
   'ceo',
@@ -127,6 +153,8 @@ const APPROVER_ROLES = [
 /* ── Helpers ─────────────────────────────────────────────── */
 
 const normalizeEmail = (e) => String(e || '').trim().toLowerCase();
+const hashResetToken = (token) =>
+  crypto.createHash('sha256').update(String(token || '')).digest('hex');
 
 const authenticateUser = (req, res, next) => {
   const header = req.headers.authorization || '';
@@ -175,6 +203,31 @@ const normalizePhone = (phone) => {
   }
 
   return raw;
+};
+
+const normalizeSmsPhone = (phone) => {
+  const raw = String(phone || '').trim();
+  if (!raw) return null;
+
+  const digits = raw.replace(/\D/g, '');
+
+  if (/^0[97]\d{8}$/.test(digits)) {
+    return `+251${digits.slice(1)}`;
+  }
+
+  if (/^[97]\d{8}$/.test(digits)) {
+    return `+251${digits}`;
+  }
+
+  if (/^251[97]\d{8}$/.test(digits)) {
+    return `+${digits}`;
+  }
+
+  if (/^\d{10,15}$/.test(digits)) {
+    return `+${digits}`;
+  }
+
+  return null;
 };
 
 const validatePasswordStrength = (password) => {
@@ -344,24 +397,291 @@ const EMAIL_FROM = process.env.EMAIL_USER
   ? `"MoA-Foreign Travel" <${process.env.EMAIL_USER}>`
   : '"MoA-Foreign Travel"';
 
+const AUTO_EMAIL_NOTICE = `
+  <div style="margin-top:24px;padding-top:14px;border-top:1px solid #e5e7eb;color:#64748b;font-size:12px;line-height:1.5">
+    This is an auto-generated email from FTMS. Please do not reply to this email.
+  </div>`;
+
+const appendAutoEmailNotice = (html) => {
+  if (!html || typeof html !== 'string') return html;
+  if (html.includes('auto-generated email from FTMS')) return html;
+
+  return html.includes('</div>')
+    ? html.replace(/<\/div>\s*$/i, `${AUTO_EMAIL_NOTICE}</div>`)
+    : `${html}${AUTO_EMAIL_NOTICE}`;
+};
+
 const sendEmailSafe = async (opts, label = 'EMAIL ERROR') => {
   if (!opts?.to) return;
 
   try {
-    await transporter.sendMail(opts);
+    await transporter.sendMail({
+      ...opts,
+      html: appendAutoEmailNotice(opts.html),
+    });
   } catch (e) {
     console.error(label, e);
   }
 };
 
+const sendSmsSafe = async ({ phone, message }, label = 'SMS ERROR') => {
+  const to = normalizeSmsPhone(phone);
+  if (!to || !message) return;
+
+  try {
+    await sendSms({ to, message });
+  } catch (e) {
+    console.error(label, e.message || e);
+  }
+};
+
+const travelStatusSms = ({ request: r, displayStatus }) =>
+  sendSmsSafe(
+    {
+      phone: r?.phone,
+      message: `FTMS: Your travel request to ${safeText(
+        r?.country
+      )} is now ${safeText(displayStatus)}.`,
+    },
+    'TRAVELER SMS ERROR:'
+  );
+
+const taskSms = ({ approver, request: r, stageName }) =>
+  sendSmsSafe(
+    {
+      phone: approver?.phone,
+      message: `FTMS: ${safeText(
+        r?.full_name,
+        'A traveler'
+      )}'s request to ${safeText(r?.country)} is waiting for your review at ${safeText(
+        stageName
+      )}.`,
+    },
+    'TASK SMS ERROR:'
+  );
+
 const query = (sql, params) => pool.query(sql, params);
+
+const syncAffiliateDirectorGeneral = async (
+  db,
+  {
+    organizationName,
+    previousOrganizationName = '',
+    generalDirectorName,
+    email,
+    phone,
+    password,
+  }
+) => {
+  const cleanOrganizationName = String(organizationName || '').trim();
+  const cleanPreviousOrganizationName = String(previousOrganizationName || '').trim();
+  const cleanEmail = normalizeEmail(email);
+  const cleanName = String(generalDirectorName || '').trim();
+
+  if (!cleanOrganizationName || !cleanEmail) return null;
+
+  const existing = (
+    await db.query(
+      `SELECT id,password
+       FROM users
+       WHERE LOWER(TRIM(email))=$1
+          OR (
+            role IN ('office_head','director_general')
+            AND $2::text <> ''
+            AND LOWER(TRIM(COALESCE(sector,'')))=LOWER(TRIM($2))
+          )
+       ORDER BY CASE WHEN LOWER(TRIM(email))=$1 THEN 0 ELSE 1 END, id ASC
+       LIMIT 1`,
+      [cleanEmail, cleanPreviousOrganizationName]
+    )
+  ).rows[0];
+
+  const cleanPassword = String(password || '').trim();
+
+  if (!existing && !cleanPassword) {
+    const error = new Error(
+      'Temporary password is required to create the General Director approver account.'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const hashed = cleanPassword ? await bcrypt.hash(cleanPassword, 10) : null;
+
+  if (existing) {
+    const r = await db.query(
+      `UPDATE users
+       SET full_name=$1,
+           email=$2,
+           password=COALESCE($3,password),
+           role='director_general',
+           phone=COALESCE($4,phone),
+           sector=$5,
+           department=NULL,
+           organization_type='Affiliate',
+           organization_name=$6,
+           account_status='active',
+           is_active=true
+       WHERE id=$7
+       RETURNING id,full_name,email,role,sector,department`,
+      [
+        cleanName || cleanEmail,
+        cleanEmail,
+        hashed,
+        normalizePhone(phone),
+        cleanOrganizationName,
+        cleanOrganizationName,
+        existing.id,
+      ]
+    );
+
+    return { user: r.rows[0], created: false };
+  }
+
+  const r = await db.query(
+    `INSERT INTO users(
+      full_name,
+      email,
+      password,
+      role,
+      phone,
+      sector,
+      department,
+      organization_type,
+      organization_name,
+      account_status,
+      is_active
+    )
+    VALUES($1,$2,$3,'director_general',$4,$5,NULL,'Affiliate',$6,'active',true)
+    RETURNING id,full_name,email,role,sector,department`,
+    [
+      cleanName || cleanEmail,
+      cleanEmail,
+      hashed,
+      normalizePhone(phone),
+      cleanOrganizationName,
+      cleanOrganizationName,
+    ]
+  );
+
+  return { user: r.rows[0], created: true };
+};
+
+const syncProjectCoordinator = async (
+  db,
+  {
+    projectName,
+    previousProjectName = '',
+    parentStructureName,
+    coordinatorName,
+    email,
+    phone,
+    password,
+  }
+) => {
+  const cleanProjectName = String(projectName || '').trim();
+  const cleanPreviousProjectName = String(previousProjectName || '').trim();
+  const cleanParentStructureName = String(parentStructureName || '').trim();
+  const cleanEmail = normalizeEmail(email);
+  const cleanName = String(coordinatorName || '').trim();
+
+  if (!cleanProjectName || !cleanParentStructureName || !cleanEmail) return null;
+
+  const existing = (
+    await db.query(
+      `SELECT id,password
+       FROM users
+       WHERE LOWER(TRIM(email))=$1
+          OR (
+            role='project_coordinator'
+            AND $2::text <> ''
+            AND LOWER(TRIM(COALESCE(department,'')))=LOWER(TRIM($2))
+          )
+       ORDER BY CASE WHEN LOWER(TRIM(email))=$1 THEN 0 ELSE 1 END, id ASC
+       LIMIT 1`,
+      [cleanEmail, cleanPreviousProjectName]
+    )
+  ).rows[0];
+
+  const cleanPassword = String(password || '').trim();
+
+  if (!existing && !cleanPassword) {
+    const error = new Error(
+      'Temporary password is required to create the Project Coordinator account.'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const hashed = cleanPassword ? await bcrypt.hash(cleanPassword, 10) : null;
+
+  if (existing) {
+    const r = await db.query(
+      `UPDATE users
+       SET full_name=$1,
+           email=$2,
+           password=COALESCE($3,password),
+           role='project_coordinator',
+           phone=COALESCE($4,phone),
+           sector=$5,
+           department=$6,
+           organization_type='MoA Project',
+           organization_name=$6,
+           account_status='active',
+           is_active=true
+       WHERE id=$7
+       RETURNING id,full_name,email,role,sector,department`,
+      [
+        cleanName || cleanEmail,
+        cleanEmail,
+        hashed,
+        normalizePhone(phone),
+        cleanParentStructureName,
+        cleanProjectName,
+        existing.id,
+      ]
+    );
+
+    return { user: r.rows[0], created: false };
+  }
+
+  const r = await db.query(
+    `INSERT INTO users(
+      full_name,
+      email,
+      password,
+      role,
+      phone,
+      sector,
+      department,
+      organization_type,
+      organization_name,
+      account_status,
+      is_active
+    )
+    VALUES($1,$2,$3,'project_coordinator',$4,$5,$6,'MoA Project',$6,'active',true)
+    RETURNING id,full_name,email,role,sector,department`,
+    [
+      cleanName || cleanEmail,
+      cleanEmail,
+      hashed,
+      normalizePhone(phone),
+      cleanParentStructureName,
+      cleanProjectName,
+    ]
+  );
+
+  return { user: r.rows[0], created: true };
+};
 
 const ROLE_ALIASES = {
   chief_executive_officer: ['chief_executive_officer', 'ceo'],
   ceo: ['chief_executive_officer', 'ceo'],
+  director_general: ['director_general', 'office_head'],
   office_head: ['office_head'],
   lead_executive_officer: ['lead_executive_officer', 'lead_executive'],
   lead_executive: ['lead_executive_officer', 'lead_executive'],
+  project_coordinator: ['project_coordinator'],
   protocol: ['protocol'],
   pm_office: ['pm_office'],
   minister: ['minister'],
@@ -372,6 +692,31 @@ const getRolesForLookup = (role) => ROLE_ALIASES[role] || [role];
 
 const getFirstUserByRole = async (role) => {
   const roles = getRolesForLookup(role);
+
+  if (role === 'office_head') {
+    const officeHead = await query(
+      `SELECT u.id, u.full_name, u.email, u.role, u.sector, u.department
+       FROM users u
+       LEFT JOIN moa_sectors s
+         ON LOWER(TRIM(s.name))=LOWER(TRIM(COALESCE(u.sector,'')))
+       WHERE u.role='office_head'
+         AND COALESCE(u.account_status,'active')='active'
+         AND COALESCE(u.is_active,true)=true
+         AND LOWER(TRIM(COALESCE(u.organization_type,''))) NOT LIKE '%affiliate%'
+         AND LOWER(TRIM(COALESCE(u.organization_type,''))) <> 'moa project'
+       ORDER BY
+         CASE WHEN s.workflow_type='office_head_structure' THEN 0 ELSE 1 END,
+         CASE
+           WHEN LOWER(TRIM(COALESCE(u.sector,''))) LIKE '%minister%office%' THEN 0
+           WHEN LOWER(TRIM(COALESCE(u.sector,''))) LIKE '%office head%' THEN 1
+           ELSE 2
+         END,
+         u.id ASC
+       LIMIT 1`
+    );
+
+    return officeHead.rows[0] || null;
+  }
 
   const r = await query(
     `SELECT id, full_name, email, role, sector
@@ -387,12 +732,20 @@ const getFirstUserByRole = async (role) => {
   return r.rows[0] || null;
 };
 
-const getFirstUserByRoleAndSector = async (role, sector, department = '') => {
+const getFirstUserByRoleAndSector = async (
+  role,
+  sector,
+  department = '',
+  options = {}
+) => {
   const roles = getRolesForLookup(role);
   const cleanSector = String(sector || '').trim();
   const cleanDepartment = String(department || '').trim();
+  const allowFallback = options.allowFallback !== false;
+  const excludeAffiliateOfficeHead =
+    role === 'office_head' || roles.includes('office_head');
 
-  if (!cleanSector) return getFirstUserByRole(role);
+  if (!cleanSector) return allowFallback ? getFirstUserByRole(role) : null;
 
   if (cleanDepartment) {
     const officeMatch = await query(
@@ -401,11 +754,18 @@ const getFirstUserByRoleAndSector = async (role, sector, department = '') => {
        WHERE role = ANY($1)
          AND COALESCE(account_status,'active')='active'
          AND COALESCE(is_active,true)=true
+         AND (
+           $4::boolean=false
+           OR (
+             LOWER(TRIM(COALESCE(organization_type,''))) NOT LIKE '%affiliate%'
+             AND LOWER(TRIM(COALESCE(organization_type,''))) <> 'moa project'
+           )
+         )
          AND LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($2))
          AND LOWER(TRIM(COALESCE(department,''))) = LOWER(TRIM($3))
        ORDER BY id ASC
        LIMIT 1`,
-      [roles, cleanSector, cleanDepartment]
+      [roles, cleanSector, cleanDepartment, excludeAffiliateOfficeHead]
     );
 
     if (officeMatch.rows[0]) return officeMatch.rows[0];
@@ -417,13 +777,22 @@ const getFirstUserByRoleAndSector = async (role, sector, department = '') => {
      WHERE role = ANY($1)
        AND COALESCE(account_status,'active')='active'
        AND COALESCE(is_active,true)=true
+       AND (
+         $3::boolean=false
+         OR (
+           LOWER(TRIM(COALESCE(organization_type,''))) NOT LIKE '%affiliate%'
+           AND LOWER(TRIM(COALESCE(organization_type,''))) <> 'moa project'
+         )
+       )
        AND LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($2))
      ORDER BY id ASC
      LIMIT 1`,
-    [roles, cleanSector]
+    [roles, cleanSector, excludeAffiliateOfficeHead]
   );
 
   if (exact.rows[0]) return exact.rows[0];
+
+  if (!allowFallback) return null;
 
   const partial = await query(
     `SELECT id, full_name, email, role, sector, department
@@ -432,12 +801,19 @@ const getFirstUserByRoleAndSector = async (role, sector, department = '') => {
        AND COALESCE(account_status,'active')='active'
        AND COALESCE(is_active,true)=true
        AND (
+         $3::boolean=false
+         OR (
+           LOWER(TRIM(COALESCE(organization_type,''))) NOT LIKE '%affiliate%'
+           AND LOWER(TRIM(COALESCE(organization_type,''))) <> 'moa project'
+         )
+       )
+       AND (
          LOWER(TRIM(COALESCE(sector,''))) LIKE '%' || LOWER(TRIM($2)) || '%'
          OR LOWER(TRIM($2)) LIKE '%' || LOWER(TRIM(COALESCE(sector,''))) || '%'
        )
      ORDER BY id ASC
      LIMIT 1`,
-    [roles, cleanSector]
+    [roles, cleanSector, excludeAffiliateOfficeHead]
   );
 
   return partial.rows[0] || getFirstUserByRole(role);
@@ -446,8 +822,15 @@ const getFirstUserByRoleAndSector = async (role, sector, department = '') => {
 const getSectorForStage = (stage, request) => {
   const workflow = normalizeWorkflow(request?.workflow_type);
   const requestSector = request?.sector;
+  const affiliateOrganization = request?.organization_name || requestSector;
 
-  if ([STAGES.DIRECTOR_REVIEW, STAGES.LEAD_EXECUTIVE_REVIEW].includes(stage)) {
+  if (
+    [
+      STAGES.DIRECTOR_REVIEW,
+      STAGES.LEAD_EXECUTIVE_REVIEW,
+      STAGES.PROJECT_COORDINATOR_REVIEW,
+    ].includes(stage)
+  ) {
     return requestSector;
   }
 
@@ -460,6 +843,10 @@ const getSectorForStage = (stage, request) => {
   }
 
   if (stage === STAGES.OFFICE_HEAD_REVIEW) {
+    if (request?.traveler_category === 'affiliate_institution') {
+      return affiliateOrganization;
+    }
+
     return workflow === WORKFLOW.OFFICE_HEAD ? requestSector : null;
   }
 
@@ -471,18 +858,239 @@ const getSectorForStage = (stage, request) => {
 };
 
 const getFirstUserForStage = async (stage, request = null) => {
-  const role = STAGE_ROLES[stage];
+  const role =
+    stage === STAGES.OFFICE_HEAD_REVIEW &&
+    request?.traveler_category === 'affiliate_institution'
+      ? 'director_general'
+      : STAGE_ROLES[stage];
   if (!role) return null;
 
   const sector = getSectorForStage(stage, request);
   const department =
-    stage === STAGES.LEAD_EXECUTIVE_REVIEW ? request?.department : '';
+    [STAGES.LEAD_EXECUTIVE_REVIEW, STAGES.PROJECT_COORDINATOR_REVIEW].includes(stage)
+      ? request?.department
+      : '';
 
   if (sector) {
-    return getFirstUserByRoleAndSector(role, sector, department);
+    const requiresExactSector =
+      stage === STAGES.OFFICE_HEAD_REVIEW &&
+      request?.traveler_category === 'affiliate_institution';
+
+    return getFirstUserByRoleAndSector(role, sector, department, {
+      allowFallback: !requiresExactSector,
+    });
   }
 
   return getFirstUserByRole(role);
+};
+
+const isSameUser = (a, b) => {
+  if (!a || !b) return false;
+
+  if (a.id && b.id && Number(a.id) === Number(b.id)) return true;
+
+  return sameText(a.email, b.email);
+};
+
+const getNextStageAfterApproval = (stage, request = {}) => {
+  const wf = normalizeWorkflow(request.workflow_type);
+
+  if (stage === STAGES.LEAD_EXECUTIVE_REVIEW) {
+    if (wf === WORKFLOW.SECTOR) return STAGES.STATE_MINISTER_REVIEW;
+    if (wf === WORKFLOW.CEO) return STAGES.CEO_REVIEW;
+    return STAGES.OFFICE_HEAD_REVIEW;
+  }
+
+  if (stage === STAGES.PROJECT_COORDINATOR_REVIEW) {
+    if (wf === WORKFLOW.SECTOR) return STAGES.STATE_MINISTER_REVIEW;
+    if (wf === WORKFLOW.CEO) return STAGES.CEO_REVIEW;
+    return STAGES.PROTOCOL_CLEARANCE;
+  }
+
+  if (stage === STAGES.STATE_MINISTER_REVIEW) return STAGES.PROTOCOL_CLEARANCE;
+  if (stage === STAGES.CEO_REVIEW) return STAGES.PROTOCOL_CLEARANCE;
+  if (stage === STAGES.OFFICE_HEAD_REVIEW) return STAGES.PROTOCOL_CLEARANCE;
+  if (stage === STAGES.PROTOCOL_CLEARANCE) return STAGES.OFFICE_HEAD_FINAL;
+  if (stage === STAGES.OFFICE_HEAD_FINAL) {
+    return request.pm_approval_required === false
+      ? STAGES.COMPLETED
+      : STAGES.PM_OFFICE_SUBMISSION;
+  }
+  if (stage === STAGES.MINISTER_REVIEW) {
+    return request.pm_approval_required === false
+      ? STAGES.COMPLETED
+      : STAGES.PM_OFFICE_SUBMISSION;
+  }
+  if (stage === STAGES.PM_OFFICE_SUBMISSION) return STAGES.PM_OFFICE;
+
+  return stage;
+};
+
+const getWorkflowStagesForRequest = (request = {}) => {
+  const workflow = normalizeWorkflow(request.workflow_type);
+  const showPmOfficeStages =
+    request.pm_approval_required !== false ||
+    [STAGES.PM_OFFICE_SUBMISSION, STAGES.PM_OFFICE].includes(
+      request.current_stage
+    ) ||
+    String(request.status || '').toLowerCase().includes('pm office');
+
+  if (request.traveler_category === 'affiliate_institution') {
+    const stages = [
+      STAGES.EXPERT_PREPARATION,
+      STAGES.OFFICE_HEAD_REVIEW,
+      STAGES.PROTOCOL_CLEARANCE,
+      STAGES.OFFICE_HEAD_FINAL,
+    ];
+
+    if (showPmOfficeStages) {
+      stages.push(STAGES.PM_OFFICE_SUBMISSION, STAGES.PM_OFFICE);
+    }
+
+    stages.push(STAGES.COMPLETED);
+
+    return stages;
+  }
+
+  const stages = [
+    STAGES.EXPERT_PREPARATION,
+  ];
+
+  if (workflow === WORKFLOW.MINISTER && request.traveler_category !== 'advisor') {
+    stages.push(STAGES.MINISTER_REVIEW);
+
+    if (showPmOfficeStages) {
+      stages.push(STAGES.PM_OFFICE_SUBMISSION, STAGES.PM_OFFICE);
+    }
+
+    stages.push(STAGES.COMPLETED);
+
+    return stages;
+  }
+
+  if (request.traveler_category === 'project') {
+    stages.push(STAGES.PROJECT_COORDINATOR_REVIEW);
+  } else if (request.traveler_category !== 'advisor') {
+    stages.push(STAGES.LEAD_EXECUTIVE_REVIEW);
+  }
+
+  if (workflow === WORKFLOW.SECTOR) {
+    stages.push(STAGES.STATE_MINISTER_REVIEW);
+  } else if (workflow === WORKFLOW.CEO) {
+    stages.push(STAGES.CEO_REVIEW);
+  }
+
+  stages.push(
+    STAGES.PROTOCOL_CLEARANCE,
+    STAGES.OFFICE_HEAD_FINAL
+  );
+
+  if (
+    request.current_stage === STAGES.MINISTER_REVIEW ||
+    String(request.status || '').toLowerCase().includes('minister')
+  ) {
+    stages.push(STAGES.MINISTER_REVIEW);
+  }
+
+  if (showPmOfficeStages) {
+    stages.push(STAGES.PM_OFFICE_SUBMISSION, STAGES.PM_OFFICE);
+  }
+
+  stages.push(STAGES.COMPLETED);
+
+  return stages;
+};
+
+const getInitialReviewStage = (request, actor) => {
+  if (request?.traveler_category === 'affiliate_institution') {
+    return STAGES.OFFICE_HEAD_REVIEW;
+  }
+
+  const wf = normalizeWorkflow(request?.workflow_type);
+
+  if (request?.traveler_category === 'advisor') {
+    if (wf === WORKFLOW.SECTOR) return STAGES.STATE_MINISTER_REVIEW;
+    if (wf === WORKFLOW.CEO) return STAGES.CEO_REVIEW;
+    if (wf === WORKFLOW.MINISTER) return STAGES.PROTOCOL_CLEARANCE;
+    if (wf === WORKFLOW.OFFICE_HEAD) return STAGES.PROTOCOL_CLEARANCE;
+  }
+
+  if (request?.traveler_category === 'project') {
+    if (
+      actor?.role === 'project_coordinator' &&
+      sameText(actor.sector, request?.sector) &&
+      sameText(actor.department, request?.department)
+    ) {
+      return getNextStageAfterApproval(
+        STAGES.PROJECT_COORDINATOR_REVIEW,
+        request
+      );
+    }
+
+    return STAGES.PROJECT_COORDINATOR_REVIEW;
+  }
+
+  if (wf === WORKFLOW.MINISTER) {
+    return STAGES.MINISTER_REVIEW;
+  }
+
+  if (
+    actor?.role === 'state_minister' &&
+    wf === WORKFLOW.SECTOR &&
+    sameText(actor.sector, request?.sector)
+  ) {
+    return STAGES.STATE_MINISTER_REVIEW;
+  }
+
+  if (
+    ['chief_executive_officer', 'ceo'].includes(actor?.role) &&
+    wf === WORKFLOW.CEO &&
+    sameText(actor.sector, request?.sector)
+  ) {
+    return STAGES.CEO_REVIEW;
+  }
+
+  if (
+    actor?.role === 'office_head' &&
+    wf === WORKFLOW.OFFICE_HEAD &&
+    sameText(actor.sector, request?.sector)
+  ) {
+    return STAGES.OFFICE_HEAD_REVIEW;
+  }
+
+  if (
+    ['lead_executive_officer', 'lead_executive'].includes(actor?.role) &&
+    sameText(actor.sector, request?.sector) &&
+    sameText(actor.department, request?.department)
+  ) {
+    return getNextStageAfterApproval(STAGES.LEAD_EXECUTIVE_REVIEW, request);
+  }
+
+  return STAGES.LEAD_EXECUTIVE_REVIEW;
+};
+
+const resolveNextStageSkippingSelf = async (startStage, request, actor) => {
+  let stage = startStage;
+  const traveler = { email: request?.email };
+
+  for (let i = 0; i < 8; i += 1) {
+    if ([STAGES.EXPERT_PREPARATION, STAGES.COMPLETED].includes(stage)) {
+      return stage;
+    }
+
+    const approver = await getFirstUserForStage(stage, request);
+
+    if (!isSameUser(actor, approver) && !isSameUser(traveler, approver)) {
+      return stage;
+    }
+
+    const next = getNextStageAfterApproval(stage, request);
+    if (!next || next === stage) return stage;
+
+    stage = next;
+  }
+
+  return stage;
 };
 
 const getActorUser = async ({ actorId, actorEmail }) => {
@@ -530,7 +1138,7 @@ const getScopedDecisionError = async ({
   }
 
   if (action === 'submit' || action === 'resubmit') {
-    if (['traveler', 'expert'].includes(role) && !sameText(actor.email, request.email)) {
+    if (!sameText(actor.email, request.email)) {
       return 'You can only submit your own travel request.';
     }
 
@@ -549,6 +1157,16 @@ const getScopedDecisionError = async ({
     }
   }
 
+  if (stage === STAGES.PROJECT_COORDINATOR_REVIEW) {
+    if (
+      actor.role !== 'project_coordinator' ||
+      !sameText(actor.sector, request.sector) ||
+      !sameText(actor.department, request.department)
+    ) {
+      return 'This request is assigned to another Project Coordinator.';
+    }
+  }
+
   if (stage === STAGES.STATE_MINISTER_REVIEW) {
     if (workflow !== WORKFLOW.SECTOR || !sameText(actor.sector, request.sector)) {
       return 'This request is assigned to another sector State Minister.';
@@ -563,6 +1181,13 @@ const getScopedDecisionError = async ({
 
   if (stage === STAGES.OFFICE_HEAD_REVIEW) {
     if (request.traveler_category === 'affiliate_institution') {
+      const assignedAffiliate =
+        request.organization_name || request.sector || request.organizationName;
+
+      if (!sameText(actor.sector, assignedAffiliate)) {
+        return 'This request is assigned to another Affiliate Institution Director General.';
+      }
+
       return '';
     }
 
@@ -694,6 +1319,48 @@ const taskEmail = ({ to, recipientName, request: r, stageName, actionUrl }) =>
     'TASK EMAIL ERROR:'
   );
 
+const reminderEmail = ({ to, recipientName, request: r, stageName, actionUrl }) =>
+  sendEmailSafe(
+    {
+      from: EMAIL_FROM,
+      to,
+      subject: `FTMS Reminder: Decision Needed for Request #${r.id}`,
+      html: `<div style="font-family:Arial;padding:20px">
+        <h2 style="color:#0f766e">FTMS Decision Reminder</h2>
+        <p>Dear <strong>${safeText(
+          recipientName,
+          'Approver'
+        )}</strong>, this is a reminder that a travel request is still waiting for your decision.</p>
+
+        <table border="1" cellpadding="10" style="border-collapse:collapse;width:100%">
+          <tr><td><strong>Request ID</strong></td><td>#${safeText(r.id)}</td></tr>
+          <tr><td><strong>Traveler</strong></td><td>${safeText(
+            r.full_name
+          )}</td></tr>
+          <tr><td><strong>Destination</strong></td><td>${safeText(
+            r.country
+          )}</td></tr>
+          <tr><td><strong>Travel Dates</strong></td><td>${formatTravelDateRange(
+            r.start_date,
+            r.end_date
+          )}</td></tr>
+          <tr><td><strong>Current Stage</strong></td><td>${safeText(
+            stageName
+          )}</td></tr>
+        </table>
+
+        <p>
+          <a href="${
+            actionUrl || FRONTEND_URL
+          }" style="display:inline-block;background:#0f766e;color:white;padding:12px 18px;text-decoration:none;border-radius:6px">
+            Open FTMS
+          </a>
+        </p>
+      </div>`,
+    },
+    'REMINDER EMAIL ERROR:'
+  );
+
 const travelerEmail = ({ request: r, status, displayStatus, amendmentComment }) =>
   r?.email &&
   sendEmailSafe(
@@ -788,8 +1455,30 @@ const accountEmail = (user, activated) =>
     `);
 
     await query(`
+      UPDATE users
+      SET role='director_general'
+      WHERE role='office_head'
+        AND LOWER(TRIM(COALESCE(organization_type,''))) LIKE '%affiliate%'
+    `);
+
+    await query(`
+      UPDATE users u
+      SET role='director_general',
+          organization_type='Affiliate',
+          organization_name=COALESCE(NULLIF(TRIM(u.organization_name),''), u.sector)
+      WHERE u.role='office_head'
+        AND EXISTS (
+          SELECT 1
+          FROM affiliate_institutions a
+          WHERE LOWER(TRIM(a.organization_name))=LOWER(TRIM(COALESCE(u.sector,'')))
+        )
+    `);
+
+    await query(`
       ALTER TABLE requests
         ADD COLUMN IF NOT EXISTS sector VARCHAR(150),
+        ADD COLUMN IF NOT EXISTS pm_approval_required BOOLEAN,
+        ADD COLUMN IF NOT EXISTS funding_source_type VARCHAR(50),
         ADD COLUMN IF NOT EXISTS amendment_comment TEXT,
         ADD COLUMN IF NOT EXISTS amended_by VARCHAR(100),
         ADD COLUMN IF NOT EXISTS workflow_type VARCHAR(50) DEFAULT 'office_head_structure',
@@ -837,6 +1526,15 @@ const accountEmail = (user, activated) =>
 
     await query(`
       UPDATE requests
+      SET current_stage='protocol_clearance',
+          status='Approved by Lead Executive Officer'
+      WHERE workflow_type='office_head_structure'
+        AND current_stage='office_head_review'
+        AND final_status='pending'
+    `);
+
+    await query(`
+      UPDATE requests
       SET current_stage='pm_office_followup',
           status='Submitted to PM Office'
       WHERE current_stage='foreign_affairs_followup'
@@ -857,6 +1555,27 @@ const accountEmail = (user, activated) =>
         new_status VARCHAR(80),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        token_hash VARCHAR(128) NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id
+      ON password_reset_tokens(user_id)
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires_at
+      ON password_reset_tokens(expires_at)
     `);
 
     await query(`
@@ -909,6 +1628,82 @@ const accountEmail = (user, activated) =>
     await query(`
       ALTER TABLE moa_executive_offices
       ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS moa_projects (
+        id SERIAL PRIMARY KEY,
+        parent_structure_id INTEGER REFERENCES moa_sectors(id) ON DELETE CASCADE,
+        project_name VARCHAR(255) NOT NULL,
+        coordinator_name VARCHAR(255),
+        email VARCHAR(255),
+        phone VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS parent_structure_id INTEGER
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS project_name VARCHAR(255)
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS coordinator_name VARCHAR(255)
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS email VARCHAR(255)
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS phone VARCHAR(50)
+    `);
+
+    await query(`
+      ALTER TABLE moa_projects
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+
+    await query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'moa_projects_parent_structure_id_fkey'
+        ) THEN
+          ALTER TABLE moa_projects
+          ADD CONSTRAINT moa_projects_parent_structure_id_fkey
+          FOREIGN KEY (parent_structure_id)
+          REFERENCES moa_sectors(id)
+          ON DELETE CASCADE;
+        END IF;
+      END
+      $$;
+    `);
+
+    await query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'moa_projects_parent_project_name_key'
+        ) THEN
+          ALTER TABLE moa_projects
+          ADD CONSTRAINT moa_projects_parent_project_name_key
+          UNIQUE(parent_structure_id, project_name);
+        END IF;
+      END
+      $$;
     `);
 
     await query(`
@@ -1017,12 +1812,16 @@ app.post('/api/register', async (req, res) => {
     const ne = normalizeEmail(email);
 
     const existing = await query(
-      `SELECT id FROM users WHERE LOWER(TRIM(email))=$1`,
+      `SELECT id, role, account_status FROM users WHERE LOWER(TRIM(email))=$1`,
       [ne]
     );
 
     if (existing.rows.length) {
-      return res.status(400).json({ error: 'Email already registered.' });
+      return res.status(409).json({
+        code: 'ACCOUNT_ALREADY_EXISTS',
+        error:
+          'This email is already registered in FTMS. Please request a password reset from the system administrator instead of creating a new account.',
+      });
     }
 
     const hashed = await bcrypt.hash(password, 10);
@@ -1063,6 +1862,189 @@ app.post('/api/register', async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/password-reset-request', async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email || '');
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required.' });
+    }
+
+    const genericMessage =
+      'If an active FTMS account exists for this email, a password reset link has been sent.';
+
+    const account = (
+      await query(
+        `SELECT id, full_name, email, role, account_status, is_active
+         FROM users
+         WHERE LOWER(TRIM(email))=$1`,
+        [email]
+      )
+    ).rows[0];
+
+    if (
+      !account ||
+      account.is_active === false ||
+      account.account_status === 'rejected'
+    ) {
+      return res.json({ message: genericMessage });
+    }
+
+    await query(
+      `UPDATE password_reset_tokens
+       SET used_at=CURRENT_TIMESTAMP
+       WHERE user_id=$1 AND used_at IS NULL`,
+      [account.id]
+    );
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashResetToken(resetToken);
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
+
+    await query(
+      `INSERT INTO password_reset_tokens(user_id, token_hash, expires_at)
+       VALUES($1,$2,$3)`,
+      [account.id, tokenHash, expiresAt]
+    );
+
+    const resetBaseUrl = req.get('origin') || FRONTEND_URL;
+    const resetUrl = `${resetBaseUrl.replace(/\/$/, '')}/?resetToken=${resetToken}`;
+
+    await sendEmailSafe(
+      {
+        from: EMAIL_FROM,
+        to: account.email,
+        subject: 'FTMS password reset',
+        html: `
+          <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+            <h2 style="margin:0 0 12px;color:#0f766e">Reset your FTMS password</h2>
+            <p>Hello ${account.full_name || 'FTMS user'},</p>
+            <p>We received a request to reset your FTMS password. Use the secure link below to choose a new password. The link expires in 30 minutes.</p>
+            <p style="margin:22px 0">
+              <a href="${resetUrl}" style="display:inline-block;background:#0f766e;color:#ffffff;text-decoration:none;padding:11px 16px;border-radius:8px;font-weight:700">
+                Reset Password
+              </a>
+            </p>
+            <p>If the button does not work, copy and paste this link into your browser:</p>
+            <p style="word-break:break-all;color:#1d4ed8">${resetUrl}</p>
+            <p>If you did not request this reset, you can ignore this email.</p>
+          </div>
+        `,
+      },
+      'PASSWORD RESET EMAIL ERROR'
+    );
+
+    res.json({ message: genericMessage });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/password-reset/validate', async (req, res) => {
+  try {
+    const token = String(req.query?.token || '');
+
+    if (!token) {
+      return res.status(400).json({ error: 'Reset token is required.' });
+    }
+
+    const tokenHash = hashResetToken(token);
+    const r = await query(
+      `SELECT prt.id, prt.expires_at, prt.used_at, u.email
+       FROM password_reset_tokens prt
+       JOIN users u ON u.id=prt.user_id
+       WHERE prt.token_hash=$1
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    const record = r.rows[0];
+
+    if (
+      !record ||
+      record.used_at ||
+      new Date(record.expires_at).getTime() < Date.now()
+    ) {
+      return res.status(400).json({
+        error: 'This password reset link is invalid or has expired.',
+      });
+    }
+
+    res.json({ email: record.email });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/password-reset/confirm', async (req, res) => {
+  let client;
+
+  try {
+    const token = String(req.body?.token || '');
+    const newPassword = String(req.body?.newPassword || '');
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        error: 'Reset token and new password are required.',
+      });
+    }
+
+    const passwordError = validatePasswordStrength(newPassword);
+
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
+    }
+
+    const tokenHash = hashResetToken(token);
+    const r = await query(
+      `SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at
+       FROM password_reset_tokens prt
+       WHERE prt.token_hash=$1
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    const record = r.rows[0];
+
+    if (
+      !record ||
+      record.used_at ||
+      new Date(record.expires_at).getTime() < Date.now()
+    ) {
+      return res.status(400).json({
+        error: 'This password reset link is invalid or has expired.',
+      });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+    await client.query(`UPDATE users SET password=$1 WHERE id=$2`, [
+      hashed,
+      record.user_id,
+    ]);
+    await client.query(
+      `UPDATE password_reset_tokens
+       SET used_at=CURRENT_TIMESTAMP
+       WHERE user_id=$1 AND used_at IS NULL`,
+      [record.user_id]
+    );
+    await client.query('COMMIT');
+
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (e) {
+    if (client) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+    res.status(500).json({ error: e.message });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
@@ -1154,6 +2136,7 @@ app.post('/api/requests', uploadFields, async (req, res) => {
       startDate,
       endDate,
       purpose,
+      fundingSourceType,
       sponsor,
       passportNumber,
       email,
@@ -1172,6 +2155,16 @@ app.post('/api/requests', uploadFields, async (req, res) => {
       await query(`SELECT * FROM users WHERE LOWER(TRIM(email))=$1`, [ne])
     ).rows[0];
 
+    const cleanTravelerCategory = travelerCategory || 'ministry_staff';
+    const isAffiliateRequest =
+      cleanTravelerCategory === 'affiliate_institution';
+    const requestOrganization = isAffiliateRequest
+      ? organizationName || existingUser?.organization_name || null
+      : organizationName || null;
+    const requestSector = isAffiliateRequest
+      ? requestOrganization
+      : sector || existingUser?.sector || null;
+
     const r = await query(
       `INSERT INTO requests(
         traveler_category,
@@ -1187,6 +2180,7 @@ app.post('/api/requests', uploadFields, async (req, res) => {
         start_date,
         end_date,
         purpose,
+        funding_source_type,
         sponsor,
         passport_number,
         email,
@@ -1197,23 +2191,24 @@ app.post('/api/requests', uploadFields, async (req, res) => {
         status,
         foreign_affairs_status
       )
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
       RETURNING *`,
       [
-        travelerCategory || 'ministry_staff',
-        organizationName || null,
+        cleanTravelerCategory,
+        requestOrganization,
         normalizeWorkflow(workflowType),
         STAGES.EXPERT_PREPARATION,
         STATUS.PENDING,
         fullName,
         position || null,
         department || null,
-        sector || existingUser?.sector || null,
+        requestSector,
         country,
         startDate,
         endDate,
         purpose || null,
-        sponsor || null,
+        fundingSourceType || null,
+        fundingSourceType === 'government' ? sponsor || 'Government' : sponsor || null,
         passportNumber || null,
         ne,
         normalizePhone(phone),
@@ -1229,6 +2224,11 @@ app.post('/api/requests', uploadFields, async (req, res) => {
       userEmail: ne,
       title: 'Travel Request Created',
       message: `Your travel request to ${country} has been created.`,
+    });
+
+    await travelStatusSms({
+      request: r.rows[0],
+      displayStatus: 'Draft / Expert Preparation',
     });
 
     res.status(201).json(r.rows[0]);
@@ -1278,6 +2278,7 @@ const ROLE_QUERIES = {
              AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
          )
        )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (
@@ -1293,18 +2294,13 @@ const ROLE_QUERIES = {
     WHERE (
          r.current_stage='office_head_review'
          AND r.final_status='pending'
+         AND r.traveler_category<>'affiliate_institution'
+         AND r.workflow_type='office_head_structure'
          AND EXISTS (
            SELECT 1 FROM users me
            WHERE LOWER(TRIM(me.email))=LOWER(TRIM($1))
              AND me.role='office_head'
-             AND (
-               r.traveler_category='affiliate_institution'
-               OR (
-                 r.traveler_category<>'affiliate_institution'
-                 AND r.workflow_type='office_head_structure'
-                 AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
-               )
-             )
+             AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
          )
        )
        OR (
@@ -1315,8 +2311,34 @@ const ROLE_QUERIES = {
            OR r.traveler_category='affiliate_institution'
          )
        )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR r.final_status IN ('approved','rejected')
     ORDER BY CASE WHEN r.current_stage IN ('office_head_review','office_head_final') AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
+
+  director_general: `${BASE_SELECT}
+    WHERE (
+         r.current_stage='office_head_review'
+         AND r.final_status='pending'
+         AND r.traveler_category='affiliate_institution'
+         AND EXISTS (
+           SELECT 1 FROM users me
+           WHERE LOWER(TRIM(me.email))=LOWER(TRIM($1))
+             AND me.role IN ('director_general','office_head')
+             AND LOWER(TRIM(COALESCE(me.sector,''))) =
+                 LOWER(TRIM(COALESCE(r.organization_name,r.sector,'')))
+         )
+       )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
+       OR (
+         r.final_status IN ('approved','rejected')
+         AND EXISTS (
+           SELECT 1 FROM request_audit_trails a
+           WHERE a.request_id=r.id
+             AND a.actor_role IN ('director_general','office_head')
+             AND LOWER(TRIM(COALESCE(a.actor_email,'')))=LOWER(TRIM($1))
+         )
+       )
+    ORDER BY CASE WHEN r.current_stage='office_head_review' AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 
   lead_executive_officer: `${BASE_SELECT}
     WHERE (
@@ -1330,6 +2352,7 @@ const ROLE_QUERIES = {
              AND LOWER(TRIM(COALESCE(me.department,'')))=LOWER(TRIM(COALESCE(r.department,'')))
          )
        )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (
@@ -1340,6 +2363,31 @@ const ROLE_QUERIES = {
          )
        )
     ORDER BY CASE WHEN r.current_stage='lead_executive_review' AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
+
+  project_coordinator: `${BASE_SELECT}
+    WHERE (
+         r.current_stage='project_coordinator_review'
+         AND r.final_status='pending'
+         AND r.traveler_category='project'
+         AND EXISTS (
+           SELECT 1 FROM users me
+           WHERE LOWER(TRIM(me.email))=LOWER(TRIM($1))
+             AND me.role='project_coordinator'
+             AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
+             AND LOWER(TRIM(COALESCE(me.department,'')))=LOWER(TRIM(COALESCE(r.department,'')))
+         )
+       )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
+       OR (
+         r.final_status IN ('approved','rejected')
+         AND EXISTS (
+           SELECT 1 FROM request_audit_trails a
+           WHERE a.request_id=r.id
+             AND a.actor_role='project_coordinator'
+             AND LOWER(TRIM(COALESCE(a.actor_email,'')))=LOWER(TRIM($1))
+         )
+       )
+    ORDER BY CASE WHEN r.current_stage='project_coordinator_review' AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 
   state_minister: `${BASE_SELECT}
     WHERE (
@@ -1353,6 +2401,7 @@ const ROLE_QUERIES = {
              AND LOWER(TRIM(COALESCE(me.sector,'')))=LOWER(TRIM(COALESCE(r.sector,'')))
          )
        )
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (
@@ -1366,6 +2415,8 @@ const ROLE_QUERIES = {
 
   protocol: `${BASE_SELECT}
     WHERE (r.current_stage IN ('protocol_clearance','pm_office_submission') AND r.final_status='pending')
+       OR (r.current_stage IN (${REMINDER_DECISION_STAGE_SQL}) AND r.final_status='pending')
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR (
          r.final_status IN ('approved','rejected')
          AND EXISTS (
@@ -1379,10 +2430,12 @@ const ROLE_QUERIES = {
 
   pm_office: `${BASE_SELECT}
     WHERE (r.current_stage IN ('pm_office_followup','foreign_affairs_followup') AND r.final_status='pending')
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
     ORDER BY CASE WHEN r.current_stage IN ('pm_office_followup','foreign_affairs_followup') AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 
   minister: `${BASE_SELECT}
     WHERE (r.current_stage='minister_review' AND r.final_status='pending')
+       OR LOWER(TRIM(r.email))=LOWER(TRIM($1))
        OR r.final_status IN ('approved','rejected')
     ORDER BY CASE WHEN r.current_stage='minister_review' AND r.final_status='pending' THEN 0 ELSE 1 END, r.id DESC`,
 };
@@ -1397,9 +2450,13 @@ const EMAIL_SCOPED_REQUEST_ROLES = [
   'ceo',
   'lead_executive_officer',
   'lead_executive',
+  'project_coordinator',
   'state_minister',
+  'director_general',
   'office_head',
   'protocol',
+  'pm_office',
+  'minister',
 ];
 
 app.get('/api/requests', async (req, res) => {
@@ -1415,6 +2472,100 @@ app.get('/api/requests', async (req, res) => {
     const r = await query(sql, needsEmail ? [email || ''] : []);
 
     res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/requests/:id/send-reminder', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role, actorEmail, actorId } = req.body;
+
+    if (!['protocol', 'admin', 'super_admin'].includes(role)) {
+      return res.status(403).json({
+        error: 'Only Protocol can send decision reminders.',
+      });
+    }
+
+    const existing = (
+      await query(`SELECT * FROM requests WHERE id=$1`, [id])
+    ).rows[0];
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+
+    if (
+      existing.current_stage === STAGES.COMPLETED ||
+      [STATUS.APPROVED, STATUS.REJECTED].includes(existing.final_status)
+    ) {
+      return res.status(400).json({
+        error: 'Reminder is not available for finalized requests.',
+      });
+    }
+
+    if (!REMINDER_DECISION_STAGES.includes(existing.current_stage)) {
+      return res.status(400).json({
+        error:
+          'Reminder is only available while a request is pending with a decision maker.',
+      });
+    }
+
+    const actor = await getActorUser({ actorId, actorEmail });
+
+    if (role === 'protocol' && actor?.role !== 'protocol') {
+      return res.status(403).json({
+        error: 'Logged-in account does not match the Protocol role.',
+      });
+    }
+
+    const approver = await getFirstUserForStage(existing.current_stage, existing);
+
+    if (!approver?.email) {
+      return res.status(400).json({
+        error: `No active approver is configured for ${getStageName(
+          existing.current_stage
+        )}.`,
+      });
+    }
+
+    await reminderEmail({
+      to: approver.email,
+      recipientName: approver.full_name,
+      request: existing,
+      stageName: getStageName(existing.current_stage),
+      actionUrl: FRONTEND_URL,
+    });
+
+    await addNotification({
+      userEmail: approver.email,
+      title: 'FTMS Decision Reminder',
+      message: `Protocol reminded you to review request #${existing.id} from ${safeText(
+        existing.full_name
+      )} at ${getStageName(existing.current_stage)}.`,
+    });
+
+    await addAudit({
+      requestId: existing.id,
+      action: 'reminder_sent',
+      actorRole: role,
+      actorEmail,
+      comment: `Reminder sent to ${approver.full_name || approver.email}`,
+      oldStage: existing.current_stage,
+      newStage: existing.current_stage,
+      oldStatus: existing.final_status,
+      newStatus: existing.final_status,
+    });
+
+    res.json({
+      message: 'Reminder sent.',
+      approver: {
+        fullName: approver.full_name,
+        email: approver.email,
+        role: approver.role,
+      },
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1438,6 +2589,7 @@ app.put('/api/requests/:id', uploadFields, async (req, res) => {
       startDate,
       endDate,
       purpose,
+      fundingSourceType,
       sponsor,
       passportNumber,
     } = req.body;
@@ -1457,12 +2609,13 @@ app.put('/api/requests/:id', uploadFields, async (req, res) => {
         start_date=COALESCE($11,start_date),
         end_date=COALESCE($12,end_date),
         purpose=COALESCE($13,purpose),
-        sponsor=COALESCE($14,sponsor),
-        passport_number=COALESCE($15,passport_number),
-        passport_file=COALESCE($16,passport_file),
-        invitation_letter=COALESCE($17,invitation_letter),
-        tor_file=COALESCE($18,tor_file)
-       WHERE id=$19
+        funding_source_type=COALESCE($14,funding_source_type),
+        sponsor=COALESCE($15,sponsor),
+        passport_number=COALESCE($16,passport_number),
+        passport_file=COALESCE($17,passport_file),
+        invitation_letter=COALESCE($18,invitation_letter),
+        tor_file=COALESCE($19,tor_file)
+       WHERE id=$20
        RETURNING *`,
       [
         travelerCategory || null,
@@ -1478,7 +2631,8 @@ app.put('/api/requests/:id', uploadFields, async (req, res) => {
         startDate || null,
         endDate || null,
         purpose || null,
-        sponsor || null,
+        fundingSourceType || null,
+        fundingSourceType === 'government' ? sponsor || 'Government' : sponsor || null,
         passportNumber || null,
         req.files?.passportFile?.[0]?.filename || null,
         req.files?.invitationLetter?.[0]?.filename || null,
@@ -1509,6 +2663,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
       actorEmail,
       actorId,
       foreignAffairsComment,
+      pmApprovalRequired,
     } = req.body;
 
     const act = String(action || status || '').trim();
@@ -1528,9 +2683,11 @@ app.put('/api/requests/:id/status', async (req, res) => {
       return res.status(400).json({ error: 'Request already finalized.' });
     }
 
+    const isSubmitAction = act === 'submit' || act === 'resubmit';
     const allowedStages = ROLE_STAGES[role] || [];
 
     if (
+      !isSubmitAction &&
       allowedStages.length &&
       !allowedStages.includes(existing.current_stage)
     ) {
@@ -1551,6 +2708,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
       return res.status(403).json({ error: scopedDecisionError });
     }
 
+    const actor = await getActorUser({ actorId, actorEmail });
     const wf = normalizeWorkflow(existing.workflow_type);
 
     let nextStage = existing.current_stage;
@@ -1563,13 +2721,17 @@ app.put('/api/requests/:id/status', async (req, res) => {
     let faStatus = existing.foreign_affairs_status || 'pending';
     let faUpdated = existing.foreign_affairs_updated_at || null;
     let faComment = existing.foreign_affairs_comment || null;
+    let pmRequired =
+      typeof existing.pm_approval_required === 'boolean'
+        ? existing.pm_approval_required
+        : existing.pm_approval_required;
 
     const cur = existing.current_stage;
 
     if (act === 'submit') {
-      if (!['traveler', 'expert', 'admin', 'super_admin'].includes(role)) {
+      if (!role) {
         return res.status(403).json({
-          error: 'Only Expert/Traveler can submit.',
+          error: 'A valid logged-in user is required to submit.',
         });
       }
 
@@ -1581,21 +2743,27 @@ app.put('/api/requests/:id/status', async (req, res) => {
 
       /*
         Approval flow:
-          - sector_structure: Expert -> Lead Executive Officer -> State Minister -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
-          - ceo_structure: Expert -> Lead Executive Officer -> CEO -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
-          - office_head_structure: Expert -> Lead Executive Officer -> Office Head -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
-          - affiliate_institution: Expert -> Protocol -> Office Head -> Minister -> Protocol PM Submission -> PM Office
+          - sector_structure: Expert -> Lead Executive Officer -> State Minister -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
+          - ceo_structure: Expert -> Lead Executive Officer -> CEO -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
+          - office_head_structure: Expert -> Lead Executive Officer -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
+          - affiliate_institution: Expert -> Director General -> Protocol -> Office Head -> Protocol PM Submission -> PM Office
+          - At Office Head final stage, the Office Head can approve, reject, or forward to Minister.
       */
       const isAffiliateRequest =
         existing.traveler_category === 'affiliate_institution';
 
-      nextStage = isAffiliateRequest
-        ? STAGES.PROTOCOL_CLEARANCE
-        : STAGES.LEAD_EXECUTIVE_REVIEW;
+      const firstReviewStage = getInitialReviewStage(existing, actor);
+
+      nextStage = await resolveNextStageSkippingSelf(
+        firstReviewStage,
+        existing,
+        actor
+      );
       finalStatus = STATUS.PENDING;
-      displayStatus = isAffiliateRequest
-        ? 'Submitted to Protocol Clearance'
-        : 'Submitted to Lead Executive Officer';
+      displayStatus =
+        nextStage === STAGES.OFFICE_HEAD_REVIEW && isAffiliateRequest
+          ? 'Submitted to Director General Review'
+          : `Submitted to ${getStageName(nextStage)}`;
     }
 
     else if (act === 'approve') {
@@ -1611,7 +2779,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
         },
 
         [STAGES.OFFICE_HEAD_REVIEW]: {
-          roles: ['office_head', 'admin', 'super_admin'],
+          roles: ['director_general', 'office_head', 'admin', 'super_admin'],
           next: STAGES.PROTOCOL_CLEARANCE,
         },
 
@@ -1627,7 +2795,17 @@ app.put('/api/requests/:id/status', async (req, res) => {
               ? STAGES.STATE_MINISTER_REVIEW
               : wf === WORKFLOW.CEO
               ? STAGES.CEO_REVIEW
-              : STAGES.OFFICE_HEAD_REVIEW,
+              : STAGES.PROTOCOL_CLEARANCE,
+        },
+
+        [STAGES.PROJECT_COORDINATOR_REVIEW]: {
+          roles: ['project_coordinator', 'admin', 'super_admin'],
+          next:
+            wf === WORKFLOW.SECTOR
+              ? STAGES.STATE_MINISTER_REVIEW
+              : wf === WORKFLOW.CEO
+              ? STAGES.CEO_REVIEW
+              : STAGES.PROTOCOL_CLEARANCE,
         },
 
         [STAGES.STATE_MINISTER_REVIEW]: {
@@ -1637,12 +2815,18 @@ app.put('/api/requests/:id/status', async (req, res) => {
 
         [STAGES.OFFICE_HEAD_FINAL]: {
           roles: ['office_head', 'admin', 'super_admin'],
-          next: STAGES.MINISTER_REVIEW,
+          next:
+            existing.pm_approval_required === false
+              ? STAGES.COMPLETED
+              : STAGES.PM_OFFICE_SUBMISSION,
         },
 
         [STAGES.MINISTER_REVIEW]: {
           roles: ['minister', 'admin', 'super_admin'],
-          next: STAGES.PM_OFFICE_SUBMISSION,
+          next:
+            existing.pm_approval_required === false
+              ? STAGES.COMPLETED
+              : STAGES.PM_OFFICE_SUBMISSION,
         },
       };
 
@@ -1660,14 +2844,29 @@ app.put('/api/requests/:id/status', async (req, res) => {
         });
       }
 
-      nextStage = mapping.next;
-      finalStatus = STATUS.PENDING;
-      displayStatus =
-        mapping.next === STAGES.PM_OFFICE_SUBMISSION
-          ? 'Minister Approved - Sent to Protocol for PM Office Submission'
-          : `Approved by ${role
-              .replace(/_/g, ' ')
-              .replace(/\b\w/g, (c) => c.toUpperCase())}`;
+      nextStage = await resolveNextStageSkippingSelf(
+        mapping.next,
+        existing,
+        actor
+      );
+      finalStatus =
+        nextStage === STAGES.COMPLETED ? STATUS.APPROVED : STATUS.PENDING;
+
+      if (nextStage === STAGES.PM_OFFICE_SUBMISSION) {
+        displayStatus =
+          cur === STAGES.OFFICE_HEAD_FINAL
+            ? 'Office Head Approved - Sent to Protocol for PM Office Submission'
+            : 'Minister Approved - Sent to Protocol for PM Office Submission';
+      } else if (nextStage === STAGES.COMPLETED) {
+        displayStatus =
+          cur === STAGES.OFFICE_HEAD_FINAL
+            ? 'Approved by Office Head'
+            : 'Approved by Minister';
+      } else {
+        displayStatus = `Approved by ${role
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase())}`;
+      }
     }
 
     else if (act === 'reject') {
@@ -1677,6 +2876,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
           STAGES.CEO_REVIEW,
           STAGES.OFFICE_HEAD_REVIEW,
           STAGES.LEAD_EXECUTIVE_REVIEW,
+          STAGES.PROJECT_COORDINATOR_REVIEW,
           STAGES.STATE_MINISTER_REVIEW,
         ].includes(cur)
       ) {
@@ -1711,9 +2911,18 @@ app.put('/api/requests/:id/status', async (req, res) => {
         });
       }
 
+      if (typeof pmApprovalRequired !== 'boolean') {
+        return res.status(400).json({
+          error: 'Protocol must choose whether PM Office approval is required.',
+        });
+      }
+
       nextStage = STAGES.OFFICE_HEAD_FINAL;
       finalStatus = STATUS.PENDING;
-      displayStatus = 'Cleared by Protocol';
+      pmRequired = pmApprovalRequired;
+      displayStatus = pmApprovalRequired
+        ? 'Cleared by Protocol - PM Approval Required'
+        : 'Cleared by Protocol - No PM Approval Required';
     }
 
     else if (act === 'amend') {
@@ -1813,6 +3022,24 @@ app.put('/api/requests/:id/status', async (req, res) => {
       });
     }
 
+    let nextApprover = null;
+
+    if (![STAGES.COMPLETED, STAGES.EXPERT_PREPARATION].includes(nextStage)) {
+      nextApprover = await getFirstUserForStage(nextStage, existing);
+
+      if (!nextApprover) {
+        const nextStageLabel =
+          nextStage === STAGES.OFFICE_HEAD_REVIEW &&
+          existing.traveler_category === 'affiliate_institution'
+            ? 'Affiliate Institution Director General'
+            : getStageName(nextStage);
+
+        return res.status(400).json({
+          error: `No active ${nextStageLabel} approver is configured for this request.`,
+        });
+      }
+    }
+
     const updated = await query(
       `UPDATE requests SET
         status=$1,
@@ -1825,8 +3052,9 @@ app.put('/api/requests/:id/status', async (req, res) => {
         last_decision_at=NOW(),
         foreign_affairs_status=$8,
         foreign_affairs_comment=COALESCE($9,foreign_affairs_comment),
-        foreign_affairs_updated_at=COALESCE($10,foreign_affairs_updated_at)
-       WHERE id=$11
+        foreign_affairs_updated_at=COALESCE($10,foreign_affairs_updated_at),
+        pm_approval_required=COALESCE($11,pm_approval_required)
+       WHERE id=$12
        RETURNING *`,
       [
         displayStatus,
@@ -1839,6 +3067,7 @@ app.put('/api/requests/:id/status', async (req, res) => {
         faStatus,
         faComment,
         faUpdated,
+        typeof pmRequired === 'boolean' ? pmRequired : null,
         id,
       ]
     );
@@ -1878,7 +3107,10 @@ app.put('/api/requests/:id/status', async (req, res) => {
       amendmentComment: amendComment,
     });
 
-    const nextApprover = await getFirstUserForStage(nextStage, req2);
+    await travelStatusSms({
+      request: req2,
+      displayStatus,
+    });
 
     if (
       nextApprover &&
@@ -1898,6 +3130,12 @@ app.put('/api/requests/:id/status', async (req, res) => {
         message: `A travel request from ${safeText(
           req2.full_name
         )} is waiting for your review at ${getStageName(nextStage)}.`,
+      });
+
+      await taskSms({
+        approver: nextApprover,
+        request: req2,
+        stageName: getStageName(nextStage),
       });
     }
 
@@ -2011,6 +3249,11 @@ app.put('/api/requests/bulk/submit-to-pm-office', async (req, res) => {
         title: 'Travel Request Submitted to PM Office',
         message: `Your request to ${request.country} was submitted to the PM Office.`,
       });
+
+      await travelStatusSms({
+        request,
+        displayStatus: 'Submitted to PM Office',
+      });
     }
 
     const pmOfficeUser = await getFirstUserForStage(
@@ -2034,6 +3277,12 @@ app.put('/api/requests/bulk/submit-to-pm-office', async (req, res) => {
           updated.rowCount === 1 ? '' : 's'
         } were submitted to the PM Office queue.`,
       });
+
+      await taskSms({
+        approver: pmOfficeUser,
+        request: updated.rows[0],
+        stageName: 'PM Office Follow-up',
+      });
     }
 
     res.json({
@@ -2053,7 +3302,7 @@ app.put('/api/requests/bulk/submit-to-pm-office', async (req, res) => {
 app.put('/api/requests/:id/resubmit', async (req, res) => {
   try {
     const { id } = req.params;
-    const { actorEmail, role } = req.body;
+    const { actorEmail, actorId, role } = req.body;
 
     const existing = (
       await query(`SELECT * FROM requests WHERE id=$1`, [id])
@@ -2074,15 +3323,36 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
 
     const isAffiliateRequest =
       existing.traveler_category === 'affiliate_institution';
-    const nextStage = isAffiliateRequest
-      ? STAGES.PROTOCOL_CLEARANCE
-      : STAGES.LEAD_EXECUTIVE_REVIEW;
+    const actor = await getActorUser({ actorId, actorEmail });
+    const firstReviewStage = getInitialReviewStage(existing, actor);
+    const nextStage = await resolveNextStageSkippingSelf(
+      firstReviewStage,
+      existing,
+      actor
+    );
     const displayStatus = isAffiliateRequest
-      ? 'Resubmitted to Protocol Clearance'
-      : 'Resubmitted to Lead Executive Officer';
+      ? nextStage === STAGES.OFFICE_HEAD_REVIEW
+        ? 'Resubmitted to Director General Review'
+        : `Resubmitted to ${getStageName(nextStage)}`
+      : `Resubmitted to ${getStageName(nextStage)}`;
     const nextStageName = isAffiliateRequest
-      ? 'Protocol Clearance'
-      : 'Lead Executive Officer Review';
+      ? nextStage === STAGES.OFFICE_HEAD_REVIEW
+        ? 'Director General Review'
+        : getStageName(nextStage)
+      : getStageName(nextStage);
+
+    const nextApprover = await getFirstUserForStage(nextStage, existing);
+
+    if (!nextApprover) {
+      const nextStageLabel =
+        nextStage === STAGES.OFFICE_HEAD_REVIEW && isAffiliateRequest
+          ? 'Affiliate Institution Director General'
+          : nextStageName;
+
+      return res.status(400).json({
+        error: `No active ${nextStageLabel} approver is configured for this request.`,
+      });
+    }
 
     const r = await query(
       `UPDATE requests
@@ -2128,7 +3398,10 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
       displayStatus,
     });
 
-    const nextApprover = await getFirstUserForStage(nextStage, req2);
+    await travelStatusSms({
+      request: req2,
+      displayStatus,
+    });
 
     if (nextApprover) {
       await taskEmail({
@@ -2145,6 +3418,12 @@ app.put('/api/requests/:id/resubmit', async (req, res) => {
         message: `A corrected travel request from ${safeText(
           req2.full_name
         )} is waiting for ${nextStageName}.`,
+      });
+
+      await taskSms({
+        approver: nextApprover,
+        request: req2,
+        stageName: nextStageName,
       });
     }
 
@@ -2177,6 +3456,7 @@ app.get('/api/audit-trail', async (_req, res) => {
         a.action,
         a.actor_role,
         a.actor_email,
+        actor.full_name AS actor_full_name,
         a.comment,
         a.old_stage,
         a.new_stage,
@@ -2194,6 +3474,8 @@ app.get('/api/audit-trail', async (_req, res) => {
         r.final_status
        FROM request_audit_trails a
        LEFT JOIN requests r ON r.id = a.request_id
+       LEFT JOIN users actor
+         ON LOWER(TRIM(actor.email))=LOWER(TRIM(a.actor_email))
        ORDER BY a.created_at DESC, a.id DESC`
     );
 
@@ -2208,6 +3490,7 @@ app.get('/api/requests/:id/audit-trail', async (req, res) => {
     const r = await query(
       `SELECT
         a.*,
+        actor.full_name AS actor_full_name,
         r.full_name,
         r.email AS traveler_email,
         r.country,
@@ -2219,6 +3502,8 @@ app.get('/api/requests/:id/audit-trail', async (req, res) => {
         r.final_status
        FROM request_audit_trails a
        LEFT JOIN requests r ON r.id = a.request_id
+       LEFT JOIN users actor
+         ON LOWER(TRIM(actor.email))=LOWER(TRIM(a.actor_email))
        WHERE a.request_id=$1
        ORDER BY a.created_at ASC, a.id ASC`,
       [req.params.id]
@@ -2231,6 +3516,51 @@ app.get('/api/requests/:id/audit-trail', async (req, res) => {
 });
 
 /* ── Approvers / Workflow Users ─────────────────────────── */
+
+app.get('/api/requests/:id/workflow-approvers', async (req, res) => {
+  try {
+    const requestResult = await query(
+      `SELECT *
+       FROM requests
+       WHERE id=$1`,
+      [req.params.id]
+    );
+
+    const request = requestResult.rows[0];
+
+    if (!request) {
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+
+    const stages = getWorkflowStagesForRequest(request);
+    const approvers = [];
+
+    for (const stage of stages) {
+      if ([STAGES.EXPERT_PREPARATION, STAGES.COMPLETED].includes(stage)) {
+        approvers.push({
+          stage,
+          full_name: stage === STAGES.EXPERT_PREPARATION ? request.full_name : '',
+          email: stage === STAGES.EXPERT_PREPARATION ? request.email : '',
+          role: stage === STAGES.EXPERT_PREPARATION ? 'traveler' : '',
+        });
+        continue;
+      }
+
+      const approver = await getFirstUserForStage(stage, request);
+
+      approvers.push({
+        stage,
+        full_name: approver?.full_name || '',
+        email: approver?.email || '',
+        role: approver?.role || STAGE_ROLES[stage] || '',
+      });
+    }
+
+    res.json(approvers);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/api/state-ministers', async (_req, res) => {
   try {
@@ -2367,13 +3697,14 @@ app.get('/api/users', async (_req, res) => {
         email,
         phone,
         position,
+        organization_type,
+        organization_name,
         sector,
         department,
         role,
         is_active,
         account_status
        FROM users
-       WHERE role <> 'super_admin'
        ORDER BY id DESC`
     );
 
@@ -2422,6 +3753,8 @@ app.post('/api/users', async (req, res) => {
       position,
       sector,
       department,
+      organizationType,
+      organizationName,
     } = req.body;
 
     if (!fullName || !email || !password || !role) {
@@ -2440,6 +3773,18 @@ app.post('/api/users', async (req, res) => {
     }
 
     const hashed = await bcrypt.hash(password, 10);
+    const cleanOrganizationType =
+      organizationType !== undefined
+        ? organizationType
+        : role === 'director_general'
+        ? 'Affiliate'
+        : null;
+    const cleanOrganizationName =
+      organizationName !== undefined
+        ? organizationName
+        : role === 'director_general'
+        ? sector
+        : null;
 
     const r = await query(
       `INSERT INTO users(
@@ -2451,11 +3796,13 @@ app.post('/api/users', async (req, res) => {
         position,
         sector,
         department,
+        organization_type,
+        organization_name,
         account_status,
         is_active
       )
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,'active',true)
-      RETURNING id,full_name,email,role,phone,position,sector,department,account_status`,
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',true)
+      RETURNING id,full_name,email,role,phone,position,sector,department,organization_type,organization_name,account_status`,
       [
         fullName,
         ne,
@@ -2465,6 +3812,8 @@ app.post('/api/users', async (req, res) => {
         position || null,
         sector || null,
         department || null,
+        cleanOrganizationType || null,
+        cleanOrganizationName || null,
       ]
     );
 
@@ -2546,9 +3895,25 @@ app.put('/api/users/:id', async (req, res) => {
       position,
       sector,
       department,
+      organizationType,
+      organizationName,
       accountStatus,
       isActive,
     } = req.body;
+
+    const cleanRole = role || null;
+    const cleanOrganizationType =
+      organizationType !== undefined
+        ? organizationType || null
+        : cleanRole === 'director_general'
+        ? 'Affiliate'
+        : null;
+    const cleanOrganizationName =
+      organizationName !== undefined
+        ? organizationName || null
+        : cleanRole === 'director_general'
+        ? sector || null
+        : null;
 
     const r = await query(
       `UPDATE users SET
@@ -2557,24 +3922,30 @@ app.put('/api/users/:id', async (req, res) => {
         role=COALESCE($3,role),
         phone=COALESCE($4,phone),
         position=COALESCE($5,position),
-        sector=CASE WHEN $10 THEN $6 ELSE sector END,
-        department=CASE WHEN $11 THEN $7 ELSE department END,
+        sector=CASE WHEN $12 THEN $6 ELSE sector END,
+        department=CASE WHEN $13 THEN $7 ELSE department END,
         account_status=COALESCE($8,account_status),
-        is_active=COALESCE($9,is_active)
-       WHERE id=$12
-       RETURNING id,full_name,email,role,phone,position,sector,department,is_active,account_status`,
+        is_active=COALESCE($9,is_active),
+        organization_type=CASE WHEN $14 THEN $10 ELSE organization_type END,
+        organization_name=CASE WHEN $15 THEN $11 ELSE organization_name END
+       WHERE id=$16
+       RETURNING id,full_name,email,role,phone,position,sector,department,organization_type,organization_name,is_active,account_status`,
       [
         fullName || null,
         email ? normalizeEmail(email) : null,
-        role || null,
+        cleanRole,
         normalizePhone(phone),
         position || null,
         sector === undefined ? null : sector || null,
         department === undefined ? null : department || null,
         accountStatus || null,
         typeof isActive === 'boolean' ? isActive : null,
+        cleanOrganizationType,
+        cleanOrganizationName,
         sector !== undefined,
         department !== undefined,
+        organizationType !== undefined || cleanRole === 'director_general',
+        organizationName !== undefined || cleanRole === 'director_general',
         req.params.id,
       ]
     );
@@ -2715,7 +4086,7 @@ app.get('/api/stats', async (req, res) => {
         : '';
     const scopedStatusAnd = scope ? 'AND' : 'WHERE';
 
-    const [[total], [approved], [pending], [rejected]] = await Promise.all(
+    const [[total], [approved], [pending], [rejected], categoryRows] = await Promise.all(
       [
         query(`SELECT COUNT(*)::int AS count FROM requests ${scope}`),
         query(
@@ -2736,14 +4107,47 @@ app.get('/api/stats', async (req, res) => {
            ${scope}
            ${scopedStatusAnd} final_status='rejected'`
         ),
+        query(
+          `SELECT
+             CASE
+               WHEN traveler_category='project' THEN 'project_staff'
+               WHEN traveler_category='advisor' THEN 'advisor'
+               WHEN traveler_category='affiliate_institution' THEN 'affiliate_institute'
+               ELSE 'lead_executive_staff'
+             END AS category,
+             COUNT(*)::int AS count
+           FROM requests
+           ${scope}
+           GROUP BY category`
+        ),
       ].map((p) => p.then((r) => r.rows))
     );
+
+    const requestTypeCounts = {
+      projectStaff: 0,
+      advisor: 0,
+      leadExecutiveStaff: 0,
+      affiliateInstitute: 0,
+    };
+
+    categoryRows.forEach((row) => {
+      if (row.category === 'project_staff') {
+        requestTypeCounts.projectStaff = row.count;
+      } else if (row.category === 'advisor') {
+        requestTypeCounts.advisor = row.count;
+      } else if (row.category === 'affiliate_institute') {
+        requestTypeCounts.affiliateInstitute = row.count;
+      } else if (row.category === 'lead_executive_staff') {
+        requestTypeCounts.leadExecutiveStaff = row.count;
+      }
+    });
 
     res.json({
       totalRequests: total.count,
       approvedRequests: approved.count,
       pendingRequests: pending.count,
       rejectedRequests: rejected.count,
+      requestTypeCounts,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2766,9 +4170,14 @@ app.get('/api/dashboard/pending-by-sector', async (req, res) => {
     const stageMap = {
       chief_executive_officer: `r.current_stage='ceo_review'`,
       ceo: `r.current_stage='ceo_review'`,
-      office_head: `r.current_stage IN ('office_head_review','office_head_final')`,
+      director_general: `r.current_stage='office_head_review' AND r.traveler_category='affiliate_institution'`,
+      office_head: `(
+        (r.current_stage='office_head_review' AND r.traveler_category<>'affiliate_institution')
+        OR r.current_stage='office_head_final'
+      )`,
       lead_executive_officer: `r.current_stage='lead_executive_review'`,
       lead_executive: `r.current_stage='lead_executive_review'`,
+      project_coordinator: `r.current_stage='project_coordinator_review'`,
       state_minister: `r.current_stage='state_minister_review'`,
       protocol: `r.current_stage IN ('protocol_clearance','pm_office_submission')`,
       pm_office: `r.current_stage IN ('pm_office_followup','foreign_affairs_followup')`,
@@ -2878,6 +4287,29 @@ app.get('/api/reports/stage-summary', async (_req, res) => {
   }
 });
 
+app.get('/api/reports/funding-summary', async (_req, res) => {
+  try {
+    const r = await query(`
+      SELECT
+        CASE
+          WHEN funding_source_type='government' THEN 'Government'
+          WHEN funding_source_type='non_government' THEN 'Non-government'
+          WHEN LOWER(COALESCE(sponsor,'')) LIKE '%government%' THEN 'Government'
+          WHEN COALESCE(sponsor,'') <> '' THEN 'Non-government'
+          ELSE 'Not specified'
+        END AS name,
+        COUNT(*)::int AS count
+      FROM requests
+      GROUP BY 1
+      ORDER BY count DESC, name
+    `);
+
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/reports/office-minister-summary', async (_req, res) => {
   try {
     const [moa, sector, affiliate] = await Promise.all([
@@ -2930,9 +4362,315 @@ app.get('/api/reports/office-minister-summary', async (_req, res) => {
   }
 });
 
+app.get('/api/reports/currently-abroad', async (_req, res) => {
+  try {
+    const activeTravelWhere = `
+      r.final_status='approved'
+      AND r.start_date IS NOT NULL
+      AND r.end_date IS NOT NULL
+      AND CURRENT_DATE BETWEEN r.start_date::date AND r.end_date::date
+    `;
+
+    const sectorExpression = `
+      COALESCE(
+        NULLIF(TRIM(r.organization_name),''),
+        CASE
+          WHEN r.traveler_category='affiliate_institution' THEN NULLIF(TRIM(u.organization_name),'')
+          ELSE NULL
+        END,
+        NULLIF(TRIM(r.sector),''),
+        NULLIF(TRIM(u.sector),''),
+        'Unassigned'
+      )
+    `;
+
+    const departmentExpression = `
+      COALESCE(
+        NULLIF(TRIM(r.department),''),
+        NULLIF(TRIM(u.department),''),
+        CASE
+          WHEN r.traveler_category='affiliate_institution' THEN 'Affiliate Institute'
+          WHEN r.traveler_category='project_staff' THEN 'Project'
+          WHEN r.traveler_category='advisor' THEN 'Advisor'
+          ELSE 'Unassigned'
+        END,
+        'Unassigned'
+      )
+    `;
+
+    const travelers = await query(`
+      SELECT
+        r.id,
+        COALESCE(NULLIF(TRIM(r.full_name),''), 'Unknown Traveler') AS full_name,
+        COALESCE(NULLIF(TRIM(r.position),''), NULLIF(TRIM(u.position),''), '-') AS position,
+        COALESCE(NULLIF(TRIM(r.country),''), '-') AS country,
+        r.start_date,
+        r.end_date,
+        ${sectorExpression} AS sector,
+        ${departmentExpression} AS department,
+        COALESCE(NULLIF(TRIM(r.traveler_category),''), 'staff_under_lead_executive') AS traveler_category,
+        GREATEST((r.end_date::date - CURRENT_DATE), 0)::int AS days_remaining,
+        GREATEST((CURRENT_DATE - r.start_date::date), 0)::int AS days_abroad
+      FROM requests r
+      LEFT JOIN users u
+        ON LOWER(TRIM(r.email))=LOWER(TRIM(u.email))
+      WHERE ${activeTravelWhere}
+      ORDER BY sector ASC, department ASC, r.end_date ASC, full_name ASC
+    `);
+
+    const bySector = await query(`
+      SELECT
+        ${sectorExpression} AS sector,
+        COUNT(*)::int AS count
+      FROM requests r
+      LEFT JOIN users u
+        ON LOWER(TRIM(r.email))=LOWER(TRIM(u.email))
+      WHERE ${activeTravelWhere}
+      GROUP BY 1
+      ORDER BY count DESC, sector ASC
+    `);
+
+    const byDepartment = await query(`
+      SELECT
+        ${sectorExpression} AS sector,
+        ${departmentExpression} AS department,
+        COUNT(*)::int AS count
+      FROM requests r
+      LEFT JOIN users u
+        ON LOWER(TRIM(r.email))=LOWER(TRIM(u.email))
+      WHERE ${activeTravelWhere}
+      GROUP BY 1, 2
+      ORDER BY sector ASC, count DESC, department ASC
+    `);
+
+    res.json({
+      total: travelers.rows.length,
+      bySector: bySector.rows,
+      byDepartment: byDepartment.rows,
+      travelers: travelers.rows,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 /* ── PDF Generation ─────────────────────────────────────── */
 
 app.get('/api/generate-pdf/:id', async (req, res) => {
+  try {
+    const r = (
+      await query(`SELECT * FROM requests WHERE id=$1`, [req.params.id])
+    ).rows[0];
+
+    if (!r) {
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+
+    const supportLetterStages = [
+      STAGES.PM_OFFICE_SUBMISSION,
+      STAGES.PM_OFFICE,
+      'foreign_affairs_followup',
+      STAGES.COMPLETED,
+    ];
+
+    if (
+      !supportLetterStages.includes(r.current_stage) &&
+      r.final_status !== STATUS.APPROVED
+    ) {
+      return res.status(400).json({
+        error:
+          'The PM Office support letter is generated only after the request is approved for PM Office submission.',
+      });
+    }
+
+    const pdfDir = path.join(__dirname, 'pdfs');
+
+    if (!fs.existsSync(pdfDir)) {
+      fs.mkdirSync(pdfDir, { recursive: true });
+    }
+
+    const filePath = path.join(pdfDir, `travel-request-${req.params.id}.pdf`);
+    const fontPath = path.join(
+      __dirname,
+      'fonts',
+      'NotoSansEthiopic-Regular.ttf'
+    );
+    const logoCandidates = [
+      path.join(__dirname, '..', 'frontend', 'public', 'ministry-logo.png'),
+      path.join(__dirname, '..', 'frontend', 'src', 'assets', 'ministry-logo.png'),
+      path.join(__dirname, 'ministry-logo.png'),
+    ];
+    const logoPath = logoCandidates.find((item) => fs.existsSync(item));
+
+    const doc = new PDFDocument({ size: 'A4', margin: 46 });
+    const stream = fs.createWriteStream(filePath);
+
+    doc.pipe(stream);
+
+    if (fs.existsSync(fontPath)) doc.font(fontPath);
+
+    const page = {
+      left: doc.page.margins.left,
+      right: doc.page.width - doc.page.margins.right,
+      top: doc.page.margins.top,
+      bottom: doc.page.height - doc.page.margins.bottom,
+      width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+    };
+    const generatedDate = new Date();
+    const refNo = `FTMS/${r.id}/${generatedDate.getFullYear()}`;
+    const travelDates = formatTravelDateRangeAmharic(r.start_date, r.end_date);
+    const travelerName = safeText(r.full_name, '-');
+    const position = safeText(r.position, '-');
+    const organization = safeText(r.organization_name || r.sector, '-');
+    const destination = safeText(r.country, '-');
+    const purpose = safeText(r.purpose, 'የውጭ ጉዞ ተልዕኮ');
+    const sponsor = safeText(r.sponsor, '-');
+    const passport = safeText(r.passport_number, '-');
+    const recipient = 'ጠቅላይ ሚኒስትር ጽ/ቤት';
+
+    const drawLine = (y, color = '#606975', width = 1) => {
+      doc
+        .save()
+        .strokeColor(color)
+        .lineWidth(width)
+        .moveTo(page.left, y)
+        .lineTo(page.right, y)
+        .stroke()
+        .restore();
+    };
+
+    if (logoPath) {
+      doc.image(logoPath, page.left, page.top - 10, { fit: [150, 92] });
+    } else {
+      doc
+        .fontSize(16)
+        .fillColor('#173f35')
+        .text('MINISTRY OF AGRICULTURE', page.left, page.top + 18);
+    }
+
+    drawLine(128, '#5b6470', 1.4);
+
+    doc
+      .fontSize(12)
+      .fillColor('#4b5563')
+      .text('ቁጥር', 395, 146)
+      .text('Ref. No', 395, 162)
+      .fillColor('#111827')
+      .text(refNo, 455, 162)
+      .moveTo(455, 177)
+      .lineTo(548, 177)
+      .strokeColor('#9ca3af')
+      .stroke()
+      .fillColor('#4b5563')
+      .text('ቀን', 395, 190)
+      .text('Date', 395, 206)
+      .fillColor('#111827')
+      .text(generatedDate.toLocaleDateString('en-GB'), 455, 206)
+      .moveTo(455, 221)
+      .lineTo(548, 221)
+      .strokeColor('#9ca3af')
+      .stroke();
+
+    doc
+      .fontSize(12.5)
+      .fillColor('#111827')
+      .text(`ለ${recipient}`, page.left + 70, 255)
+      .text('አዲስ አበባ', page.left + 70, 277);
+
+    doc
+      .fontSize(13)
+      .fillColor('#111827')
+      .text('ጉዳዩ፡- የውጭ አገር የጉዞ ፈቃድን ይመለከታል፤', page.left, 330, {
+        align: 'center',
+        underline: true,
+      });
+
+    const paragraphOptions = {
+      width: page.width - 85,
+      align: 'justify',
+      lineGap: 5,
+    };
+
+    doc
+      .fontSize(12.2)
+      .fillColor('#374151')
+      .text(
+        `የ${organization} ሰራተኛ የሆኑት ${travelerName} (${position}) ወደ ${destination} ለሚያደርጉት የውጭ አገር ጉዞ ጥያቄ  በስራ ሂደት ተገምግሞ በሚኒስቴሩ የተፈቀደ በመሆኑ ለጠቅላይ ሚኒስትር ጽ/ቤት የሚቀርብ የድጋፍ ደብዳቤ ነው።`,
+        page.left + 45,
+        372,
+        paragraphOptions
+      )
+      .moveDown(1.2)
+      .text(
+        `ጉዞው ከ${travelDates} ድረስ የሚካሄድ ሲሆን ዋና ዓላማው ${purpose} ነው። የጉዞው ወጪ የሚሸፈነው በ${sponsor} ሲሆን የፓስፖርት ቁጥር ${passport} ነው።`,
+        paragraphOptions
+      )
+      .moveDown(1.2)
+      .text(
+        'በመሆኑም ከላይ የተጠቀሰውን የጉዞ ጥያቄ እንዲፈቀድላቸው በአክብሮት እንጠያቃለን፡፡',
+        paragraphOptions
+      );
+
+    const signatureTop = 620;
+    doc
+      .fontSize(12.5)
+      .fillColor('#374151')
+      .text('ከሰላምታ ጋር', 394, signatureTop)
+      .moveTo(395, signatureTop + 42)
+      .lineTo(548, signatureTop + 42)
+      .strokeColor('#9ca3af')
+      .stroke()
+      .fontSize(11.5)
+      // .text('የተፈቀደ ፊርማ', 420, signatureTop + 52);
+
+    doc
+      .save()
+      .circle(285, signatureTop + 72, 48)
+      .strokeColor('#64748b')
+      .lineWidth(1)
+      .dash(4, { space: 3 })
+      .stroke()
+      .undash()
+      .fontSize(10)
+      .fillColor('#64748b')
+      .text('OFFICIAL STAMP', 240, signatureTop + 68, {
+        width: 90,
+        align: 'center',
+      })
+      .restore();
+
+    drawLine(page.bottom - 64, '#206cc9', 1);
+    doc
+      .fontSize(9.5)
+      .fillColor('#64748b')
+      .text('+251 116 411969/71', page.left, page.bottom - 50, {
+        width: 160,
+      })
+      .text('info@moa.gov.et', page.left + 210, page.bottom - 50, {
+        width: 130,
+      })
+      .text('www.moa.gov.et', page.left + 385, page.bottom - 50, {
+        width: 120,
+      })
+      .text(
+        'Bole Sub City, Woreda 06, Gurd Shola, Addis Ababa, Ethiopia',
+        page.left,
+        page.bottom - 30,
+        {
+          width: page.width,
+          align: 'center',
+        }
+      );
+
+    doc.end();
+
+    stream.on('finish', () => res.download(filePath));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/generate-pdf-summary/:id', async (req, res) => {
   try {
     const r = (
       await query(`SELECT * FROM requests WHERE id=$1`, [req.params.id])
@@ -3540,6 +5278,319 @@ app.delete('/api/moa-executive-offices/:id', async (req, res) => {
 
 /* ── Affiliate Institutions ─────────────────────────────── */
 
+app.get('/api/moa-projects', async (req, res) => {
+  try {
+    const { parentStructureId } = req.query;
+    const params = [];
+
+    let sql = `
+      SELECT
+        p.id,
+        p.parent_structure_id,
+        p.project_name,
+        p.coordinator_name,
+        p.email,
+        p.phone,
+        p.created_at,
+        s.name AS parent_structure_name,
+        s.workflow_type
+      FROM moa_projects p
+      JOIN moa_sectors s ON s.id = p.parent_structure_id
+    `;
+
+    if (parentStructureId) {
+      sql += ` WHERE p.parent_structure_id=$1 `;
+      params.push(parentStructureId);
+    }
+
+    sql += ` ORDER BY s.name ASC, p.project_name ASC`;
+
+    const r = await query(sql, params);
+
+    res.json(r.rows);
+  } catch (e) {
+    console.error('FETCH MOA PROJECTS ERROR:', e);
+    res.status(500).json({ error: e.message || 'Failed to fetch projects.' });
+  }
+});
+
+app.post('/api/moa-projects', async (req, res) => {
+  let client;
+  let inTransaction = false;
+
+  try {
+    const { parentStructureId, projectName, coordinatorName, email, phone, password } = req.body;
+    const cleanProjectName = String(projectName || '').trim();
+
+    if (!parentStructureId || !cleanProjectName) {
+      return res.status(400).json({
+        error: 'Parent structure and project name are required.',
+      });
+    }
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const parent = (
+      await client.query(
+        `SELECT id,name,workflow_type
+         FROM moa_sectors
+         WHERE id=$1
+           AND workflow_type IN ('sector_structure','ceo_structure','office_head_structure')`,
+        [parentStructureId]
+      )
+    ).rows[0];
+
+    if (!parent) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(400).json({
+        error: 'Selected parent structure is not valid for projects.',
+      });
+    }
+
+    const r = await client.query(
+      `INSERT INTO moa_projects(parent_structure_id,project_name,coordinator_name,email,phone)
+       VALUES($1,$2,$3,$4,$5)
+       RETURNING *`,
+      [
+        parentStructureId,
+        cleanProjectName,
+        coordinatorName || null,
+        email ? normalizeEmail(email) : null,
+        normalizePhone(phone),
+      ]
+    );
+
+    const coordinator = await syncProjectCoordinator(client, {
+      projectName: cleanProjectName,
+      parentStructureName: parent.name,
+      coordinatorName,
+      email,
+      phone,
+      password,
+    });
+
+    await client.query('COMMIT');
+    inTransaction = false;
+
+    res.status(201).json({
+      ...r.rows[0],
+      parent_structure_name: parent.name,
+      workflow_type: parent.workflow_type,
+      coordinator,
+    });
+  } catch (e) {
+    if (client && inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+
+    console.error('ADD MOA PROJECT ERROR:', e);
+
+    if (e.code === '23505') {
+      return res.status(409).json({
+        error: 'This project already exists under the selected parent structure.',
+      });
+    }
+
+    res.status(e.statusCode || 500).json({
+      error: e.message || 'Failed to add project.',
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+app.put('/api/moa-projects/:id', async (req, res) => {
+  let client;
+  let inTransaction = false;
+
+  try {
+    const { parentStructureId, projectName, coordinatorName, email, phone, password } = req.body;
+    const cleanProjectName = String(projectName || '').trim();
+
+    if (!parentStructureId || !cleanProjectName) {
+      return res.status(400).json({
+        error: 'Parent structure and project name are required.',
+      });
+    }
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const existing = (
+      await client.query(
+        `SELECT p.id,p.project_name,s.name AS parent_structure_name
+         FROM moa_projects p
+         JOIN moa_sectors s ON s.id=p.parent_structure_id
+         WHERE p.id=$1`,
+        [req.params.id]
+      )
+    ).rows[0];
+
+    if (!existing) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(404).json({ error: 'Project not found.' });
+    }
+
+    const parent = (
+      await client.query(
+        `SELECT id,name,workflow_type
+         FROM moa_sectors
+         WHERE id=$1
+           AND workflow_type IN ('sector_structure','ceo_structure','office_head_structure')`,
+        [parentStructureId]
+      )
+    ).rows[0];
+
+    if (!parent) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(400).json({
+        error: 'Selected parent structure is not valid for projects.',
+      });
+    }
+
+    const r = await client.query(
+      `UPDATE moa_projects
+       SET parent_structure_id=$1,
+           project_name=$2,
+           coordinator_name=$3,
+           email=$4,
+           phone=$5
+       WHERE id=$6
+       RETURNING *`,
+      [
+        parentStructureId,
+        cleanProjectName,
+        coordinatorName || null,
+        email ? normalizeEmail(email) : null,
+        normalizePhone(phone),
+        req.params.id,
+      ]
+    );
+
+    const requestsUpdate = await client.query(
+      `UPDATE requests
+       SET sector=$1,
+           department=$2,
+           organization_name='MoA'
+       WHERE traveler_category='project'
+         AND LOWER(TRIM(COALESCE(department,'')))=LOWER(TRIM($3))
+         AND LOWER(TRIM(COALESCE(sector,'')))=LOWER(TRIM($4))`,
+      [parent.name, cleanProjectName, existing.project_name, existing.parent_structure_name]
+    );
+
+    const coordinator = await syncProjectCoordinator(client, {
+      projectName: cleanProjectName,
+      previousProjectName: existing.project_name,
+      parentStructureName: parent.name,
+      coordinatorName,
+      email,
+      phone,
+      password,
+    });
+
+    await client.query('COMMIT');
+    inTransaction = false;
+
+    res.json({
+      message: 'Project updated.',
+      project: {
+        ...r.rows[0],
+        parent_structure_name: parent.name,
+        workflow_type: parent.workflow_type,
+      },
+      coordinator,
+      updatedRequests: requestsUpdate.rowCount,
+    });
+  } catch (e) {
+    if (client && inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+
+    console.error('UPDATE MOA PROJECT ERROR:', e);
+
+    if (e.code === '23505') {
+      return res.status(409).json({
+        error: 'This project already exists under the selected parent structure.',
+      });
+    }
+
+    res.status(e.statusCode || 500).json({
+      error: e.message || 'Failed to update project.',
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+app.delete('/api/moa-projects/:id', async (req, res) => {
+  try {
+    const existing = (
+      await query(
+        `SELECT p.id,p.project_name,s.name AS parent_structure_name
+         FROM moa_projects p
+         JOIN moa_sectors s ON s.id=p.parent_structure_id
+         WHERE p.id=$1`,
+        [req.params.id]
+      )
+    ).rows[0];
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Project not found.' });
+    }
+
+    const userCount = Number(
+      (
+        await query(
+          `SELECT COUNT(*) AS count
+           FROM users
+           WHERE role='project_coordinator'
+             AND LOWER(TRIM(COALESCE(department,'')))=LOWER(TRIM($1))
+             AND LOWER(TRIM(COALESCE(sector,'')))=LOWER(TRIM($2))`,
+          [existing.project_name, existing.parent_structure_name]
+        )
+      ).rows[0].count
+    );
+
+    const requestCount = Number(
+      (
+        await query(
+          `SELECT COUNT(*) AS count
+           FROM requests
+           WHERE traveler_category='project'
+             AND LOWER(TRIM(COALESCE(department,'')))=LOWER(TRIM($1))
+             AND LOWER(TRIM(COALESCE(sector,'')))=LOWER(TRIM($2))`,
+          [existing.project_name, existing.parent_structure_name]
+        )
+      ).rows[0].count
+    );
+
+    if (userCount || requestCount) {
+      return res.status(409).json({
+        error:
+          'This project is used by coordinator accounts or travel requests. Reassign them before deleting it.',
+        linkedUsers: userCount,
+        linkedRequests: requestCount,
+      });
+    }
+
+    await query(`DELETE FROM moa_projects WHERE id=$1`, [req.params.id]);
+
+    res.json({ message: 'Project deleted.' });
+  } catch (e) {
+    console.error('DELETE MOA PROJECT ERROR:', e);
+    res.status(500).json({ error: e.message || 'Failed to delete project.' });
+  }
+});
+
 app.get('/api/affiliate-institutions', async (_req, res) => {
   try {
     const r = await query(`
@@ -3555,16 +5606,25 @@ app.get('/api/affiliate-institutions', async (_req, res) => {
 });
 
 app.post('/api/affiliate-institutions', async (req, res) => {
-  try {
-    const { organizationName, generalDirectorName, email, phone } = req.body;
+  let client;
+  let inTransaction = false;
 
-    if (!organizationName) {
+  try {
+    const { organizationName, generalDirectorName, email, phone, password } =
+      req.body;
+    const cleanOrganizationName = String(organizationName || '').trim();
+
+    if (!cleanOrganizationName) {
       return res.status(400).json({
         error: 'Organization name is required.',
       });
     }
 
-    const r = await query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const r = await client.query(
       `INSERT INTO affiliate_institutions(
         organization_name,
         general_director_name,
@@ -3574,36 +5634,85 @@ app.post('/api/affiliate-institutions', async (req, res) => {
       VALUES($1,$2,$3,$4)
       RETURNING *`,
       [
-        organizationName.trim(),
+        cleanOrganizationName,
         generalDirectorName || null,
-        email || null,
+        email ? normalizeEmail(email) : null,
         normalizePhone(phone),
       ]
     );
 
-    res.status(201).json(r.rows[0]);
+    const directorGeneral = await syncAffiliateDirectorGeneral(client, {
+      organizationName: cleanOrganizationName,
+      generalDirectorName,
+      email,
+      phone,
+      password,
+    });
+
+    await client.query('COMMIT');
+    inTransaction = false;
+
+    res.status(201).json({
+      ...r.rows[0],
+      directorGeneral,
+    });
   } catch (e) {
+    if (client && inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+
     if (e.code === '23505') {
       return res.status(409).json({
         error: 'This organization already exists.',
       });
     }
 
-    res.status(500).json({ error: e.message });
+    res.status(e.statusCode || 500).json({ error: e.message });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
 app.put('/api/affiliate-institutions/:id', async (req, res) => {
-  try {
-    const { organizationName, generalDirectorName, email, phone } = req.body;
+  let client;
+  let inTransaction = false;
 
-    if (!organizationName) {
+  try {
+    const { organizationName, generalDirectorName, email, phone, password } =
+      req.body;
+    const cleanOrganizationName = String(organizationName || '').trim();
+
+    if (!cleanOrganizationName) {
       return res.status(400).json({
         error: 'Organization name is required.',
       });
     }
 
-    const r = await query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const existing = (
+      await client.query(
+        `SELECT id,organization_name
+         FROM affiliate_institutions
+         WHERE id=$1`,
+        [req.params.id]
+      )
+    ).rows[0];
+
+    if (!existing) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+
+      return res.status(404).json({
+        error: 'Organization not found.',
+      });
+    }
+
+    const r = await client.query(
       `UPDATE affiliate_institutions
        SET organization_name=$1,
            general_director_name=$2,
@@ -3612,32 +5721,60 @@ app.put('/api/affiliate-institutions/:id', async (req, res) => {
        WHERE id=$5
        RETURNING *`,
       [
-        organizationName.trim(),
+        cleanOrganizationName,
         generalDirectorName || null,
-        email || null,
+        email ? normalizeEmail(email) : null,
         normalizePhone(phone),
         req.params.id,
       ]
     );
 
-    if (!r.rows.length) {
-      return res.status(404).json({
-        error: 'Organization not found.',
-      });
-    }
+    const requestsUpdate = await client.query(
+      `UPDATE requests
+       SET organization_name=$1,
+           sector=$2
+       WHERE traveler_category='affiliate_institution'
+         AND (
+           LOWER(TRIM(COALESCE(organization_name,''))) = LOWER(TRIM($3))
+           OR LOWER(TRIM(COALESCE(sector,''))) = LOWER(TRIM($3))
+         )`,
+      [cleanOrganizationName, cleanOrganizationName, existing.organization_name]
+    );
+
+    const directorGeneral = await syncAffiliateDirectorGeneral(client, {
+      organizationName: cleanOrganizationName,
+      previousOrganizationName: existing.organization_name,
+      generalDirectorName,
+      email,
+      phone,
+      password,
+    });
+
+    await client.query('COMMIT');
+    inTransaction = false;
 
     res.json({
       message: 'Organization updated.',
       organization: r.rows[0],
+      directorGeneral,
+      updatedRequests: requestsUpdate.rowCount,
     });
   } catch (e) {
+    if (client && inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+
     if (e.code === '23505') {
       return res.status(409).json({
         error: 'This organization already exists.',
       });
     }
 
-    res.status(500).json({ error: e.message });
+    res.status(e.statusCode || 500).json({ error: e.message });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
@@ -3739,6 +5876,17 @@ app.use((req, res) => {
 
 /* ── Start Server ───────────────────────────────────────── */
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`FTMS backend running on port ${PORT}`);
+});
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(
+      `Port ${PORT} is already in use. If you are running locally, use "npm run dev" so FTMS can stop the old backend process before starting.`
+    );
+    process.exit(1);
+  }
+
+  throw error;
 });

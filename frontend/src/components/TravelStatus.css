@@ -75,11 +75,37 @@
 }
 
 .travel-status-summary-card {
+  position: relative;
+  overflow: hidden;
   padding: 14px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.travel-status-summary-card::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  content: "";
+  background: #2563eb;
+}
+
+.travel-status-summary-card.blue::before {
+  background: #2563eb;
+}
+
+.travel-status-summary-card.amber::before {
+  background: #f59e0b;
+}
+
+.travel-status-summary-card.orange::before {
+  background: #ea580c;
+}
+
+.travel-status-summary-card.green::before {
+  background: #16a34a;
 }
 
 .travel-status-summary-card span {
@@ -121,7 +147,7 @@
 
 .travel-status-controls {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(280px, 1.3fr);
+  grid-template-columns: minmax(360px, 1.25fr) minmax(300px, 1fr) minmax(180px, 0.55fr);
   gap: 12px;
   margin-bottom: 14px;
   padding: 14px;
@@ -159,13 +185,98 @@
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
+.travel-status-search-field {
+  max-width: 260px;
+  justify-self: end;
+}
+
+.travel-status-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.travel-status-filter-group > span {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.travel-status-filter-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.travel-status-filter-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.travel-status-filter-card:hover,
+.travel-status-filter-card:focus-visible {
+  border-color: #0f766e;
+  background: #f0fdfa;
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.12);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.travel-status-filter-card.active {
+  border-color: #0f766e;
+  background: #0f766e;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.18);
+}
+
+.travel-status-filter-card strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.travel-status-filter-card small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.travel-status-filter-card.active small {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
 .travel-status-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.8fr);
+  grid-template-columns: minmax(220px, 0.58fr) minmax(0, 1.35fr) minmax(280px, 0.72fr);
   gap: 14px;
   align-items: start;
 }
 
+.travel-status-request-panel,
 .travel-status-diagram-card,
 .travel-status-detail-card,
 .travel-status-empty {
@@ -175,10 +286,167 @@
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
+.travel-status-request-panel {
+  position: sticky;
+  top: 14px;
+  overflow: hidden;
+}
+
+.travel-status-panel-heading,
+.travel-status-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 13px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.travel-status-panel-heading span,
+.travel-status-detail-heading span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.travel-status-panel-heading strong,
+.travel-status-detail-heading strong {
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.travel-status-request-list {
+  display: grid;
+  gap: 8px;
+  max-height: 620px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.travel-status-request-card {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #2563eb;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.travel-status-request-card:hover,
+.travel-status-request-card.selected {
+  border-color: #99f6e4;
+  box-shadow: 0 10px 24px rgba(15, 118, 110, 0.12);
+  transform: translateY(-1px);
+}
+
+.travel-status-request-card.selected {
+  background: #f0fdfa;
+}
+
+.travel-status-request-card.completed {
+  border-left-color: #16a34a;
+}
+
+.travel-status-request-card.returned {
+  border-left-color: #ea580c;
+}
+
+.travel-status-request-card span {
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.travel-status-request-card strong {
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.travel-status-request-card small {
+  color: #64748b;
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+
+.travel-status-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid #d9f4e8;
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.95), rgba(255, 255, 255, 0.96)),
+    radial-gradient(circle at 94% 0%, rgba(22, 163, 74, 0.16), transparent 34%);
+}
+
+.travel-status-hero h3 {
+  margin: 8px 0 5px;
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.travel-status-hero p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.travel-status-hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.travel-status-hero-metrics div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.travel-status-hero-metrics span {
+  display: block;
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.travel-status-hero-metrics strong {
+  display: block;
+  margin-top: 5px;
+  color: #0f172a;
+  font-size: 12.5px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .travel-status-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
   padding: 14px;
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
+}
+
+.travel-status-card-header > div:first-child {
+  min-width: 0;
 }
 
 .travel-status-card-header h3 {
@@ -195,12 +463,63 @@
   line-height: 1.45;
 }
 
+.travel-status-progress-card {
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+  padding: 10px 12px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.travel-status-progress-card span,
+.travel-status-progress-card small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.travel-status-progress-card strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 780;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.travel-status-progress-track {
+  height: 7px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.travel-status-progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+}
+
 .travel-status-diagram {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 20px 18px;
+  padding: 22px 20px;
   overflow-x: visible;
+}
+
+.travel-status-audit-loading {
+  margin-bottom: 12px;
+  padding: 9px 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .travel-status-step-wrap {
@@ -214,53 +533,124 @@
 .travel-status-step {
   position: relative;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  grid-template-areas:
-    "badge title"
-    "badge note";
-  column-gap: 12px;
-  row-gap: 3px;
-  width: min(100%, 520px);
+  grid-template-columns: 42px minmax(0, 1fr);
+  column-gap: 14px;
+  width: min(100%, 620px);
   min-height: auto;
-  padding: 7px 8px;
+  padding: 10px 12px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 10px;
   background: transparent;
 }
 
 .travel-status-step span {
-  grid-area: badge;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
   background: #e2e8f0;
   color: #475569;
   font-size: 12px;
   font-weight: 760;
-  box-shadow: 0 0 0 4px #fff;
+  box-shadow: 0 0 0 5px #fff;
   z-index: 1;
 }
 
+.travel-status-step-copy {
+  min-width: 0;
+}
+
+.travel-status-step-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .travel-status-step strong {
-  grid-area: title;
+  display: block;
   color: #0f172a;
-  font-size: 13px;
-  font-weight: 720;
+  font-size: 14px;
+  font-weight: 780;
   line-height: 1.25;
 }
 
 .travel-status-step small {
-  grid-area: note;
+  display: inline-flex;
+  margin-top: 3px;
   color: #64748b;
   font-size: 11px;
+  font-weight: 700;
   line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.travel-status-state-chip {
+  margin-top: 0 !important;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+}
+
+.travel-status-state-chip.complete {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.travel-status-state-chip.current {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.travel-status-state-chip.upcoming {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.travel-status-state-chip.optional {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.travel-status-step-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.travel-status-step-meta em,
+.travel-status-step-meta b {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.travel-status-step-meta em {
+  border: 1px solid #dbe4ef;
+  background: #fff;
+  color: #475569;
+}
+
+.travel-status-step-meta b {
+  border: 1px solid #fde68a;
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .travel-status-step.complete {
-  background: #f0fdf4;
+  background: linear-gradient(90deg, #f0fdf4 0%, #ffffff 100%);
 }
 
 .travel-status-step.complete span {
@@ -269,17 +659,17 @@
 }
 
 .travel-status-step.current {
-  background: #eff6ff;
-  box-shadow: inset 3px 0 0 #2563eb;
+  background: linear-gradient(90deg, #fffbeb 0%, #ffffff 100%);
+  box-shadow: inset 3px 0 0 #f59e0b;
 }
 
 .travel-status-step.current span {
-  background: #2563eb;
+  background: #f59e0b;
   color: #fff;
 }
 
 .travel-status-step.returned {
-  background: #fff7ed;
+  background: linear-gradient(90deg, #fff7ed 0%, #ffffff 100%);
   box-shadow: inset 3px 0 0 #ea580c;
 }
 
@@ -289,7 +679,7 @@
 }
 
 .travel-status-step.rejected {
-  background: #fef2f2;
+  background: linear-gradient(90deg, #fef2f2 0%, #ffffff 100%);
   box-shadow: inset 3px 0 0 #dc2626;
 }
 
@@ -299,13 +689,36 @@
 }
 
 .travel-status-step.upcoming {
-  background: transparent;
+  background: linear-gradient(90deg, #fef2f2 0%, #ffffff 100%);
+  box-shadow: inset 3px 0 0 #fecaca;
+}
+
+.travel-status-step.upcoming span {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.travel-status-step.optional {
+  border: 1px dashed #94a3b8;
+  background: linear-gradient(90deg, #f8fafc 0%, #ffffff 100%);
+  box-shadow: inset 3px 0 0 #94a3b8;
+}
+
+.travel-status-step.optional span {
+  border: 2px dashed #64748b;
+  background: #fff;
+  color: #475569;
+}
+
+.travel-status-step.optional strong {
+  color: #334155;
 }
 
 .travel-status-connector {
-  width: 2px;
-  height: 28px;
-  margin: 0 0 0 23px;
+  width: 3px;
+  height: 30px;
+  margin: -2px 0 -2px 28px;
+  border-radius: 999px;
   background: #cbd5e1;
   flex-shrink: 0;
   align-self: flex-start;
@@ -316,7 +729,7 @@
 }
 
 .travel-status-connector.current {
-  background: #2563eb;
+  background: #f59e0b;
 }
 
 .travel-status-connector.returned {
@@ -327,7 +740,19 @@
   background: #dc2626;
 }
 
+.travel-status-connector.upcoming {
+  background: #fecaca;
+}
+
+.travel-status-connector.optional {
+  width: 0;
+  border-left: 3px dotted #94a3b8;
+  background: transparent;
+}
+
 .travel-status-detail-card {
+  position: sticky;
+  top: 14px;
   overflow: hidden;
 }
 
@@ -376,6 +801,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .travel-status-controls {
+    grid-template-columns: 1fr;
+  }
+
   .travel-status-layout {
     grid-template-columns: 1fr;
   }
@@ -397,6 +826,18 @@
   .travel-status-summary-grid,
   .travel-status-controls {
     grid-template-columns: 1fr;
+  }
+
+  .travel-status-filter-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .travel-status-card-header {
+    flex-direction: column;
+  }
+
+  .travel-status-progress-card {
+    width: 100%;
   }
 
   .travel-status-step-wrap {

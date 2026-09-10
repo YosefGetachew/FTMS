@@ -4,25 +4,15 @@ import { Card, EmptyState, Notice } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import API, { getApiErrorMessage } from '../../src/services/api';
 import { colors } from '../../src/styles/theme';
-import { formatStage } from '../../src/utils/format';
 
 const REPORT_ROLES = ['admin', 'super_admin', 'minister', 'office_head'];
-
-const statusLabels = {
-  approved: 'Approved',
-  rejected: 'Rejected',
-  pending: 'Pending',
-  amended: 'Returned',
-};
 
 export default function ReportsScreen() {
   const { user } = useAuth();
   const canViewReports = REPORT_ROLES.includes(user?.role);
   const isMinister = user?.role === 'minister';
   const [statusSummary, setStatusSummary] = useState([]);
-  const [sectorStatus, setSectorStatus] = useState([]);
   const [monthlyRequests, setMonthlyRequests] = useState([]);
-  const [stageSummary, setStageSummary] = useState([]);
   const [officeSummary, setOfficeSummary] = useState({
     moaVsAffiliate: [],
     moaBySector: [],
@@ -40,18 +30,14 @@ export default function ReportsScreen() {
 
       const results = await Promise.allSettled([
         API.get('/reports/status-summary'),
-        API.get('/reports/sector-status'),
         API.get('/reports/monthly-requests'),
-        API.get('/reports/stage-summary'),
         API.get('/reports/office-minister-summary'),
       ]);
 
       if (results[0].status === 'fulfilled') setStatusSummary(results[0].value.data || []);
-      if (results[1].status === 'fulfilled') setSectorStatus(results[1].value.data || []);
-      if (results[2].status === 'fulfilled') setMonthlyRequests(results[2].value.data || []);
-      if (results[3].status === 'fulfilled') setStageSummary(results[3].value.data || []);
-      if (results[4].status === 'fulfilled') {
-        setOfficeSummary(results[4].value.data || {});
+      if (results[1].status === 'fulfilled') setMonthlyRequests(results[1].value.data || []);
+      if (results[2].status === 'fulfilled') {
+        setOfficeSummary(results[2].value.data || {});
       }
 
       const failed = results.find((item) => item.status === 'rejected');
@@ -87,28 +73,6 @@ export default function ReportsScreen() {
     };
   }, [statusSummary]);
 
-  const sectorRows = useMemo(() => {
-    const grouped = new Map();
-
-    sectorStatus.forEach((item) => {
-      const key = item.sector || 'Unassigned';
-      const current = grouped.get(key) || {
-        name: key,
-        approved: 0,
-        rejected: 0,
-        pending: 0,
-        amended: 0,
-        total: 0,
-      };
-      const status = item.final_status || 'pending';
-      current[status] = Number(item.count || 0);
-      current.total += Number(item.count || 0);
-      grouped.set(key, current);
-    });
-
-    return [...grouped.values()].sort((a, b) => b.total - a.total);
-  }, [sectorStatus]);
-
   const monthlyTrend = useMemo(
     () =>
       monthlyRequests.map((item) => ({
@@ -117,11 +81,18 @@ export default function ReportsScreen() {
       })),
     [monthlyRequests]
   );
-
-  const topSector = sectorRows[0] || null;
-  const activeStages = stageSummary
-    .filter((item) => Number(item.count || 0) > 0)
-    .sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
+  const moaAffiliateRows = useMemo(
+    () => (officeSummary.moaVsAffiliate || []).map(toNameCount),
+    [officeSummary.moaVsAffiliate]
+  );
+  const moaSectorRows = useMemo(
+    () => (officeSummary.moaBySector || []).map(toNameCount),
+    [officeSummary.moaBySector]
+  );
+  const affiliateRows = useMemo(
+    () => (officeSummary.affiliateByOrganization || []).map(toNameCount),
+    [officeSummary.affiliateByOrganization]
+  );
 
   if (!canViewReports) {
     return (
@@ -144,9 +115,7 @@ export default function ReportsScreen() {
         <Text style={styles.kicker}>FTMS Reports</Text>
         <Text style={styles.title}>{isMinister ? 'Minister Report' : 'Ministry Analytics'}</Text>
         <Text style={styles.subtitle}>
-          {isMinister
-            ? 'Executive view of travel approvals, active workload, and monthly travel movement.'
-            : 'Status, workload, sector, and organization-level travel reports.'}
+          Approved travel trend and organization-level travel distribution.
         </Text>
       </View>
 
@@ -159,79 +128,20 @@ export default function ReportsScreen() {
         <Metric label="Approval Rate" value={`${analytics.approvalRate}%`} />
       </View>
 
-      {isMinister ? (
-        <ReportCard title="Executive Snapshot">
-          <View style={styles.insightGrid}>
-            <Insight
-              label="Decision Balance"
-              value={`${analytics.approvalRate}%`}
-              detail={`${analytics.approved} approved, ${analytics.rejected} rejected`}
-            />
-            <Insight
-              label="Active Workload"
-              value={analytics.pending}
-              detail={`${analytics.amended} returned for correction`}
-            />
-            <Insight
-              label="Top Sector"
-              value={topSector?.name || '-'}
-              detail={topSector ? `${topSector.total} total request(s)` : 'No sector activity'}
-            />
-          </View>
-        </ReportCard>
-      ) : null}
-
-      <ReportCard title={isMinister ? 'Approved Travel Trend' : 'Approved Travel by Month'}>
+      <ReportCard title="1. Approved Travel by Month">
         <LineTrendChart rows={monthlyTrend} />
       </ReportCard>
 
-      <ReportCard title="Status Summary">
-        <BarRows
-          rows={[
-            { name: 'Approved', count: analytics.approved },
-            { name: 'Rejected', count: analytics.rejected },
-            { name: 'Pending', count: analytics.pending },
-            { name: 'Returned', count: analytics.amended },
-          ]}
-        />
+      <ReportCard title="2. Total Travel by MoA and Affiliate Institute">
+        <BarRows rows={moaAffiliateRows} emptyMessage="No MoA or Affiliate Institute travel data available." />
       </ReportCard>
 
-      <ReportCard title={isMinister ? 'Active Workflow Workload' : 'Workflow Stage Workload'}>
-        <BarRows
-          rows={(isMinister ? activeStages : stageSummary).map((item) => ({
-            name: formatStage(item.current_stage),
-            count: Number(item.count || 0),
-          }))}
-        />
+      <ReportCard title="3. Total MoA Travel by Sector">
+        <BarRows rows={moaSectorRows} emptyMessage="No MoA sector travel data available." />
       </ReportCard>
 
-      <ReportCard title="Sector Status">
-        {sectorRows.length ? (
-          sectorRows.map((item) => (
-            <View key={item.name} style={styles.tableRow}>
-              <View style={styles.tableMain}>
-                <Text style={styles.rowTitle}>{item.name}</Text>
-                <Text style={styles.rowMeta}>
-                  {item.approved} approved | {item.pending} pending | {item.rejected} rejected
-                </Text>
-              </View>
-              <Text style={styles.rowCount}>{item.total}</Text>
-            </View>
-          ))
-        ) : (
-          <Text style={styles.emptyText}>No sector data available.</Text>
-        )}
-      </ReportCard>
-
-      <ReportCard title="Office Head and Minister Report">
-        <Text style={styles.sectionLabel}>MoA vs Affiliate</Text>
-        <BarRows rows={(officeSummary.moaVsAffiliate || []).map(toNameCount)} />
-
-        <Text style={styles.sectionLabel}>MoA by Sector</Text>
-        <BarRows rows={(officeSummary.moaBySector || []).map(toNameCount)} />
-
-        <Text style={styles.sectionLabel}>Affiliate Organizations</Text>
-        <BarRows rows={(officeSummary.affiliateByOrganization || []).map(toNameCount)} />
+      <ReportCard title="4. Total Affiliate Institute Travel by Organization">
+        <BarRows rows={affiliateRows} emptyMessage="No affiliate organization travel data available." />
       </ReportCard>
     </ScrollView>
   );
@@ -239,7 +149,7 @@ export default function ReportsScreen() {
 
 function toNameCount(item) {
   return {
-    name: item.name || item.sector || item.status || statusLabels[item.final_status] || 'Unassigned',
+    name: item.name || item.sector || item.status || item.final_status || 'Unassigned',
     count: Number(item.count || item.total || 0),
   };
 }
@@ -253,16 +163,6 @@ function Metric({ label, value }) {
   );
 }
 
-function Insight({ label, value, detail }) {
-  return (
-    <View style={styles.insight}>
-      <Text style={styles.insightLabel}>{label}</Text>
-      <Text style={styles.insightValue} numberOfLines={2}>{value}</Text>
-      <Text style={styles.insightDetail}>{detail}</Text>
-    </View>
-  );
-}
-
 function ReportCard({ title, children }) {
   return (
     <Card style={styles.reportCard}>
@@ -272,7 +172,7 @@ function ReportCard({ title, children }) {
   );
 }
 
-function LineTrendChart({ rows }) {
+function LineTrendChart({ rows, emptyMessage = 'No monthly approved travel data available.' }) {
   const [plotWidth, setPlotWidth] = useState(0);
   const cleanRows = rows.filter((item) => item.label);
   const max = Math.max(...cleanRows.map((item) => item.value), 0);
@@ -281,7 +181,7 @@ function LineTrendChart({ rows }) {
   const usableWidth = Math.max(plotWidth - 18, 1);
 
   if (!cleanRows.length) {
-    return <Text style={styles.emptyText}>No monthly approved travel data available.</Text>;
+    return <Text style={styles.emptyText}>{emptyMessage}</Text>;
   }
 
   const points = cleanRows.map((item, index) => {
@@ -355,12 +255,12 @@ function LineSegment({ from, to }) {
   );
 }
 
-function BarRows({ rows }) {
+function BarRows({ rows, emptyMessage = 'No report data available.' }) {
   const cleanRows = rows.filter((item) => item.name);
   const max = Math.max(...cleanRows.map((item) => Number(item.count || 0)), 0);
 
   if (!cleanRows.length) {
-    return <Text style={styles.emptyText}>No report data available.</Text>;
+    return <Text style={styles.emptyText}>{emptyMessage}</Text>;
   }
 
   return cleanRows.map((item) => {

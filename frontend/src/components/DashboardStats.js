@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
   Cell,
+  LabelList,
 } from "recharts";
 
 import API from "../services/api";
@@ -17,6 +18,7 @@ const formatRole = (value) => {
   if (!value) return "User";
 
   const labels = {
+    director_general: "Director General",
     pm_office: "PM Office",
   };
 
@@ -40,12 +42,16 @@ const getDashboardScope = (user) => {
     return "Final ministerial review and approved travel oversight";
   }
 
+  if (role === "director_general") {
+    return sector ? `${sector} affiliate institute review workload` : "Affiliate institute review workload";
+  }
+
   if (role === "office_head") {
     return "Office Head clearance and final review workload";
   }
 
   if (role === "protocol") {
-    return "Protocol clearance and PM Office submission workload";
+    return "Clear protocol reviews, remind decision makers, and submit approved requests to PM Office.";
   }
 
   if (role === "pm_office") {
@@ -66,6 +72,12 @@ const getDashboardScope = (user) => {
       : "Assigned lead executive office workload";
   }
 
+  if (role === "project_coordinator") {
+    return department
+      ? `${department} project coordinator workload`
+      : "Assigned project coordinator workload";
+  }
+
   return "Your available travel request workspace";
 };
 
@@ -79,10 +91,18 @@ function DashboardStats({ setActivePage }) {
     approvedRequests: 0,
     pendingRequests: 0,
     rejectedRequests: 0,
+    requestTypeCounts: {
+      projectStaff: 0,
+      advisor: 0,
+      leadExecutiveStaff: 0,
+      affiliateInstitute: 0,
+    },
   });
+  const [currentlyAbroadCount, setCurrentlyAbroadCount] = useState(0);
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const normalizeSectorData = useCallback((data) => {
     return (data || [])
@@ -99,9 +119,10 @@ function DashboardStats({ setActivePage }) {
       setLoading(true);
       setError("");
 
-      const [statsResponse, chartResponse] = await Promise.all([
+      const [statsResponse, chartResponse, abroadResponse] = await Promise.all([
         API.get(`/stats?role=${role}`),
         API.get(`/dashboard/pending-by-sector?role=${role}&id=${user.id}`),
+        API.get('/reports/currently-abroad').catch(() => ({ data: { total: 0 } })),
       ]);
 
       setStats({
@@ -109,9 +130,17 @@ function DashboardStats({ setActivePage }) {
         approvedRequests: statsResponse.data.approvedRequests || 0,
         pendingRequests: statsResponse.data.pendingRequests || 0,
         rejectedRequests: statsResponse.data.rejectedRequests || 0,
+        requestTypeCounts: statsResponse.data.requestTypeCounts || {
+          projectStaff: 0,
+          advisor: 0,
+          leadExecutiveStaff: 0,
+          affiliateInstitute: 0,
+        },
       });
 
+      setCurrentlyAbroadCount(Number(abroadResponse.data?.total || 0));
       setChartData(normalizeSectorData(chartResponse.data || []));
+      setLastUpdated(new Date());
     } catch (err) {
       console.error(err);
       setError(err?.response?.data?.error || "Unable to load dashboard analytics.");
@@ -157,6 +186,12 @@ function DashboardStats({ setActivePage }) {
       topPendingSector,
       pendingSectorTotal,
       concentration,
+      requestTypeCounts: {
+        projectStaff: Number(stats.requestTypeCounts?.projectStaff || 0),
+        advisor: Number(stats.requestTypeCounts?.advisor || 0),
+        leadExecutiveStaff: Number(stats.requestTypeCounts?.leadExecutiveStaff || 0),
+        affiliateInstitute: Number(stats.requestTypeCounts?.affiliateInstitute || 0),
+      },
     };
   }, [chartData, stats]);
 
@@ -170,70 +205,253 @@ function DashboardStats({ setActivePage }) {
     [role, user]
   );
 
+  const goToSubmittedRequests = (filter = null) => {
+    if (!setActivePage) return;
+
+    if (filter) {
+      sessionStorage.setItem("ftmsRequestViewFilter", JSON.stringify(filter));
+    } else {
+      sessionStorage.removeItem("ftmsRequestViewFilter");
+    }
+
+    setActivePage("submitted-requests");
+  };
+
+  const canOpenQueue = Boolean(setActivePage);
+
+  const handleMetricKeyDown = (event, onClick) => {
+    if (!onClick) return;
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onClick();
+    }
+  };
+
   const kpis = [
     {
       label: "Total Requests",
       value: analytics.total,
-      detail: "All travel requests recorded",
+      detail: "All travel requests",
       tone: "blue",
+      meter: 100,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "all", label: "Total Requests" })
+        : null,
     },
     {
       label: "Approved",
       value: analytics.approved,
-      detail: `${analytics.approvalRate}% of completed decisions`,
+      detail: `${analytics.approvalRate}% approval rate`,
       tone: "green",
+      meter: analytics.approvalRate,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "historical", status: "approved", label: "Approved Requests" })
+        : null,
     },
     {
       label: "Pending",
       value: analytics.pending,
-      detail: `${analytics.pendingShare}% of total requests`,
+      detail: "Still waiting",
       tone: "amber",
+      meter: analytics.pendingShare,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "active", status: "pending", label: "Pending Requests" })
+        : null,
     },
     {
       label: "Rejected",
       value: analytics.rejected,
-      detail: `${analytics.rejectionRate}% of completed decisions`,
+      detail: `${analytics.rejectionRate}% rejection rate`,
       tone: "rose",
+      meter: analytics.rejectionRate,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "historical", status: "rejected", label: "Rejected Requests" })
+        : null,
     },
   ];
 
-  const goToSubmittedRequests = () => {
-    if (role !== "traveler" && setActivePage) {
-      setActivePage("submitted-requests");
-    }
-  };
+  const structureCounts = [
+    {
+      label: "Project Staff",
+      value: analytics.requestTypeCounts.projectStaff,
+      detail: "Project-based requests",
+      tone: "blue",
+      meter: analytics.total
+        ? Math.round((analytics.requestTypeCounts.projectStaff / analytics.total) * 100)
+        : 0,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "all", travelerCategory: "project", label: "Project Staff Requests" })
+        : null,
+    },
+    {
+      label: "Advisors",
+      value: analytics.requestTypeCounts.advisor,
+      detail: "Advisor requests",
+      tone: "green",
+      meter: analytics.total
+        ? Math.round((analytics.requestTypeCounts.advisor / analytics.total) * 100)
+        : 0,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "all", travelerCategory: "advisor", label: "Advisor Requests" })
+        : null,
+    },
+    {
+      label: "Staff under Lead Executive",
+      value: analytics.requestTypeCounts.leadExecutiveStaff,
+      detail: "Regular MoA staff",
+      tone: "amber",
+      meter: analytics.total
+        ? Math.round((analytics.requestTypeCounts.leadExecutiveStaff / analytics.total) * 100)
+        : 0,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "all", travelerCategory: "lead_executive_staff", label: "Staff under Lead Executive Requests" })
+        : null,
+    },
+    {
+      label: "Affiliate Institute",
+      value: analytics.requestTypeCounts.affiliateInstitute,
+      detail: "Affiliate requests",
+      tone: "rose",
+      meter: analytics.total
+        ? Math.round((analytics.requestTypeCounts.affiliateInstitute / analytics.total) * 100)
+        : 0,
+      onClick: canOpenQueue
+        ? () => goToSubmittedRequests({ scope: "all", travelerCategory: "affiliate_institution", label: "Affiliate Institute Requests" })
+        : null,
+    },
+  ];
 
   const actionCards = [
     {
-      title: "Open Assigned Queue",
-      detail: "Review pending requests that match your workflow responsibility.",
-      action: "Open requests",
-      onClick: goToSubmittedRequests,
+      title: role === "protocol" ? "Open active requested travel" : "Review requests",
+      detail:
+        role === "protocol"
+          ? "Clear protocol items or remind decision makers."
+          : "Open the travel requests waiting for action.",
+      action: "Open",
+      tone: "teal",
+      onClick: () => goToSubmittedRequests(),
       show: role !== "traveler",
     },
     {
-      title: "Create Travel Request",
-      detail: "Start a new foreign travel request for workflow approval.",
-      action: "New request",
+      title: "Create request",
+      detail: "Start a new foreign travel request.",
+      action: "New",
+      tone: "green",
       onClick: () => setActivePage && setActivePage("travel-request"),
       show: role !== "minister",
     },
     {
-      title: "Analytical Reports",
-      detail: "Open detailed reports for status, sector, and approval trends.",
-      action: "View reports",
+      title: "View reports",
+      detail: "See travel summaries and trends.",
+      action: "Reports",
+      tone: "blue",
       onClick: () => setActivePage && setActivePage("reports"),
       show: canOpenReports,
     },
   ].filter((item) => item.show);
 
+  const recommendedAction = useMemo(() => {
+    if (role === "protocol" && analytics.pending > 0) {
+      return {
+        label: "Next step",
+        title: "Open active requested travel",
+        detail: `${analytics.pending} request(s) need protocol action or reminder follow-up.`,
+      };
+    }
+
+    if (analytics.pending > 0 && role !== "traveler") {
+      return {
+        label: "Next step",
+        title: "Review pending requests",
+        detail: `${analytics.pending} request(s) are waiting for a decision.`,
+      };
+    }
+
+    if (role !== "minister") {
+      return {
+        label: "Next step",
+        title: "Create or track travel",
+        detail: "Start a request or check existing travel progress.",
+      };
+    }
+
+    return {
+      label: "Next step",
+      title: "Review reports",
+      detail: "Open reports for ministry travel visibility.",
+    };
+  }, [analytics.pending, role]);
+
+  const lastUpdatedLabel = lastUpdated
+    ? lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : "Not refreshed yet";
+
   const chartColors = ["#1d4ed8", "#15803d", "#b45309", "#7c3aed", "#0369a1"];
+
+  const intelligenceItems = [
+    {
+      label: role === "protocol" ? "Active Requested Travel" : "Requests Needing Action",
+      value: loading ? "-" : analytics.pending,
+      helper:
+        role === "protocol"
+          ? "Clear, submit, or send reminders"
+          : analytics.pending > 0
+          ? "Waiting for decision"
+          : "Nothing waiting",
+    },
+    {
+      label: "Completion Rate",
+      value: loading ? "-" : `${analytics.completedShare}%`,
+      helper: `${analytics.completed} of ${analytics.total} finished`,
+    },
+    {
+      label: "Staff Currently Abroad",
+      value: loading ? "-" : currentlyAbroadCount,
+      helper: "Approved and traveling now",
+    },
+    {
+      label: "Your Role",
+      value: dashboardContext.roleLabel,
+      helper: dashboardContext.structure,
+    },
+  ];
+
+  const renderMetricCard = (item) => {
+    const clickable = Boolean(item.onClick);
+    const meterValue = Math.max(0, Math.min(100, Number(item.meter || 0)));
+
+    return (
+      <div
+        key={item.label}
+        className={`dashboard-kpi-card ${item.tone} ${clickable ? "interactive" : ""}`}
+        role={clickable ? "button" : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        onClick={clickable ? item.onClick : undefined}
+        onKeyDown={(event) => handleMetricKeyDown(event, item.onClick)}
+        title={clickable ? "Open related view" : undefined}
+      >
+        <div className="dashboard-kpi-topline">
+          <span>{item.label}</span>
+          {clickable && <em>Open</em>}
+        </div>
+        <div className="dashboard-kpi-main">
+          <strong>{loading ? "-" : item.value}</strong>
+          <small>{item.detail}</small>
+        </div>
+        <div className="dashboard-kpi-meter" aria-hidden="true">
+          <i style={{ width: `${meterValue}%` }} />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="dashboard-page">
       <div className="dashboard-header">
         <div>
-          <span className="dashboard-eyebrow">Dashboard Overview</span>
+          <span className="dashboard-eyebrow">Overview</span>
           <h2>{dashboardContext.roleLabel} Workspace</h2>
           <p>
             {dashboardContext.scope}
@@ -252,41 +470,86 @@ function DashboardStats({ setActivePage }) {
 
       {error && <div className="notice-error">{error}</div>}
 
-      <div className="dashboard-context-grid">
-        <div className="dashboard-context-card">
-          <span>Logged-in Role</span>
-          <strong>{dashboardContext.roleLabel}</strong>
+      <div className={`dashboard-smart-panel role-${role || "user"}`}>
+        <div className="dashboard-smart-main">
+          <span>{recommendedAction.label}</span>
+          <h3>{recommendedAction.title}</h3>
+          <p>{recommendedAction.detail}</p>
+          <small>Last updated: {lastUpdatedLabel}</small>
         </div>
-        <div className="dashboard-context-card">
-          <span>Structure</span>
-          <strong title={dashboardContext.structure}>
-            {dashboardContext.structure}
-          </strong>
+
+        <div className="dashboard-smart-metrics">
+          {intelligenceItems.map((item) => (
+            <div key={item.label}>
+              <span>{item.label}</span>
+              <strong title={item.value}>{item.value}</strong>
+              <small title={item.helper}>{item.helper}</small>
+            </div>
+          ))}
         </div>
-        <div className="dashboard-context-card">
-          <span>Lead Executive Office</span>
-          <strong title={dashboardContext.office}>
-            {dashboardContext.office}
-          </strong>
-        </div>
+
+        {actionCards.length > 0 && (
+          <div className="dashboard-smart-actions">
+            {actionCards.map((item) => (
+              <button
+                type="button"
+                key={item.title}
+                className={`dashboard-action-tile ${item.tone}`}
+                onClick={item.onClick}
+              >
+                <span>{item.action}</span>
+                <strong>{item.title}</strong>
+                <small>{item.detail}</small>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="dashboard-kpi-grid">
-        {kpis.map((item) => (
-          <div key={item.label} className={`dashboard-kpi-card ${item.tone}`}>
-            <span>{item.label}</span>
-            <strong>{loading ? "-" : item.value}</strong>
-            <small>{item.detail}</small>
+        {kpis.map(renderMetricCard)}
+      </div>
+
+      <div className="dashboard-panel" style={{ marginBottom: "24px" }}>
+        <div className="dashboard-panel-header">
+          <div>
+            <h3>Requests by Traveler Type</h3>
+            <p>Quick count of where requests came from.</p>
           </div>
-        ))}
+        </div>
+
+        <div className="dashboard-structure-strip">
+          {structureCounts.map((item) => {
+            const clickable = Boolean(item.onClick);
+            const meterValue = Math.max(0, Math.min(100, Number(item.meter || 0)));
+
+            return (
+              <button
+                type="button"
+                key={item.label}
+                className={`dashboard-structure-chip ${item.tone}`}
+                onClick={clickable ? item.onClick : undefined}
+                disabled={!clickable}
+                title={clickable ? "Open related requests" : undefined}
+              >
+                <span>{item.label}</span>
+                <strong>{loading ? "-" : item.value}</strong>
+                <small>{item.detail}</small>
+                <i aria-hidden="true">
+                  <b style={{ width: `${meterValue}%` }} />
+                </i>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="dashboard-analytics-grid">
         <div className="dashboard-panel dashboard-chart-panel">
           <div className="dashboard-panel-header">
             <div>
-              <h3>Pending Requests by Sector</h3>
-              <p>Shows where active review workload is concentrated.</p>
+              <h3>Pending by Sector</h3>
+              <p>Where requests are waiting now.</p>
             </div>
 
             {analytics.pendingSectorTotal > 0 && (
@@ -314,7 +577,7 @@ function DashboardStats({ setActivePage }) {
                   tick={{ fontSize: 12, fill: "#475569" }}
                 />
 
-                <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#475569" }} />
+                <YAxis hide allowDecimals={false} />
 
                 <Tooltip
                   cursor={{ fill: "rgba(29, 78, 216, 0.08)" }}
@@ -325,7 +588,7 @@ function DashboardStats({ setActivePage }) {
                   dataKey="pending_count"
                   name="Pending Requests"
                   radius={[6, 6, 0, 0]}
-                  onClick={goToSubmittedRequests}
+                  onClick={() => goToSubmittedRequests()}
                   style={{
                     cursor: user?.role !== "traveler" ? "pointer" : "default",
                   }}
@@ -336,6 +599,13 @@ function DashboardStats({ setActivePage }) {
                       fill={chartColors[index % chartColors.length]}
                     />
                   ))}
+                  <LabelList
+                    dataKey="pending_count"
+                    position="top"
+                    fill="#0f172a"
+                    fontSize={13}
+                    fontWeight={700}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

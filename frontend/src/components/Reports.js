@@ -6,9 +6,6 @@ import {
   Bar,
   LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -22,88 +19,52 @@ import API from '../services/api';
 
 const REPORT_ROLES = ['admin', 'super_admin', 'minister', 'office_head'];
 
-const COLORS = {
-  approved: '#16a34a',
-  rejected: '#dc2626',
-  pending: '#f59e0b',
-  amended: '#7c3aed',
-  total: '#2563eb',
-  stage: ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#7c3aed', '#0891b2'],
-};
-
 const formatRole = (role) =>
   String(role || 'User')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-const formatStage = (stage) => {
-  const labels = {
-    expert_preparation: 'Expert Preparation',
-    lead_executive_review: 'Lead Executive Review',
-    director_review: 'Lead Executive Review',
-    state_minister_review: 'State Minister Review',
-    ceo_review: 'CEO Review',
-    office_head_review: 'Office Head Review',
-    protocol_clearance: 'Protocol Clearance',
-    office_head_final: 'Office Head Final',
-    minister_review: 'Minister Review',
-    pm_office_submission: 'Protocol Submission to PM Office',
-    pm_office_followup: 'PM Office Follow-up',
-    foreign_affairs_followup: 'PM Office Follow-up',
-    completed: 'Completed',
-  };
+const formatReportDate = (value) => {
+  if (!value) return '-';
 
-  return labels[stage] || formatRole(stage);
-};
+  const date = new Date(value);
 
-const addMonths = (date, months) => {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
-};
+  if (Number.isNaN(date.getTime())) return '-';
 
-const formatMonth = (date) =>
-  date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString('en-US', {
     month: 'short',
+    day: '2-digit',
     year: 'numeric',
   });
+};
 
-const buildMonthlyForecast = (monthlyRequests) => {
-  const actual = (monthlyRequests || []).map((item) => ({
-    month: item.month,
-    actual: Number(item.total || 0),
-    forecast: null,
-    type: 'Actual',
-  }));
+const useViewportWidth = () => {
+  const getWidth = () =>
+    typeof window === 'undefined' ? 1440 : window.innerWidth;
 
-  if (actual.length === 0) return [];
+  const [width, setWidth] = useState(getWidth);
 
-  const recent = actual.slice(-3);
-  const average =
-    recent.reduce((sum, item) => sum + item.actual, 0) / recent.length;
-  const last = actual[actual.length - 1]?.actual || 0;
-  const previous =
-    actual.length > 1 ? actual[actual.length - 2]?.actual || 0 : last;
-  const trend = Math.max(-2, Math.min(3, last - previous));
-  const lastMonthDate = monthlyRequests[monthlyRequests.length - 1]?.month_date
-    ? new Date(monthlyRequests[monthlyRequests.length - 1].month_date)
-    : new Date();
+  useEffect(() => {
+    const handleResize = () => setWidth(getWidth());
 
-  const forecast = [1, 2, 3].map((step) => ({
-    month: formatMonth(addMonths(lastMonthDate, step)),
-    actual: null,
-    forecast: Math.max(0, Math.round(average + trend * step)),
-    type: 'Forecast',
-  }));
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-  return [...actual, ...forecast];
+  return width;
 };
 
 function Reports() {
+  const viewportWidth = useViewportWidth();
   const [statusSummary, setStatusSummary] = useState([]);
-  const [sectorStatus, setSectorStatus] = useState([]);
   const [monthlyRequests, setMonthlyRequests] = useState([]);
-  const [stageSummary, setStageSummary] = useState([]);
+  const [fundingSummary, setFundingSummary] = useState([]);
+  const [currentlyAbroad, setCurrentlyAbroad] = useState({
+    total: 0,
+    bySector: [],
+    byDepartment: [],
+    travelers: [],
+  });
 
   const [moaVsAffiliateData, setMoaVsAffiliateData] = useState([]);
   const [moaSectorData, setMoaSectorData] = useState([]);
@@ -123,30 +84,15 @@ function Reports() {
   const userRole = getUserRole();
   const canViewReports = REPORT_ROLES.includes(userRole);
   const canViewOfficeMinisterGraphs = canViewReports;
-
-  const transformSectorData = useCallback((data) => {
-    const grouped = {};
-
-    data.forEach((item) => {
-      const sector = item.sector || 'Unassigned';
-
-      if (!grouped[sector]) {
-        grouped[sector] = {
-          sector,
-          approved: 0,
-          rejected: 0,
-          pending: 0,
-          amended: 0,
-        };
-      }
-
-      const status = item.final_status || item.status || 'pending';
-
-      grouped[sector][status] = Number(item.count) || 0;
-    });
-
-    return Object.values(grouped);
-  }, []);
+  const isMobileChart = viewportWidth < 680;
+  const isTabletChart = viewportWidth >= 680 && viewportWidth < 1180;
+  const compactChartHeight = isMobileChart ? 240 : isTabletChart ? 270 : 300;
+  const abroadChartHeight = isMobileChart ? 190 : 205;
+  const monthlyChartHeight = isMobileChart ? 260 : isTabletChart ? 310 : 350;
+  const organizationAxisWidth = isMobileChart ? 106 : 140;
+  const sectorAxisWidth = isMobileChart ? 142 : isTabletChart ? 190 : 230;
+  const affiliateAxisWidth = isMobileChart ? 132 : 190;
+  const fundingAxisWidth = isMobileChart ? 112 : 145;
 
   const fetchReports = useCallback(async () => {
     if (!canViewReports) return;
@@ -155,10 +101,10 @@ function Reports() {
 
     const results = await Promise.allSettled([
       API.get('/reports/status-summary'),
-      API.get('/reports/sector-status'),
       API.get('/reports/monthly-requests'),
-      API.get('/reports/stage-summary'),
       API.get('/reports/office-minister-summary'),
+      API.get('/reports/funding-summary'),
+      API.get('/reports/currently-abroad'),
     ]);
 
     if (results[0].status === 'fulfilled') {
@@ -166,19 +112,11 @@ function Reports() {
     }
 
     if (results[1].status === 'fulfilled') {
-      setSectorStatus(transformSectorData(results[1].value.data || []));
+      setMonthlyRequests(results[1].value.data || []);
     }
 
     if (results[2].status === 'fulfilled') {
-      setMonthlyRequests(results[2].value.data || []);
-    }
-
-    if (results[3].status === 'fulfilled') {
-      setStageSummary(results[3].value.data || []);
-    }
-
-    if (results[4].status === 'fulfilled') {
-      const officeMinisterData = results[4].value.data || {};
+      const officeMinisterData = results[2].value.data || {};
 
       setMoaVsAffiliateData(officeMinisterData.moaVsAffiliate || []);
       setMoaSectorData(officeMinisterData.moaBySector || []);
@@ -194,7 +132,20 @@ function Reports() {
         'Some report data could not be loaded. Please check backend report APIs.'
       );
     }
-  }, [canViewReports, transformSectorData]);
+
+    if (results[3].status === 'fulfilled') {
+      setFundingSummary(results[3].value.data || []);
+    }
+
+    if (results[4].status === 'fulfilled') {
+      setCurrentlyAbroad({
+        total: Number(results[4].value.data?.total || 0),
+        bySector: results[4].value.data?.bySector || [],
+        byDepartment: results[4].value.data?.byDepartment || [],
+        travelers: results[4].value.data?.travelers || [],
+      });
+    }
+  }, [canViewReports]);
 
   useEffect(() => {
     fetchReports();
@@ -260,27 +211,110 @@ function Reports() {
     },
   ];
 
-  const formattedStageSummary = stageSummary.map((item) => ({
-    ...item,
-    stageLabel: formatStage(item.current_stage),
-  }));
+  const decisionStatusData = useMemo(
+    () => {
+      const total = Math.max(
+        analytics.approved + analytics.rejected + analytics.pending,
+        1
+      );
 
-  const forecastData = useMemo(
-    () => buildMonthlyForecast(monthlyRequests),
-    [monthlyRequests]
+      return [
+      {
+        name: 'Needs Decision',
+        count: analytics.pending,
+        fill: '#f59e0b',
+        percent: Math.round((analytics.pending / total) * 100),
+        helper: 'Waiting for approval or rejection',
+      },
+      {
+        name: 'Approved',
+        count: analytics.approved,
+        fill: '#16a34a',
+        percent: Math.round((analytics.approved / total) * 100),
+        helper: 'Approved final decisions',
+      },
+      {
+        name: 'Rejected',
+        count: analytics.rejected,
+        fill: '#dc2626',
+        percent: Math.round((analytics.rejected / total) * 100),
+        helper: 'Rejected final decisions',
+      },
+    ];
+    },
+    [analytics.approved, analytics.pending, analytics.rejected]
   );
 
-  const forecastOnly = forecastData.filter((item) => item.type === 'Forecast');
-  const nextForecast = forecastOnly[0]?.forecast || 0;
-  const forecastAverage = forecastOnly.length
-    ? Math.round(
-        forecastOnly.reduce((sum, item) => sum + item.forecast, 0) /
-          forecastOnly.length
-      )
-    : 0;
-  const forecastPeak = forecastOnly.reduce(
-    (peak, item) => (item.forecast > peak.forecast ? item : peak),
-    { month: '-', forecast: 0 }
+  const decisionInsight = useMemo(() => {
+    if (analytics.pending > 0) {
+      return {
+        tone: 'warning',
+        label: 'Attention needed',
+        title: `${analytics.pending} request${analytics.pending === 1 ? '' : 's'} still need a decision`,
+        detail: `${analytics.approved} approved and ${analytics.rejected} rejected so far.`,
+      };
+    }
+
+    return {
+      tone: 'clear',
+      label: 'No pending decision',
+      title: 'All visible requests have a final decision',
+      detail: `${analytics.approved} approved and ${analytics.rejected} rejected.`,
+    };
+  }, [analytics.approved, analytics.pending, analytics.rejected]);
+
+  const leadershipSummaryCards = useMemo(() => {
+    const getChartCount = (items, name) => {
+      const found = items.find((item) => item.name === name);
+      return Number(found?.count || 0);
+    };
+
+    const moaCount = getChartCount(moaVsAffiliateData, 'MoA');
+    const affiliateCount = getChartCount(moaVsAffiliateData, 'Affiliate Institute');
+    const governmentCount = getChartCount(fundingSummary, 'Government');
+    const nonGovernmentCount = getChartCount(fundingSummary, 'Non-government');
+
+    return [
+      {
+        label: 'Decision Needed',
+        value: analytics.pending,
+        detail: `${analytics.approved} approved / ${analytics.rejected} rejected`,
+      },
+      {
+        label: 'Organization Type',
+        value: `${moaCount} MoA`,
+        detail: `${affiliateCount} affiliate institute request(s)`,
+      },
+      {
+        label: 'Funding Source',
+        value: `${governmentCount} government`,
+        detail: `${nonGovernmentCount} non-government request(s)`,
+      },
+      {
+        label: 'Traveling Today',
+        value: currentlyAbroad.total,
+        detail: 'Approved staff currently abroad',
+      },
+    ];
+  }, [
+    analytics.approved,
+    analytics.pending,
+    analytics.rejected,
+    currentlyAbroad.total,
+    fundingSummary,
+    moaVsAffiliateData,
+  ]);
+
+  const currentlyAbroadDepartmentChart = useMemo(
+    () =>
+      currentlyAbroad.byDepartment.map((item) => ({
+        ...item,
+        departmentLabel:
+          item.sector && item.sector !== 'Unassigned'
+            ? `${item.sector} - ${item.department || 'Unassigned'}`
+            : item.department || 'Unassigned',
+      })),
+    [currentlyAbroad.byDepartment]
   );
 
   if (!canViewReports) {
@@ -289,8 +323,8 @@ function Reports() {
         <div className="reports-access-card">
           <h2>Reports Access Restricted</h2>
           <p>
-            Analytical reports are available only to Admin, Super Admin,
-            Minister, and Office Head roles.
+            Analytical reports are available to Admin, Minister, and Office
+            Head roles.
           </p>
           <span>Your role: {formatRole(userRole)}</span>
         </div>
@@ -302,16 +336,15 @@ function Reports() {
     <div className="reports-page">
       <div className="reports-hero">
         <div>
-          <span>FTMS Reports</span>
-          <h2 className="reports-title">Analytical Reports</h2>
+          <span>Reports</span>
+          <h2 className="reports-title">Travel Reports</h2>
           <p>
-            Ministry-level travel analytics for Admin, Super Admin, Minister,
-            and Office Head review.
+            Simple travel summaries for administrators and leadership review.
           </p>
         </div>
 
         <button type="button" onClick={fetchReports}>
-          Refresh Reports
+          Refresh
         </button>
       </div>
 
@@ -327,39 +360,420 @@ function Reports() {
         ))}
       </div>
 
-      <div className="reports-forecast-strip">
-        <div>
-          <span>Next Month Forecast</span>
-          <strong>{nextForecast}</strong>
-          <small>Estimated approved travel requests</small>
+      <div className="reports-section-heading">
+        <h2 className="reports-section-title">Staff Currently Abroad</h2>
+        <p>
+          Approved staff traveling today, summarized by sector, department, and traveler.
+        </p>
+      </div>
+
+      <div className="reports-card reports-abroad-combo-card">
+        <div className="reports-abroad-combo-top">
+          <div className="reports-abroad-focus">
+            <span>Abroad today</span>
+            <strong>{currentlyAbroad.total}</strong>
+            <small>Approved staff within active travel dates</small>
+          </div>
+
+          <div className="reports-abroad-mini-metrics">
+            <div>
+              <span>Sectors</span>
+              <strong>{currentlyAbroad.bySector.length}</strong>
+            </div>
+            <div>
+              <span>Departments</span>
+              <strong>{currentlyAbroadDepartmentChart.length}</strong>
+            </div>
+            <div>
+              <span>Travelers</span>
+              <strong>{currentlyAbroad.travelers.length}</strong>
+            </div>
+          </div>
         </div>
-        <div>
-          <span>3-Month Average Forecast</span>
-          <strong>{forecastAverage}</strong>
-          <small>Expected monthly approval volume</small>
-        </div>
-        <div>
-          <span>Forecast Peak</span>
-          <strong>{forecastPeak.forecast}</strong>
-          <small>{forecastPeak.month}</small>
+
+        <div className="reports-abroad-body">
+          <div className="reports-abroad-chart-grid">
+            <div className="reports-abroad-mini-card">
+              <div className="reports-card-header">
+                <h3>By Sector</h3>
+                <p>Active approved staff grouped by owning structure.</p>
+              </div>
+
+              {currentlyAbroad.bySector.length === 0 ? (
+                <p className="reports-empty compact">No approved staff are abroad today.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={abroadChartHeight}>
+                  <BarChart data={currentlyAbroad.bySector}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="sector"
+                      angle={-15}
+                      textAnchor="end"
+                      interval={0}
+                      height={70}
+                    />
+                    <YAxis hide allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#0f766e" radius={[6, 6, 0, 0]}>
+                      <LabelList
+                        dataKey="count"
+                        position="top"
+                        fontWeight={700}
+                        fill="#334155"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="reports-abroad-mini-card">
+              <div className="reports-card-header">
+                <h3>By Department</h3>
+                <p>Active approved staff grouped by department or office.</p>
+              </div>
+
+              {currentlyAbroadDepartmentChart.length === 0 ? (
+                <p className="reports-empty compact">No department data available today.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={abroadChartHeight}>
+                  <BarChart data={currentlyAbroadDepartmentChart}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="departmentLabel"
+                      angle={-15}
+                      textAnchor="end"
+                      interval={0}
+                      height={70}
+                    />
+                    <YAxis hide allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]}>
+                      <LabelList
+                        dataKey="count"
+                        position="top"
+                        fontWeight={700}
+                        fill="#334155"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          <div className="reports-abroad-list-panel">
+            <div className="reports-card-header">
+              <h3>Current Staff Abroad List</h3>
+              <p>Names, destinations, sectors, departments, and remaining days abroad.</p>
+            </div>
+
+            {currentlyAbroad.travelers.length === 0 ? (
+              <p className="reports-empty compact">No approved staff are abroad today.</p>
+            ) : (
+              <div className="reports-table-wrap">
+                <table className="reports-data-table">
+                  <thead>
+                    <tr>
+                      <th>Staff Member</th>
+                      <th>Sector</th>
+                      <th>Department</th>
+                      <th>Destination</th>
+                      <th>Travel Dates</th>
+                      <th>Days Abroad</th>
+                      <th>Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentlyAbroad.travelers.map((traveler) => (
+                      <tr key={traveler.id}>
+                        <td>
+                          <strong>{traveler.full_name}</strong>
+                          <span>{traveler.position || '-'}</span>
+                        </td>
+                        <td>{traveler.sector || 'Unassigned'}</td>
+                        <td>{traveler.department || 'Unassigned'}</td>
+                        <td>{traveler.country || '-'}</td>
+                        <td>
+                          {formatReportDate(traveler.start_date)} to{' '}
+                          {formatReportDate(traveler.end_date)}
+                        </td>
+                        <td>{Number(traveler.days_abroad || 0)}</td>
+                        <td>{Number(traveler.days_remaining || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* ============================================================
+          PART 2: OFFICE HEAD AND MINISTER REPORTS
+      ============================================================ */}
+
+      {canViewOfficeMinisterGraphs && (
+        <section className="reports-leadership-panel">
+          <div className="reports-section-heading">
+            <h2 className="reports-section-title">
+              Office Head and Minister Summary
+            </h2>
+            <p>
+              A leadership view of decisions, organization coverage, sector
+              distribution, affiliate requests, and funding source.
+            </p>
+          </div>
+
+          <div className="reports-leadership-summary">
+            {leadershipSummaryCards.map((item) => (
+              <div key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <small>{item.detail}</small>
+              </div>
+            ))}
+          </div>
+
+          <div className="reports-grid reports-leadership-grid">
+            <div className="reports-card reports-status-dashboard reports-leadership-wide">
+              <div className="reports-card-header">
+                <h3>Decision Status</h3>
+                <p>Shows what needs leadership attention and what already has a final decision.</p>
+              </div>
+
+              <div className={`reports-decision-insight ${decisionInsight.tone}`}>
+                <span>{decisionInsight.label}</span>
+                <strong>{decisionInsight.title}</strong>
+                <small>{decisionInsight.detail}</small>
+              </div>
+
+              <div className="reports-status-graphic">
+                {decisionStatusData.map((item) => (
+                  <div className="reports-status-row" key={item.name}>
+                    <div className="reports-status-row-heading">
+                      <span>{item.name}</span>
+                      <strong>{item.count}</strong>
+                    </div>
+                    <div className="reports-status-track">
+                      <i
+                        style={{
+                          width: `${Math.max(item.percent, item.count > 0 ? 6 : 0)}%`,
+                          backgroundColor: item.fill,
+                        }}
+                      />
+                    </div>
+                    <small>{item.helper} · {item.percent}%</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="reports-card reports-compact-chart">
+              <div className="reports-card-header">
+                <h3>Requests by Organization Type</h3>
+                <p>Compares internal MoA and affiliate institute requests.</p>
+              </div>
+
+              {moaVsAffiliateData.length === 0 ? (
+                <p className="reports-empty">No MoA or Affiliate Institute data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={compactChartHeight}>
+                  <BarChart
+                    data={moaVsAffiliateData}
+                    layout="vertical"
+                    margin={{ top: 10, right: 42, left: 8, bottom: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+
+                    <XAxis type="number" hide allowDecimals={false} />
+
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={organizationAxisWidth}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+
+                    <Tooltip />
+
+                    <Bar
+                      dataKey="count"
+                      fill="#2563eb"
+                      radius={[0, 8, 8, 0]}
+                    >
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        fontWeight={800}
+                        fill="#334155"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="reports-card reports-compact-chart">
+              <div className="reports-card-header">
+                <h3>MoA Requests by Sector</h3>
+                <p>MoA requests grouped by registered structure.</p>
+              </div>
+
+              {moaSectorData.length === 0 ? (
+                <p className="reports-empty">No MoA sector data available</p>
+              ) : (
+                <ResponsiveContainer
+                  width="100%"
+                  height={Math.max(
+                    isMobileChart ? 260 : 280,
+                    moaSectorData.length * (isMobileChart ? 42 : 52)
+                  )}
+                >
+                  <BarChart
+                    data={moaSectorData}
+                    layout="vertical"
+                    margin={{ top: 8, right: 44, left: 12, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+
+                    <XAxis type="number" hide allowDecimals={false} />
+
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={sectorAxisWidth}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+
+                    <Tooltip />
+
+                    <Bar
+                      dataKey="count"
+                      fill="#16a34a"
+                      radius={[0, 8, 8, 0]}
+                    >
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        fontWeight={800}
+                        fill="#334155"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="reports-card reports-compact-chart">
+              <div className="reports-card-header">
+                <h3>Affiliate Requests by Organization</h3>
+                <p>Affiliate institute requests grouped by organization.</p>
+              </div>
+
+              {affiliateOrganizationData.length === 0 ? (
+                <p className="reports-empty">No affiliate organization data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={compactChartHeight}>
+                  <BarChart
+                    data={affiliateOrganizationData}
+                    layout="vertical"
+                    margin={{ top: 10, right: 42, left: 8, bottom: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+
+                    <XAxis type="number" hide allowDecimals={false} />
+
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={affiliateAxisWidth}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+
+                    <Tooltip />
+
+                    <Bar
+                      dataKey="count"
+                      fill="#f97316"
+                      radius={[0, 8, 8, 0]}
+                    >
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        fontWeight={800}
+                        fill="#334155"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="reports-card reports-compact-chart">
+              <div className="reports-card-header">
+                <h3>Funding Source</h3>
+                <p>Government and non-government funded requests.</p>
+              </div>
+
+              {fundingSummary.length === 0 ? (
+                <p className="reports-empty">No funding data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={compactChartHeight}>
+                  <BarChart
+                    data={fundingSummary}
+                    layout="vertical"
+                    margin={{ top: 10, right: 42, left: 8, bottom: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+
+                    <XAxis type="number" hide allowDecimals={false} />
+
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={fundingAxisWidth}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+
+                    <Tooltip />
+
+                    <Bar dataKey="count" fill="#0f766e" radius={[0, 8, 8, 0]}>
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        fontWeight={800}
+                        fill="#334155"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ============================================================
           PART 1: GENERAL ANALYTICAL REPORTS
       ============================================================ */}
 
-      <div className="reports-chart-pair">
-        <div className="reports-card">
+      <div className="reports-grid">
+        <div className="reports-card reports-card-wide">
           <div className="reports-card-header">
-            <h3>Monthly Approved Travel</h3>
-            <p>Approved requests grouped by travel start month.</p>
+            <h3>Monthly Travel Trend</h3>
+            <p>Approved travel requests shown by month across the system.</p>
           </div>
 
           {monthlyRequests.length === 0 ? (
-            <p className="reports-empty">No monthly data available</p>
+            <p className="reports-empty">No monthly travel data available</p>
           ) : (
-            <ResponsiveContainer width="100%" height={350}>
+            <ResponsiveContainer width="100%" height={monthlyChartHeight}>
               <LineChart data={monthlyRequests}>
                 <CartesianGrid strokeDasharray="3 3" />
 
@@ -377,8 +791,11 @@ function Reports() {
                 <Line
                   type="monotone"
                   dataKey="total"
-                  stroke="#2563eb"
+                  name="Approved Travel"
+                  stroke="#0f766e"
                   strokeWidth={3}
+                  dot={{ r: 5 }}
+                  activeDot={{ r: 7 }}
                 >
                   <LabelList
                     dataKey="total"
@@ -386,7 +803,7 @@ function Reports() {
                     style={{
                       fontSize: 12,
                       fontWeight: 700,
-                      fill: '#2563eb',
+                      fill: '#0f766e',
                     }}
                   />
                 </Line>
@@ -394,323 +811,9 @@ function Reports() {
             </ResponsiveContainer>
           )}
         </div>
-
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>3-Month Travel Forecast</h3>
-            <p>
-              Simple projection based on recent approved monthly travel volume.
-            </p>
-          </div>
-
-          {forecastData.length === 0 ? (
-            <p className="reports-empty">No monthly data available for forecasting</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={330}>
-              <LineChart data={forecastData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis allowDecimals={false} tickCount={6} domain={[0, 'auto']} />
-                <Tooltip />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="actual"
-                  name="Actual Approved"
-                  stroke="#2563eb"
-                  strokeWidth={3}
-                  connectNulls={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="forecast"
-                  name="Forecast"
-                  stroke="#f59e0b"
-                  strokeWidth={3}
-                  strokeDasharray="6 5"
-                  connectNulls={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
       </div>
 
-      <div className="reports-grid">
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>Status by Structure</h3>
-            <p>Approved, rejected, and pending requests by sector or organization group.</p>
-          </div>
 
-          {sectorStatus.length === 0 ? (
-            <p className="reports-empty">No sector data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={sectorStatus}>
-                <CartesianGrid strokeDasharray="3 3" />
-
-                <XAxis dataKey="sector" />
-
-                <YAxis
-                  allowDecimals={false}
-                  tickCount={6}
-                  domain={[0, 'auto']}
-                />
-
-                <Tooltip />
-                <Legend />
-
-                <Bar
-                  dataKey="approved"
-                  fill="#16a34a"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-
-                <Bar
-                  dataKey="rejected"
-                  fill="#dc2626"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-
-                <Bar
-                  dataKey="pending"
-                  fill="#f59e0b"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>Requests by Workflow Stage</h3>
-            <p>Current workflow distribution across all requests.</p>
-          </div>
-
-          {stageSummary.length === 0 ? (
-            <p className="reports-empty">No workflow stage data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={350}>
-              <PieChart>
-                <Pie
-                  data={formattedStageSummary}
-                  dataKey="count"
-                  nameKey="stageLabel"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={120}
-                  label
-                >
-                  {formattedStageSummary.map((entry, index) => (
-                    <Cell
-                      key={index}
-                      fill={COLORS.stage[index % COLORS.stage.length]}
-                    />
-                  ))}
-                </Pie>
-
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>Status Summary</h3>
-            <p>Overall final status distribution.</p>
-          </div>
-
-          {statusSummary.length === 0 ? (
-            <p className="reports-empty">No status data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={statusSummary}>
-                <CartesianGrid strokeDasharray="3 3" />
-
-                <XAxis dataKey="status" />
-
-                <YAxis
-                  allowDecimals={false}
-                  tickCount={6}
-                  domain={[0, 'auto']}
-                />
-
-                <Tooltip />
-                <Legend />
-
-                <Bar
-                  dataKey="count"
-                  fill="#2563eb"
-                  label={{
-                    position: 'top',
-                    fontWeight: 600,
-                    fill: '#334155',
-                  }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* ============================================================
-          PART 2: OFFICE HEAD AND MINISTER REPORTS
-      ============================================================ */}
-
-      {canViewOfficeMinisterGraphs && (
-        <>
-          <div className="reports-section-heading">
-            <h2 className="reports-section-title">
-              Office Head and Minister Report
-            </h2>
-            <p>Organization-level reports visible to all report-authorized roles.</p>
-          </div>
-
-          <div className="reports-grid">
-            <div className="reports-card">
-              <div className="reports-card-header">
-                <h3>MoA vs Affiliate Institute Count</h3>
-                <p>Compares internal MoA and affiliate institution travel requests.</p>
-              </div>
-
-              {moaVsAffiliateData.length === 0 ? (
-                <p className="reports-empty">No MoA or Affiliate Institute data available</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={moaVsAffiliateData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-
-                    <XAxis dataKey="name" />
-
-                    <YAxis
-                      allowDecimals={false}
-                      tickCount={6}
-                      domain={[0, 'auto']}
-                    />
-
-                    <Tooltip />
-                    <Legend />
-
-                    <Bar
-                      dataKey="count"
-                      fill="#2563eb"
-                      label={{
-                        position: 'top',
-                        fontWeight: 600,
-                        fill: '#334155',
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className="reports-card">
-              <div className="reports-card-header">
-                <h3>MoA Travelers by Sector</h3>
-                <p>MoA requests grouped by registered structure.</p>
-              </div>
-
-              {moaSectorData.length === 0 ? (
-                <p className="reports-empty">No MoA sector data available</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={moaSectorData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-
-                    <XAxis
-                      dataKey="name"
-                      angle={-10}
-                      textAnchor="end"
-                      interval={0}
-                      height={90}
-                    />
-
-                    <YAxis
-                      allowDecimals={false}
-                      tickCount={6}
-                      domain={[0, 'auto']}
-                    />
-
-                    <Tooltip />
-                    <Legend />
-
-                    <Bar
-                      dataKey="count"
-                      fill="#16a34a"
-                      label={{
-                        position: 'top',
-                        fontWeight: 600,
-                        fill: '#334155',
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className="reports-card">
-              <div className="reports-card-header">
-                <h3>Affiliate Institute Travelers by Organization</h3>
-                <p>Affiliate institution requests grouped by organization.</p>
-              </div>
-
-              {affiliateOrganizationData.length === 0 ? (
-                <p className="reports-empty">No affiliate organization data available</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={affiliateOrganizationData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-
-                    <XAxis
-                      dataKey="name"
-                      angle={-25}
-                      textAnchor="end"
-                      interval={0}
-                      height={90}
-                    />
-
-                    <YAxis
-                      allowDecimals={false}
-                      tickCount={6}
-                      domain={[0, 'auto']}
-                    />
-
-                    <Tooltip />
-                    <Legend />
-
-                    <Bar
-                      dataKey="count"
-                      fill="#f97316"
-                      label={{
-                        position: 'top',
-                        fontWeight: 600,
-                        fill: '#334155',
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }

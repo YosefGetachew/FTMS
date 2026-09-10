@@ -16,9 +16,19 @@ function Settings() {
         group: "Lead Executive Officers",
       },
       {
+        value: "project_coordinator",
+        label: "Project Coordinator",
+        group: "Projects",
+      },
+      {
         value: "chief_executive_officer",
         label: "CEO",
         group: "CEO",
+      },
+      {
+        value: "director_general",
+        label: "Director General",
+        group: "Affiliate Institutes",
       },
       {
         value: "office_head",
@@ -89,6 +99,7 @@ function Settings() {
   );
 
   const [affiliateInstitutions, setAffiliateInstitutions] = useState([]);
+  const [moaProjects, setMoaProjects] = useState([]);
   const [sectorApprovers, setSectorApprovers] = useState([]);
 
   const [moaSectors, setMoaSectors] = useState([]);
@@ -98,6 +109,7 @@ function Settings() {
   const [generalDirectorName, setGeneralDirectorName] = useState("");
   const [organizationEmail, setOrganizationEmail] = useState("");
   const [organizationPhone, setOrganizationPhone] = useState("");
+  const [generalDirectorPassword, setGeneralDirectorPassword] = useState("");
 
   const [sectorName, setSectorName] = useState("");
   const [sectorWorkflowType, setSectorWorkflowType] =
@@ -107,6 +119,16 @@ function Settings() {
   const [executiveOfficeStructureType, setExecutiveOfficeStructureType] =
     useState("sector_structure");
   const [executiveOfficeName, setExecutiveOfficeName] = useState("");
+
+  const [projectStructureType, setProjectStructureType] =
+    useState("sector_structure");
+  const [projectParentStructureId, setProjectParentStructureId] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [projectCoordinatorName, setProjectCoordinatorName] = useState("");
+  const [projectCoordinatorEmail, setProjectCoordinatorEmail] = useState("");
+  const [projectCoordinatorPhone, setProjectCoordinatorPhone] = useState("");
+  const [projectCoordinatorPassword, setProjectCoordinatorPassword] =
+    useState("");
 
   const [sector, setSector] = useState("");
   const [approverOffice, setApproverOffice] = useState("");
@@ -121,9 +143,11 @@ function Settings() {
   const [editingOrganization, setEditingOrganization] = useState(null);
   const [editingSector, setEditingSector] = useState(null);
   const [editingExecutiveOffice, setEditingExecutiveOffice] = useState(null);
+  const [editingProject, setEditingProject] = useState(null);
   const [editingApprover, setEditingApprover] = useState(null);
   const [inheritanceFilter, setInheritanceFilter] = useState("");
   const [executiveOfficeFilter, setExecutiveOfficeFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
   const [approverListFilter, setApproverListFilter] = useState("");
   const [activeSettingsSection, setActiveSettingsSection] = useState("structures");
 
@@ -141,13 +165,25 @@ function Settings() {
     (user) => user.role === "office_head"
   );
 
+  const directorGenerals = sectorApprovers.filter((user) =>
+    ["director_general", "office_head"].includes(user.role)
+  );
+
   const ministers = sectorApprovers.filter((user) => user.role === "minister");
 
   const leadExecutives = sectorApprovers.filter((user) =>
     ["lead_executive_officer", "lead_executive"].includes(user.role)
   );
 
+  const projectCoordinators = sectorApprovers.filter(
+    (user) => user.role === "project_coordinator"
+  );
+
   const getOwnerForStructure = (structure) => {
+    if (structure.workflow_type === "affiliate_structure") {
+      return directorGenerals.find((user) => user.sector === structure.name);
+    }
+
     if (structure.workflow_type === "sector_structure") {
       return stateMinisters.find((user) => user.sector === structure.name);
     }
@@ -174,6 +210,7 @@ function Settings() {
       return "Head of the Minister's Office";
     }
     if (workflowType === "minister_structure") return "Minister";
+    if (workflowType === "affiliate_structure") return "Director General";
     return "Owner";
   };
 
@@ -185,8 +222,15 @@ function Settings() {
       (user) => user.sector === sectorName && user.department === officeName
     );
 
+  const getProjectCoordinatorsForProject = (sectorName, projectName) =>
+    projectCoordinators.filter(
+      (user) => user.sector === sectorName && user.department === projectName
+    );
+
   const isLeadExecutiveRole = (role) =>
     ["lead_executive_officer", "lead_executive"].includes(role);
+
+  const isProjectCoordinatorRole = (role) => role === "project_coordinator";
 
   const isStructureOwnerRole = (role) =>
     ["state_minister", "chief_executive_officer", "ceo", "office_head"].includes(
@@ -194,7 +238,10 @@ function Settings() {
     );
 
   const getStructureLabelForApproverRole = (role) => {
-    if (isLeadExecutiveRole(role)) return "Parent Structure";
+    if (isLeadExecutiveRole(role) || isProjectCoordinatorRole(role)) {
+      return "Parent Structure";
+    }
+    if (role === "director_general") return "Affiliate Institute";
     if (role === "state_minister") return "Sector";
     if (role === "chief_executive_officer" || role === "ceo") return "CEO";
     if (role === "office_head") return "Head of the Minister's Office";
@@ -208,9 +255,16 @@ function Settings() {
 
   const getStructuresForApproverRole = (role) =>
     moaSectors.filter((item) => {
-      if (isLeadExecutiveRole(role)) return true;
+      if (isLeadExecutiveRole(role) || isProjectCoordinatorRole(role)) {
+        return ["sector_structure", "ceo_structure", "office_head_structure"].includes(
+          item.workflow_type
+        );
+      }
       if (role === "state_minister") {
         return item.workflow_type === "sector_structure";
+      }
+      if (role === "director_general") {
+        return false;
       }
       if (role === "chief_executive_officer" || role === "ceo") {
         return item.workflow_type === "ceo_structure";
@@ -226,11 +280,11 @@ function Settings() {
 
   const getApproverRolesForStructureType = (workflowType) => {
     const roleMap = {
-      sector_structure: ["state_minister", "lead_executive_officer"],
-      ceo_structure: ["chief_executive_officer", "lead_executive_officer"],
-      office_head_structure: ["office_head", "lead_executive_officer"],
+      sector_structure: ["state_minister", "lead_executive_officer", "project_coordinator"],
+      ceo_structure: ["chief_executive_officer", "lead_executive_officer", "project_coordinator"],
+      office_head_structure: ["office_head", "lead_executive_officer", "project_coordinator"],
       minister_structure: ["minister", "pm_office"],
-      affiliate_structure: ["office_head"],
+      affiliate_structure: ["director_general"],
     };
 
     return sectorApproverRoles.filter((role) =>
@@ -243,7 +297,7 @@ function Settings() {
     if (workflowType === "ceo_structure") return "chief_executive_officer";
     if (workflowType === "office_head_structure") return "office_head";
     if (workflowType === "minister_structure") return "minister";
-    if (workflowType === "affiliate_structure") return "office_head";
+    if (workflowType === "affiliate_structure") return "director_general";
     return "lead_executive_officer";
   };
 
@@ -263,13 +317,26 @@ function Settings() {
     (item) => item.value !== "minister_structure"
   );
 
+  const projectStructureTypes = workflowTypes.filter(
+    (item) => item.value !== "minister_structure"
+  );
+
   const getSelectedApproverStructure = () =>
     moaSectors.find(
       (item) =>
         item.workflow_type === approverStructureType && item.name === sector
     );
 
-  const filteredInheritanceStructures = moaSectors.filter((item) => {
+  const affiliateStructures = affiliateInstitutions.map((item) => ({
+    id: `affiliate-${item.id}`,
+    name: item.organization_name,
+    workflow_type: "affiliate_structure",
+    source: "affiliate",
+  }));
+
+  const allStructures = [...moaSectors, ...affiliateStructures];
+
+  const filteredInheritanceStructures = allStructures.filter((item) => {
     if (!inheritanceFilter) return true;
     return item.name === inheritanceFilter;
   });
@@ -279,18 +346,26 @@ function Settings() {
     return office.sector_name === executiveOfficeFilter;
   });
 
+  const filteredProjects = moaProjects.filter((project) => {
+    if (!projectFilter) return true;
+    return project.parent_structure_name === projectFilter;
+  });
+
   const filteredApprovers = sectorApprovers.filter((approver) => {
     if (!approverListFilter) return true;
     return approver.sector === approverListFilter;
   });
 
   const getWorkflowTypeRank = (workflowType) => {
-    const index = workflowTypes.findIndex((item) => item.value === workflowType);
-    return index === -1 ? workflowTypes.length : index;
+    const index = approverAreaTypes.findIndex((item) => item.value === workflowType);
+    return index === -1 ? approverAreaTypes.length : index;
   };
 
   const getStructureWorkflowType = (structureName) =>
-    moaSectors.find((item) => item.name === structureName)?.workflow_type || "";
+    moaSectors.find((item) => item.name === structureName)?.workflow_type ||
+    (affiliateInstitutions.some((item) => item.organization_name === structureName)
+      ? "affiliate_structure"
+      : "");
 
   const sortByWorkflowBranch = (items, getWorkflowType, getName) =>
     [...items].sort((first, second) => {
@@ -303,8 +378,8 @@ function Settings() {
       return (getName(first) || "").localeCompare(getName(second) || "");
     });
 
-  const sortedMoaSectors = sortByWorkflowBranch(
-    moaSectors,
+  const sortedStructureRegistryItems = sortByWorkflowBranch(
+    allStructures,
     (item) => item.workflow_type,
     (item) => item.name
   );
@@ -313,6 +388,12 @@ function Settings() {
     filteredExecutiveOffices,
     (item) => item.workflow_type,
     (item) => `${item.sector_name || ""} ${item.name || ""}`
+  );
+
+  const sortedProjects = sortByWorkflowBranch(
+    filteredProjects,
+    (item) => item.workflow_type,
+    (item) => `${item.parent_structure_name || ""} ${item.project_name || ""}`
   );
 
   const sortedApprovers = sortByWorkflowBranch(
@@ -328,7 +409,7 @@ function Settings() {
   );
 
   const getWorkflowGroups = (items, getWorkflowType) =>
-    workflowTypes
+    approverAreaTypes
       .map((workflowType) => ({
         ...workflowType,
         items: items.filter((item) => getWorkflowType(item) === workflowType.value),
@@ -356,6 +437,11 @@ function Settings() {
         helper: "Offices assigned under parent structures",
       },
       {
+        label: "Projects",
+        value: moaProjects.length,
+        helper: "Projects under Sector, CEO, and Office Head structures",
+      },
+      {
         label: "Workflow Approvers",
         value: sectorApprovers.length,
         helper: "Registered decision makers",
@@ -369,6 +455,7 @@ function Settings() {
     [
       moaSectors.length,
       executiveOffices.length,
+      moaProjects.length,
       sectorApprovers.length,
       affiliateInstitutions.length,
     ]
@@ -387,13 +474,18 @@ function Settings() {
         helper: "Add Lead Executive Offices under each structure",
       },
       {
+        id: "projects",
+        label: "3. Projects",
+        helper: "Register projects under MoA structures",
+      },
+      {
         id: "approvers",
-        label: "3. Approvers",
-        helper: "Assign State Ministers, CEOs, Office Heads, and Lead Executives",
+        label: "4. Approvers",
+        helper: "Assign State Ministers, CEOs, Office Heads, Lead Executives, and Project Coordinators",
       },
       {
         id: "affiliates",
-        label: "4. Affiliates",
+        label: "5. Affiliates",
         helper: "Register affiliate institutions for travelers",
       },
       {
@@ -410,6 +502,7 @@ function Settings() {
     fetchSectorApprovers();
     fetchMoaSectors();
     fetchExecutiveOffices();
+    fetchMoaProjects();
   }, []);
 
   const formatRole = (role) => {
@@ -419,11 +512,20 @@ function Settings() {
 
     const fallbackRoles = {
       lead_executive: "Lead Executive Officer",
+      project_coordinator: "Project Coordinator",
       ceo: "CEO",
       state_minister: "State Minister",
     };
 
     return fallbackRoles[role] || role || "-";
+  };
+
+  const formatApproverRoleForArea = (role, workflowType) => {
+    if (workflowType === "affiliate_structure" && role === "office_head") {
+      return "Director General";
+    }
+
+    return formatRole(role);
   };
 
   const formatWorkflowType = (workflowType) => {
@@ -484,6 +586,16 @@ function Settings() {
     }
   };
 
+  const fetchMoaProjects = async () => {
+    try {
+      const response = await API.get("/moa-projects");
+      setMoaProjects(response.data || []);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to load MoA projects");
+    }
+  };
+
   const addOrganization = async () => {
     if (!organizationName.trim()) {
       alert("Organization name is required");
@@ -496,14 +608,17 @@ function Settings() {
         generalDirectorName,
         email: organizationEmail,
         phone: organizationPhone,
+        password: generalDirectorPassword,
       });
 
       setOrganizationName("");
       setGeneralDirectorName("");
       setOrganizationEmail("");
       setOrganizationPhone("");
+      setGeneralDirectorPassword("");
 
       fetchAffiliateInstitutions();
+      fetchSectorApprovers();
     } catch (error) {
       console.error(error);
       alert(error.response?.data?.error || "Failed to add organization");
@@ -522,10 +637,12 @@ function Settings() {
         generalDirectorName: editingOrganization.general_director_name,
         email: editingOrganization.email,
         phone: editingOrganization.phone,
+        password: editingOrganization.password,
       });
 
       setEditingOrganization(null);
       fetchAffiliateInstitutions();
+      fetchSectorApprovers();
     } catch (error) {
       console.error(error);
       alert(error.response?.data?.error || "Failed to update organization");
@@ -672,6 +789,79 @@ function Settings() {
     }
   };
 
+  const addMoaProject = async () => {
+    if (!projectParentStructureId || !projectName.trim()) {
+      alert("Please select a parent structure and enter the project name");
+      return;
+    }
+
+    try {
+      await API.post("/moa-projects", {
+        parentStructureId: projectParentStructureId,
+        projectName,
+        coordinatorName: projectCoordinatorName,
+        email: projectCoordinatorEmail,
+        phone: projectCoordinatorPhone,
+        password: projectCoordinatorPassword,
+      });
+
+      setProjectStructureType("sector_structure");
+      setProjectParentStructureId("");
+      setProjectName("");
+      setProjectCoordinatorName("");
+      setProjectCoordinatorEmail("");
+      setProjectCoordinatorPhone("");
+      setProjectCoordinatorPassword("");
+
+      fetchMoaProjects();
+      fetchSectorApprovers();
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.error || "Failed to add project");
+    }
+  };
+
+  const updateMoaProject = async () => {
+    if (!editingProject?.parent_structure_id || !editingProject?.project_name?.trim()) {
+      alert("Parent structure and project name are required");
+      return;
+    }
+
+    try {
+      await API.put(`/moa-projects/${editingProject.id}`, {
+        parentStructureId: editingProject.parent_structure_id,
+        projectName: editingProject.project_name,
+        coordinatorName: editingProject.coordinator_name,
+        email: editingProject.email,
+        phone: editingProject.phone,
+        password: editingProject.password,
+      });
+
+      setEditingProject(null);
+      fetchMoaProjects();
+      fetchSectorApprovers();
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.error || "Failed to update project");
+    }
+  };
+
+  const deleteMoaProject = async (id) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this project?"
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      await API.delete(`/moa-projects/${id}`);
+      fetchMoaProjects();
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.error || "Failed to delete project");
+    }
+  };
+
   const addSectorApprover = async () => {
     if (
       !approverName.trim() ||
@@ -690,7 +880,14 @@ function Settings() {
     let finalSector = "";
     let finalDepartment = "";
 
-    if (approverRole === "state_minister") {
+    if (approverStructureType === "affiliate_structure") {
+      if (!sector.trim()) {
+        alert("Please select the Affiliate Institution for this Director General");
+        return;
+      }
+
+      finalSector = sector.trim();
+    } else if (approverRole === "state_minister") {
       if (!sector.trim()) {
         alert("Please select the sector for this State Minister");
         return;
@@ -707,16 +904,19 @@ function Settings() {
 
       finalSector = sector.trim();
       finalDepartment = approverOffice.trim();
-    } else if (isParentRole) {
-      if (!sector.trim()) {
-        alert(`Please select the ${getStructureLabelForApproverRole(approverRole)}`);
+    } else if (isProjectCoordinatorRole(approverRole)) {
+      if (!sector.trim() || !approverOffice.trim()) {
+        alert(
+          "Please select the parent structure and Project for this Project Coordinator"
+        );
         return;
       }
 
       finalSector = sector.trim();
-    } else if (approverStructureType === "affiliate_structure") {
+      finalDepartment = approverOffice.trim();
+    } else if (isParentRole) {
       if (!sector.trim()) {
-        alert("Please select the Affiliate Institute for this Office Head approver");
+        alert(`Please select the ${getStructureLabelForApproverRole(approverRole)}`);
         return;
       }
 
@@ -781,6 +981,16 @@ function Settings() {
     ) {
       alert(
         "Please select the parent structure and Lead Executive Office for this Lead Executive Officer"
+      );
+      return;
+    }
+
+    if (
+      isProjectCoordinatorRole(editingApprover.role) &&
+      (!updatedSector.trim() || !updatedDepartment.trim())
+    ) {
+      alert(
+        "Please select the parent structure and Project for this Project Coordinator"
       );
       return;
     }
@@ -900,6 +1110,20 @@ function Settings() {
               onChange={(e) => setOrganizationPhone(e.target.value)}
               placeholder="+251..."
             />
+          </div>
+
+          <div className="settings-group">
+            <label>General Director Temporary Password</label>
+            <input
+              type="password"
+              value={generalDirectorPassword}
+              onChange={(e) => setGeneralDirectorPassword(e.target.value)}
+              placeholder="Required when creating a new DG account"
+            />
+            <small className="workflow-approver-help">
+              The General Director is automatically created as this affiliate
+              institution's approver.
+            </small>
           </div>
         </div>
 
@@ -1034,39 +1258,57 @@ function Settings() {
             </thead>
 
             <tbody>
-              {sortedMoaSectors.length === 0 ? (
+              {sortedStructureRegistryItems.length === 0 ? (
                 <tr>
                   <td colSpan="2">No structure registered</td>
                 </tr>
               ) : (
-                getWorkflowGroups(sortedMoaSectors, (item) => item.workflow_type).map((group) => (
+                getWorkflowGroups(sortedStructureRegistryItems, (item) => item.workflow_type).map((group) => (
                   <Fragment key={group.value}>
                     {renderBranchHeaderRow(group.label, 2)}
-                    {group.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="settings-structure-cell">
-                          <strong>{item.name}</strong>
-                          <small>{group.label} structure</small>
-                        </td>
-                        <td>
-                          <div className="table-action-group">
-                            <button
-                              className="edit-btn"
-                              onClick={() => setEditingSector(item)}
-                            >
-                              Edit
-                            </button>
+                    {group.items.map((item) => {
+                      const isAffiliateStructure =
+                        item.workflow_type === "affiliate_structure";
 
-                            <button
-                              className="delete-btn"
-                              onClick={() => deleteMoaSector(item.id)}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                      return (
+                        <tr key={item.id}>
+                          <td className="settings-structure-cell">
+                            <strong>{item.name}</strong>
+                            <small>
+                              {isAffiliateStructure
+                                ? "Affiliate institution structure"
+                                : `${group.label} structure`}
+                            </small>
+                          </td>
+                          <td>
+                            {isAffiliateStructure ? (
+                              <button
+                                className="edit-btn"
+                                onClick={() => setActiveSettingsSection("affiliates")}
+                              >
+                                Manage in Affiliates
+                              </button>
+                            ) : (
+                              <div className="table-action-group">
+                                <button
+                                  className="edit-btn"
+                                  onClick={() => setEditingSector(item)}
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  className="delete-btn"
+                                  onClick={() => deleteMoaSector(item.id)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </Fragment>
                 ))
               )}
@@ -1161,7 +1403,7 @@ function Settings() {
             <thead>
               <tr>
                 <th>Parent Structure</th>
-                <th>Lead Executive Office</th>
+                <th>Office / Project</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -1211,6 +1453,203 @@ function Settings() {
       </>
       )}
 
+      {/* Projects */}
+      {activeSettingsSection === "projects" && (
+      <>
+      <div
+        className="settings-container lead-executive-office-card"
+        style={{ marginTop: "35px" }}
+      >
+        <h3>Project Registration</h3>
+
+        <div className="lead-executive-office-grid">
+          <div className="settings-group">
+            <label>Parent Type</label>
+            <select
+              value={projectStructureType}
+              onChange={(e) => {
+                setProjectStructureType(e.target.value);
+                setProjectParentStructureId("");
+              }}
+            >
+              {projectStructureTypes.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="settings-group">
+            <label>Parent Structure</label>
+            <select
+              value={projectParentStructureId}
+              onChange={(e) => setProjectParentStructureId(e.target.value)}
+            >
+              <option value="">Select Parent Structure</option>
+              {getStructuresForWorkflowType(projectStructureType).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="settings-group lead-executive-office-name">
+            <label>Project Name</label>
+            <input
+              type="text"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              placeholder="Example: Food Systems Resilience Project"
+            />
+          </div>
+
+          <div className="settings-group">
+            <label>Project Coordinator Name</label>
+            <input
+              type="text"
+              value={projectCoordinatorName}
+              onChange={(e) => setProjectCoordinatorName(e.target.value)}
+              placeholder="Enter full name"
+            />
+          </div>
+
+          <div className="settings-group">
+            <label>Email</label>
+            <input
+              type="email"
+              value={projectCoordinatorEmail}
+              onChange={(e) => setProjectCoordinatorEmail(e.target.value)}
+              placeholder="name@example.gov.et"
+            />
+          </div>
+
+          <div className="settings-group">
+            <label>Phone Number</label>
+            <input
+              type="text"
+              value={projectCoordinatorPhone}
+              onChange={(e) => setProjectCoordinatorPhone(e.target.value)}
+              placeholder="+251..."
+            />
+          </div>
+
+          <div className="settings-group">
+            <label>Coordinator Temporary Password</label>
+            <input
+              type="password"
+              value={projectCoordinatorPassword}
+              onChange={(e) => setProjectCoordinatorPassword(e.target.value)}
+              placeholder="Required when creating a new coordinator account"
+            />
+            <small className="workflow-approver-help">
+              The Project Coordinator is automatically created as the first
+              approver for travelers under this project.
+            </small>
+          </div>
+        </div>
+
+        <button className="save-settings-btn" onClick={addMoaProject}>
+          Add Project
+        </button>
+      </div>
+
+      <div className="settings-container" style={{ marginTop: "35px" }}>
+        <h3>Project List</h3>
+
+        <div className="settings-table-filter">
+          <label>Filter by Parent Structure</label>
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+          >
+            <option value="">All Parent Structures</option>
+            {moaSectors
+              .filter((item) =>
+                ["sector_structure", "ceo_structure", "office_head_structure"].includes(
+                  item.workflow_type
+                )
+              )
+              .map((item) => (
+                <option key={item.id} value={item.name}>
+                  {item.name} - {formatWorkflowType(item.workflow_type)}
+                </option>
+              ))}
+          </select>
+        </div>
+
+        <div className="report-table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Parent Structure</th>
+                <th>Project</th>
+                <th>Coordinator</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {sortedProjects.length === 0 ? (
+                <tr>
+                  <td colSpan="6">No projects registered</td>
+                </tr>
+              ) : (
+                getWorkflowGroups(sortedProjects, (project) => project.workflow_type).map((group) => (
+                  <Fragment key={group.value}>
+                    {renderBranchHeaderRow(group.label, 6)}
+                    {group.items.map((project) => (
+                      <tr key={project.id}>
+                        <td className="settings-structure-cell">
+                          <strong>{project.parent_structure_name || "-"}</strong>
+                          <small>{group.label}</small>
+                        </td>
+                        <td>{project.project_name || "-"}</td>
+                        <td>{project.coordinator_name || "-"}</td>
+                        <td>
+                          {project.email ? (
+                            <a
+                              className="affiliate-contact-link"
+                              href={`mailto:${project.email}`}
+                            >
+                              {project.email}
+                            </a>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td>{project.phone || "-"}</td>
+                        <td>
+                          <div className="table-action-group">
+                            <button
+                              className="edit-btn"
+                              onClick={() => setEditingProject(project)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="delete-btn"
+                              onClick={() => deleteMoaProject(project.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </>
+      )}
+
       {/* Workflow Approvers */}
       {activeSettingsSection === "approvers" && (
       <>
@@ -1235,22 +1674,12 @@ function Settings() {
             </select>
           </div>
 
-          {approverStructureType === "affiliate_structure" ? (
-            <div className="settings-group workflow-approver-structure">
-              <label>Affiliate Approver</label>
-              <input
-                value="Uses the existing Head of the Minister's Office approver"
-                disabled
-                readOnly
-              />
-              <small className="workflow-approver-help">
-                Affiliate Institute requests are assigned to the already
-                registered Office Head. No duplicate account is required.
-              </small>
-            </div>
-          ) : (
           <div className="settings-group workflow-approver-structure">
-            <label>Structure</label>
+            <label>
+              {approverStructureType === "affiliate_structure"
+                ? "Affiliate Institution"
+                : "Structure"}
+            </label>
 
             <>
                 <select
@@ -1276,7 +1705,18 @@ function Settings() {
                 {getStructuresForWorkflowType(approverStructureType).length ===
                   0 && (
                   <small style={{ color: "#dc2626", fontSize: "12px" }}>
-                    Please register this structure first.
+                    Please register this{" "}
+                    {approverStructureType === "affiliate_structure"
+                      ? "affiliate institution"
+                      : "structure"}{" "}
+                    first.
+                  </small>
+                )}
+
+                {sector && approverStructureType === "affiliate_structure" && (
+                  <small className="workflow-approver-help">
+                    This approver will act as the affiliate Director General for
+                    traveler requests under this institution.
                   </small>
                 )}
 
@@ -1301,7 +1741,6 @@ function Settings() {
               )}
             </>
           </div>
-          )}
 
           <div className="settings-group">
             <label>Approver Role</label>
@@ -1311,14 +1750,18 @@ function Settings() {
             >
               {getApproverRolesForStructureType(approverStructureType).map((role) => (
                 <option key={role.value} value={role.value}>
-                  {role.label}
+                  {formatApproverRoleForArea(role.value, approverStructureType)}
                 </option>
               ))}
             </select>
           </div>
 
           <div className="settings-group">
-            <label>Lead Executive Office</label>
+            <label>
+              {isProjectCoordinatorRole(approverRole)
+                ? "Project"
+                : "Lead Executive Office"}
+            </label>
             {isLeadExecutiveRole(approverRole) ? (
               <>
                 <select
@@ -1341,48 +1784,74 @@ function Settings() {
                   </small>
                 )}
               </>
+            ) : isProjectCoordinatorRole(approverRole) ? (
+              <>
+                <select
+                  value={approverOffice}
+                  onChange={(e) => setApproverOffice(e.target.value)}
+                  disabled={!sector}
+                >
+                  <option value="">Select Project</option>
+                  {moaProjects
+                    .filter((project) => project.parent_structure_name === sector)
+                    .map((project) => (
+                      <option key={project.id} value={project.project_name}>
+                        {project.project_name}
+                      </option>
+                    ))}
+                </select>
+
+                {sector &&
+                  moaProjects.filter(
+                    (project) => project.parent_structure_name === sector
+                  ).length === 0 && (
+                    <small style={{ color: "#dc2626", fontSize: "12px" }}>
+                      Please register a project under this structure first.
+                    </small>
+                  )}
+              </>
             ) : (
               <input value="Not required for this role" disabled readOnly />
             )}
           </div>
 
-          {approverStructureType !== "affiliate_structure" && (
-            <>
-              <div className="settings-group">
-                <label>Approver Full Name</label>
-                <input
-                  type="text"
-                  value={approverName}
-                  onChange={(e) => setApproverName(e.target.value)}
-                />
-              </div>
+          <>
+            <div className="settings-group">
+              <label>
+                {approverStructureType === "affiliate_structure"
+                  ? "Director General Full Name"
+                  : "Approver Full Name"}
+              </label>
+              <input
+                type="text"
+                value={approverName}
+                onChange={(e) => setApproverName(e.target.value)}
+              />
+            </div>
 
-              <div className="settings-group">
-                <label>Email</label>
-                <input
-                  type="email"
-                  value={approverEmail}
-                  onChange={(e) => setApproverEmail(e.target.value)}
-                />
-              </div>
+            <div className="settings-group">
+              <label>Email</label>
+              <input
+                type="email"
+                value={approverEmail}
+                onChange={(e) => setApproverEmail(e.target.value)}
+              />
+            </div>
 
-              <div className="settings-group">
-                <label>Temporary Password</label>
-                <input
-                  type="password"
-                  value={approverPassword}
-                  onChange={(e) => setApproverPassword(e.target.value)}
-                />
-              </div>
-            </>
-          )}
+            <div className="settings-group">
+              <label>Temporary Password</label>
+              <input
+                type="password"
+                value={approverPassword}
+                onChange={(e) => setApproverPassword(e.target.value)}
+              />
+            </div>
+          </>
         </div>
 
-        {approverStructureType !== "affiliate_structure" && (
-          <button className="save-settings-btn" onClick={addSectorApprover}>
-            Add Approver
-          </button>
-        )}
+        <button className="save-settings-btn" onClick={addSectorApprover}>
+          Add Approver
+        </button>
       </div>
 
       <div className="settings-container" style={{ marginTop: "35px" }}>
@@ -1395,7 +1864,7 @@ function Settings() {
             onChange={(e) => setApproverListFilter(e.target.value)}
           >
             <option value="">All Structures</option>
-            {moaSectors.map((item) => (
+            {allStructures.map((item) => (
               <option key={item.id} value={item.name}>
                 {item.name} - {formatWorkflowType(item.workflow_type)}
               </option>
@@ -1434,7 +1903,12 @@ function Settings() {
                           <small>{group.label}</small>
                         </td>
                         <td>{approver.department || "-"}</td>
-                        <td>{formatRole(approver.role)}</td>
+                        <td>
+                          {formatApproverRoleForArea(
+                            approver.role,
+                            group.value
+                          )}
+                        </td>
                         <td>{approver.full_name || "-"}</td>
                         <td>{approver.email || "-"}</td>
                         <td>
@@ -1477,7 +1951,7 @@ function Settings() {
             onChange={(e) => setInheritanceFilter(e.target.value)}
           >
             <option value="">All Structures</option>
-            {moaSectors.map((item) => (
+            {allStructures.map((item) => (
               <option key={item.id} value={item.name}>
                 {item.name} - {formatWorkflowType(item.workflow_type)}
               </option>
@@ -1491,7 +1965,7 @@ function Settings() {
               <tr>
                 <th>Structure</th>
                 <th>Owner</th>
-                <th>Lead Executive Offices / Officers</th>
+                <th>Lead Executive Offices / Projects</th>
               </tr>
             </thead>
 
@@ -1510,6 +1984,11 @@ function Settings() {
                     {group.items.map((item) => {
                       const owner = getOwnerForStructure(item);
                       const sectorOffices = getLeadExecutiveOfficesForSector(item.name);
+                      const structureProjects = moaProjects.filter(
+                        (project) => project.parent_structure_name === item.name
+                      );
+                      const isAffiliateStructure =
+                        item.workflow_type === "affiliate_structure";
 
                       return (
                         <tr key={item.id}>
@@ -1526,8 +2005,19 @@ function Settings() {
                               : "Not assigned"}
                           </td>
                           <td>
-                            {sectorOffices.length ? (
-                              sectorOffices.map((office) => {
+                            {isAffiliateStructure ? (
+                              <div>
+                                <strong>Director General approval branch</strong>
+                                <br />
+                                <small>
+                                  Affiliate traveler requests go to the Director
+                                  General, then continue through Protocol,
+                                  Office Head, Minister, and PM Office.
+                                </small>
+                              </div>
+                            ) : sectorOffices.length || structureProjects.length ? (
+                              <>
+                              {sectorOffices.map((office) => {
                                 const officeLeaders = getLeadExecutivesForOffice(
                                   item.name,
                                   office.name
@@ -1549,9 +2039,35 @@ function Settings() {
                                     </small>
                                   </div>
                                 );
-                              })
+                              })}
+
+                              {structureProjects.map((project) => {
+                                const coordinators = getProjectCoordinatorsForProject(
+                                  item.name,
+                                  project.project_name
+                                );
+
+                                return (
+                                  <div key={`project-${project.id}`} style={{ marginBottom: "8px" }}>
+                                    <strong>{project.project_name}</strong>
+                                    <br />
+                                    <small>
+                                      Project Coordinator:{" "}
+                                      {coordinators.length
+                                        ? coordinators
+                                            .map(
+                                              (coordinator) =>
+                                                `${coordinator.full_name || "-"} (${coordinator.email || "-"})`
+                                            )
+                                            .join(", ")
+                                        : project.coordinator_name || "No Project Coordinator assigned"}
+                                    </small>
+                                  </div>
+                                );
+                              })}
+                              </>
                             ) : (
-                              "No Lead Executive Office registered"
+                              "No Lead Executive Office or Project registered"
                             )}
                           </td>
                         </tr>
@@ -1650,6 +2166,22 @@ function Settings() {
                   }
                 />
               </div>
+
+              <div className="settings-group">
+                <label>Reset General Director Password</label>
+                <input
+                  type="password"
+                  className="ministry-input"
+                  placeholder="Leave blank to keep current password"
+                  value={editingOrganization.password || ""}
+                  onChange={(e) =>
+                    setEditingOrganization({
+                      ...editingOrganization,
+                      password: e.target.value,
+                    })
+                  }
+                />
+              </div>
             </div>
 
             <div className="modal-actions affiliate-edit-actions">
@@ -1660,6 +2192,147 @@ function Settings() {
               <button
                 className="delete-btn"
                 onClick={() => setEditingOrganization(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Project Modal */}
+      {editingProject && (
+        <div className="modal-overlay">
+          <div className="modal-content affiliate-edit-modal">
+            <div className="affiliate-edit-header">
+              <div>
+                <h3>Edit Project</h3>
+                <p>{editingProject.project_name || "Project"}</p>
+              </div>
+
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setEditingProject(null)}
+                aria-label="Close edit project modal"
+              >
+                Ã—
+              </button>
+            </div>
+
+            <div className="affiliate-edit-form">
+              <div className="settings-group">
+                <label>Parent Structure</label>
+                <select
+                  className="ministry-input"
+                  value={editingProject.parent_structure_id || ""}
+                  onChange={(e) =>
+                    setEditingProject({
+                      ...editingProject,
+                      parent_structure_id: e.target.value,
+                    })
+                  }
+                >
+                  <option value="">Select Parent Structure</option>
+                  {moaSectors
+                    .filter((item) =>
+                      ["sector_structure", "ceo_structure", "office_head_structure"].includes(
+                        item.workflow_type
+                      )
+                    )
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} - {formatWorkflowType(item.workflow_type)}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="settings-group">
+                <label>Project Name</label>
+                <input
+                  type="text"
+                  className="ministry-input"
+                  value={editingProject.project_name || ""}
+                  onChange={(e) =>
+                    setEditingProject({
+                      ...editingProject,
+                      project_name: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="settings-group">
+                <label>Project Coordinator Name</label>
+                <input
+                  type="text"
+                  className="ministry-input"
+                  value={editingProject.coordinator_name || ""}
+                  onChange={(e) =>
+                    setEditingProject({
+                      ...editingProject,
+                      coordinator_name: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="settings-group">
+                <label>Email</label>
+                <input
+                  type="email"
+                  className="ministry-input"
+                  value={editingProject.email || ""}
+                  onChange={(e) =>
+                    setEditingProject({
+                      ...editingProject,
+                      email: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="settings-group">
+                <label>Phone</label>
+                <input
+                  type="text"
+                  className="ministry-input"
+                  value={editingProject.phone || ""}
+                  onChange={(e) =>
+                    setEditingProject({
+                      ...editingProject,
+                      phone: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="settings-group">
+                <label>Reset Coordinator Password</label>
+                <input
+                  type="password"
+                  className="ministry-input"
+                  placeholder="Leave blank to keep current password"
+                  value={editingProject.password || ""}
+                  onChange={(e) =>
+                    setEditingProject({
+                      ...editingProject,
+                      password: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="modal-actions affiliate-edit-actions">
+              <button className="save-settings-btn" onClick={updateMoaProject}>
+                Save Changes
+              </button>
+
+              <button
+                className="delete-btn"
+                onClick={() => setEditingProject(null)}
               >
                 Cancel
               </button>
@@ -1816,7 +2489,8 @@ function Settings() {
               <label>{getStructureLabelForApproverRole(editingApprover.role)}</label>
 
               {isStructureOwnerRole(editingApprover.role) ||
-              isLeadExecutiveRole(editingApprover.role) ? (
+              isLeadExecutiveRole(editingApprover.role) ||
+              isProjectCoordinatorRole(editingApprover.role) ? (
                 <select
                   className="ministry-input"
                   value={editingApprover.sector || ""}
@@ -1835,7 +2509,8 @@ function Settings() {
                   </option>
                   {getStructuresForApproverRole(editingApprover.role).map((item) => (
                     <option key={item.id} value={item.name}>
-                      {isLeadExecutiveRole(editingApprover.role)
+                      {isLeadExecutiveRole(editingApprover.role) ||
+                      isProjectCoordinatorRole(editingApprover.role)
                         ? `${item.name} - ${formatWorkflowType(
                             item.workflow_type
                           )}`
@@ -1880,6 +2555,36 @@ function Settings() {
                       {office.name}
                     </option>
                   ))}
+                </select>
+              </div>
+            )}
+
+            {isProjectCoordinatorRole(editingApprover.role) && (
+              <div className="settings-group">
+                <label>Project</label>
+                <select
+                  className="ministry-input"
+                  value={editingApprover.department || ""}
+                  onChange={(e) =>
+                    setEditingApprover({
+                      ...editingApprover,
+                      department: e.target.value,
+                    })
+                  }
+                  disabled={!editingApprover.sector}
+                >
+                  <option value="">Select Project</option>
+                  {moaProjects
+                    .filter(
+                      (project) =>
+                        project.parent_structure_name ===
+                        (editingApprover.sector || "")
+                    )
+                    .map((project) => (
+                      <option key={project.id} value={project.project_name}>
+                        {project.project_name}
+                      </option>
+                    ))}
                 </select>
               </div>
             )}

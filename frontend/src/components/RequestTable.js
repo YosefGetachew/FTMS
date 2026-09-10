@@ -2,12 +2,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import API from "../services/api";
 import "./RequestTable.css";
 
+const normalizeText = (value) => String(value || "").toLowerCase();
+const REMINDER_DECISION_STAGES = [
+  "lead_executive_review",
+  "project_coordinator_review",
+  "state_minister_review",
+  "ceo_review",
+  "office_head_review",
+  "office_head_final",
+  "minister_review",
+  "pm_office_followup",
+  "foreign_affairs_followup",
+];
+
 function RequestTable() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   const [requests, setRequests] = useState([]);
   const [activeSearch, setActiveSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
+  const [dashboardFilter, setDashboardFilter] = useState(null);
   const [search, setSearch] = useState("");
   const [showHistorical, setShowHistorical] = useState(false);
   const [viewingRequest, setViewingRequest] = useState(null);
@@ -16,25 +30,32 @@ function RequestTable() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
   const [selectedActionIds, setSelectedActionIds] = useState([]);
+  const [expandedTextCells, setExpandedTextCells] = useState({});
 
   const API_ORIGIN =
     import.meta.env.VITE_API_ORIGIN ||
     (import.meta.env.VITE_API_BASE_URL
       ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, "")
-      : "http://localhost:5000");
+      : process.env.NODE_ENV === "development"
+      ? "http://localhost:5000"
+      : window.location.origin);
 
   const getPdfUrl = (id) => `${API_ORIGIN}/api/generate-pdf/${id}`;
   const getUploadUrl = (fileName) => `${API_ORIGIN}/uploads/${fileName}`;
 
   const getRoleAliases = (role) => {
     const aliases = {
-      ceo: ["ceo", "chief_executive_officer"],
-      chief_executive_officer: ["chief_executive_officer", "ceo"],
-      lead_executive: ["lead_executive", "lead_executive_officer"],
-      lead_executive_officer: ["lead_executive_officer", "lead_executive"],
-      state_minister: ["state_minister"],
-      office_head: ["office_head"],
-      pm_office: ["pm_office"],
+      ceo: ["ceo", "chief_executive_officer", "traveler"],
+      chief_executive_officer: ["chief_executive_officer", "ceo", "traveler"],
+      lead_executive: ["lead_executive", "lead_executive_officer", "traveler"],
+      lead_executive_officer: ["lead_executive_officer", "lead_executive", "traveler"],
+      project_coordinator: ["project_coordinator", "traveler"],
+      state_minister: ["state_minister", "traveler"],
+      director_general: ["director_general", "traveler"],
+      office_head: ["office_head", "traveler"],
+      minister: ["minister", "traveler"],
+      protocol: ["protocol", "traveler"],
+      pm_office: ["pm_office", "traveler"],
     };
 
     return [...new Set(aliases[role] || [role])].filter(Boolean);
@@ -94,6 +115,24 @@ function RequestTable() {
     fetchRequests();
   }, [fetchRequests]);
 
+  useEffect(() => {
+    const rawFilter = sessionStorage.getItem("ftmsRequestViewFilter");
+    if (!rawFilter) return;
+
+    try {
+      const parsedFilter = JSON.parse(rawFilter);
+      setDashboardFilter(parsedFilter);
+      setActiveFilter("all");
+      setActiveSearch("");
+      setSearch("");
+      setShowHistorical(parsedFilter.scope !== "active");
+    } catch (_error) {
+      setDashboardFilter(null);
+    } finally {
+      sessionStorage.removeItem("ftmsRequestViewFilter");
+    }
+  }, []);
+
   const formatDate = (date) => {
     if (!date) return "-";
 
@@ -121,7 +160,11 @@ function RequestTable() {
     return days > 0 ? days : "-";
   };
 
-  const normalizeText = (value) => String(value || "").toLowerCase();
+  const clearDashboardFilter = () => {
+    setDashboardFilter(null);
+    setActiveSearch("");
+    setSearch("");
+  };
 
   const formatWorkflowType = (workflowType) => {
     const workflows = {
@@ -140,6 +183,7 @@ function RequestTable() {
       ceo_review: "CEO Review",
       office_head_review: "Office Head Review",
       lead_executive_review: "Lead Executive Officer Review",
+      project_coordinator_review: "Project Coordinator Review",
       state_minister_review: "State Minister Review",
       protocol_clearance: "Protocol Clearance",
       office_head_final: "Office Head Final Decision",
@@ -150,6 +194,7 @@ function RequestTable() {
       completed: "Completed",
 
       state_minister: "State Minister",
+      director_general: "Director General",
       protocol: "Protocol",
       office_head: "Office Head",
       minister: "Minister",
@@ -161,24 +206,20 @@ function RequestTable() {
     return stages[stage] || stage || "-";
   };
 
-  const getStageTone = (stage) => {
-    if (["completed"].includes(stage)) return "#166534";
-    if (["expert_preparation"].includes(stage)) return "#b45309";
-    if (["minister_review", "office_head_final"].includes(stage)) return "#7c3aed";
-    if (["protocol_clearance", "pm_office_submission", "pm_office_followup", "foreign_affairs_followup"].includes(stage)) return "#0369a1";
-    return "#1d4ed8";
-  };
-
-  const getComment = (request) =>
-    request.amendment_comment ||
-    request.decision_comment ||
-    request.foreign_affairs_comment ||
-    "-";
+  const requiresPmOffice = (request) => request.pm_approval_required !== false;
 
   const getPrimaryActionLabel = (request) => {
     if (request.current_stage === "protocol_clearance") return "Clear";
-    if (request.current_stage === "office_head_final") return "Forward to Minister";
-    if (request.current_stage === "minister_review") return "Approve and send to Protocol";
+    if (request.current_stage === "office_head_final") {
+      return requiresPmOffice(request)
+        ? "Approve and send to Protocol for PM Office"
+        : "Approve and complete request";
+    }
+    if (request.current_stage === "minister_review") {
+      return requiresPmOffice(request)
+        ? "Approve and send to Protocol"
+        : "Approve and complete request";
+    }
     if (request.current_stage === "pm_office_submission") return "Submit to PM Office";
     return "Approve";
   };
@@ -186,17 +227,20 @@ function RequestTable() {
   const isAdmin = ["admin", "super_admin"].includes(user?.role);
   const isTraveler = ["traveler", "expert"].includes(user?.role);
   const isCEO = ["chief_executive_officer", "ceo"].includes(user?.role);
+  const isDirectorGeneral = user?.role === "director_general";
   const isOfficeHead = user?.role === "office_head";
   const isLeadExecutive = ["lead_executive_officer", "lead_executive"].includes(user?.role);
+  const isProjectCoordinator = user?.role === "project_coordinator";
   const isStateMinister = user?.role === "state_minister";
   const isProtocol = user?.role === "protocol";
   const isPmOffice = user?.role === "pm_office";
   const isMinister = user?.role === "minister";
   const canSeeHistorical = !isPmOffice;
+  const showPendingAtColumn = isProtocol || isAdmin || isOfficeHead;
 
-  const canTravelerEditBeforeAction = useCallback(
+  const isOwnEditableDraft = useCallback(
     (request) => {
-      if (!request || !isTraveler) return false;
+      if (!request) return false;
 
       const sameTraveler =
         normalizeText(request.email).trim() === normalizeText(user.email).trim();
@@ -210,7 +254,24 @@ function RequestTable() {
 
       return sameTraveler && isOpen && noApproverAction;
     },
-    [isTraveler, user.email]
+    [user.email]
+  );
+
+  const canTravelerEditBeforeAction = isOwnEditableDraft;
+
+  const isSavedDraftRequest = useCallback((request) => {
+    return (
+      normalizeText(request?.final_status) === "pending" &&
+      normalizeText(request?.current_stage) === "expert_preparation" &&
+      normalizeText(request?.status).includes("draft")
+    );
+  }, []);
+
+  const canCompleteSavedDraft = useCallback(
+    (request) => {
+      return isSavedDraftRequest(request) && (isOwnEditableDraft(request) || isAdmin);
+    },
+    [isAdmin, isOwnEditableDraft, isSavedDraftRequest]
   );
 
   const canDelete = isAdmin;
@@ -219,6 +280,7 @@ function RequestTable() {
     "pm_office",
     "admin",
     "super_admin",
+    "director_general",
     "office_head",
     "minister",
     "state_minister",
@@ -226,7 +288,49 @@ function RequestTable() {
     "ceo",
     "lead_executive_officer",
     "lead_executive",
+    "project_coordinator",
   ].includes(user?.role);
+
+  const canGenerateSupportLetter = useCallback(
+    (request) => {
+      if (!canViewPdf) return false;
+
+      const stage = normalizeText(request.current_stage);
+      const finalStatus = normalizeText(request.final_status);
+
+      return (
+        ["pm_office_submission", "pm_office_followup", "foreign_affairs_followup", "completed"].includes(stage) ||
+        finalStatus === "approved"
+      );
+    },
+    [canViewPdf]
+  );
+
+  const canSendDecisionReminder = useCallback(
+    (request) => {
+      if (!isProtocol || isSavedDraftRequest(request)) return false;
+
+      const currentStage = normalizeText(request?.current_stage);
+      const finalStatus = normalizeText(request?.final_status);
+
+      return (
+        finalStatus === "pending" &&
+        REMINDER_DECISION_STAGES.includes(currentStage)
+      );
+    },
+    [isProtocol, isSavedDraftRequest]
+  );
+
+  const showActiveSection = dashboardFilter?.scope !== "historical";
+  const showHistoricalSection =
+    canSeeHistorical &&
+    (showHistorical ||
+      dashboardFilter?.scope === "historical" ||
+      dashboardFilter?.scope === "all");
+  const requestPageTitle = isTraveler ? "My Travel Requests" : "Travel Requests";
+  const requestPageDescription = isTraveler
+    ? "Create drafts, finish returned requests, and follow your travel progress."
+    : "Review active travel requests and open details when you need more information.";
 
   const stageMatches = useCallback((request, stages) => {
     const currentStage = normalizeText(request.current_stage);
@@ -237,11 +341,26 @@ function RequestTable() {
 
   const canDecideRequest = useCallback(
     (request) => {
+      if (isSavedDraftRequest(request)) return false;
       if (isAdmin) return true;
 
       const workflowType = request.workflow_type;
 
       if (isLeadExecutive && stageMatches(request, ["lead_executive_review", "lead_executive"])) return true;
+      if (
+        isProjectCoordinator &&
+        request.traveler_category === "project" &&
+        stageMatches(request, ["project_coordinator_review", "project_coordinator"])
+      ) {
+        return true;
+      }
+      if (
+        isDirectorGeneral &&
+        request.traveler_category === "affiliate_institution" &&
+        stageMatches(request, ["office_head_review", "director_general"])
+      ) {
+        return true;
+      }
       if (
         isStateMinister &&
         workflowType === "sector_structure" &&
@@ -270,12 +389,15 @@ function RequestTable() {
     [
       isAdmin,
       isCEO,
+      isDirectorGeneral,
       isLeadExecutive,
+      isProjectCoordinator,
       isMinister,
       isOfficeHead,
       isPmOffice,
       isProtocol,
       isStateMinister,
+      isSavedDraftRequest,
       stageMatches,
     ]
   );
@@ -292,28 +414,87 @@ function RequestTable() {
         isTraveler &&
         currentStage === "expert_preparation" &&
         finalStatus === "amended";
+      const isEditableOwnerDraft = isOwnEditableDraft(request);
 
-      if (isAmendedForTraveler) return true;
+      if (isAmendedForTraveler || isEditableOwnerDraft) return true;
       if (!isPending) return false;
       if (isTraveler) return true;
+      if (canSendDecisionReminder(request)) return true;
 
       return canDecideRequest(request);
     });
-  }, [requests, isTraveler, canDecideRequest]);
+  }, [
+    requests,
+    isTraveler,
+    isOwnEditableDraft,
+    canDecideRequest,
+    canSendDecisionReminder,
+  ]);
 
-  const historicalRequests = useMemo(() => {
+  const allHistoricalRequests = useMemo(() => {
     return requests.filter((request) => {
-      const isHistorical =
+      return (
         request.final_status === "approved" ||
         request.final_status === "rejected" ||
-        request.current_stage === "completed";
+        request.current_stage === "completed"
+      );
+    });
+  }, [requests]);
 
-      if (!isHistorical) return false;
+  const matchesDashboardFilter = useCallback(
+    (request) => {
+      if (!dashboardFilter) return true;
 
-      const keyword = normalizeText(search);
+      const finalStatus = normalizeText(request.final_status);
+      const currentStage = normalizeText(request.current_stage);
+      const travelerCategory = normalizeText(request.traveler_category);
 
-      if (!keyword) return true;
+      if (dashboardFilter.status === "pending") {
+        const isPending =
+          !["approved", "rejected"].includes(finalStatus) &&
+          currentStage !== "completed";
 
+        if (!isPending) return false;
+      }
+
+      if (
+        dashboardFilter.status === "approved" &&
+        finalStatus !== "approved" &&
+        currentStage !== "completed"
+      ) {
+        return false;
+      }
+
+      if (dashboardFilter.status === "rejected" && finalStatus !== "rejected") {
+        return false;
+      }
+
+      if (dashboardFilter.travelerCategory === "lead_executive_staff") {
+        return !["project", "advisor", "affiliate_institution"].includes(
+          travelerCategory
+        );
+      }
+
+      if (
+        dashboardFilter.travelerCategory &&
+        travelerCategory !== dashboardFilter.travelerCategory
+      ) {
+        return false;
+      }
+
+      return true;
+    },
+    [dashboardFilter]
+  );
+
+  const historicalRequests = useMemo(() => {
+    const keyword = normalizeText(search);
+
+    const filteredHistorical = allHistoricalRequests.filter(matchesDashboardFilter);
+
+    if (!keyword) return filteredHistorical;
+
+    return filteredHistorical.filter((request) => {
       return (
         normalizeText(request.full_name).includes(keyword) ||
         normalizeText(request.workflow_type).includes(keyword) ||
@@ -327,7 +508,7 @@ function RequestTable() {
         normalizeText(request.current_stage).includes(keyword)
       );
     });
-  }, [requests, search]);
+  }, [allHistoricalRequests, search, matchesDashboardFilter]);
 
   const filteredSubmittedRequests = useMemo(() => {
     const keyword = normalizeText(activeSearch);
@@ -336,6 +517,7 @@ function RequestTable() {
       const finalStatus = normalizeText(request.final_status);
       const currentStage = normalizeText(request.current_stage);
 
+      if (!matchesDashboardFilter(request)) return false;
       if (activeFilter === "action" && !canDecideRequest(request)) return false;
       if (activeFilter === "amended" && finalStatus !== "amended") return false;
       if (activeFilter === "protocol" && !currentStage.includes("protocol")) return false;
@@ -356,7 +538,7 @@ function RequestTable() {
         normalizeText(request.current_stage).includes(keyword)
       );
     });
-  }, [activeFilter, activeSearch, submittedRequests, canDecideRequest]);
+  }, [activeFilter, activeSearch, submittedRequests, canDecideRequest, matchesDashboardFilter]);
 
   const isBulkActionable = useCallback(
     (request) =>
@@ -449,7 +631,7 @@ function RequestTable() {
     ];
   }, [submittedRequests, canDecideRequest, isPmOffice]);
 
-  const updateStatus = async (id, action, comment = "") => {
+  const updateStatus = async (id, action, comment = "", options = {}) => {
     if (updatingId) return;
 
     try {
@@ -461,6 +643,7 @@ function RequestTable() {
         actorEmail: user.email,
         actorId: user.id || null,
         comment,
+        ...options,
       });
 
       await fetchRequests();
@@ -480,6 +663,47 @@ function RequestTable() {
     }
   };
 
+  const sendDecisionReminder = async (request) => {
+    if (updatingId || !canSendDecisionReminder(request)) return;
+
+    const approverLabel = formatStage(request.current_stage);
+    const confirmed = window.confirm(
+      `Send a reminder to the current ${approverLabel} approver for request #${request.id}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setUpdatingId(`reminder-${request.id}`);
+
+      const response = await API.post(`/requests/${request.id}/send-reminder`, {
+        role: user.role,
+        actorEmail: user.email,
+        actorId: user.id || null,
+      });
+
+      const approverName =
+        response.data?.approver?.fullName ||
+        response.data?.approver?.email ||
+        "the decision maker";
+
+      await fetchRequests();
+      setNotice({
+        type: "success",
+        message: `Reminder sent to ${approverName}.`,
+      });
+    } catch (error) {
+      console.error(error);
+      setNotice({
+        type: "error",
+        message:
+          error.response?.data?.error || "Failed to send reminder.",
+      });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const rejectRequest = async (request) => {
     let comment = "";
 
@@ -487,6 +711,7 @@ function RequestTable() {
       "ceo_review",
       "office_head_review",
       "lead_executive_review",
+      "project_coordinator_review",
       "state_minister_review",
     ].includes(request.current_stage);
 
@@ -556,41 +781,51 @@ function RequestTable() {
     }
   };
 
+  const buildEditingRequestPayload = () => {
+    const data = new FormData();
+
+    data.append("travelerCategory", editingRequest.traveler_category || "");
+    data.append("workflowType", editingRequest.workflow_type || "");
+    data.append("organizationName", editingRequest.organization_name || "");
+    data.append("fullName", editingRequest.full_name || "");
+    data.append("position", editingRequest.position || "");
+    data.append("department", editingRequest.department || "");
+    data.append("sector", editingRequest.sector || "");
+    data.append("email", editingRequest.email || "");
+    data.append("phone", editingRequest.phone || "");
+    data.append("country", editingRequest.country || "");
+    data.append("startDate", getInputDate(editingRequest.start_date));
+    data.append("endDate", getInputDate(editingRequest.end_date));
+    data.append("purpose", editingRequest.purpose || "");
+    data.append("fundingSourceType", editingRequest.funding_source_type || "");
+    data.append(
+      "sponsor",
+      editingRequest.funding_source_type === "government"
+        ? "Government"
+        : editingRequest.sponsor || ""
+    );
+    data.append("passportNumber", editingRequest.passport_number || "");
+
+    if (editingRequest.passportFile) {
+      data.append("passportFile", editingRequest.passportFile);
+    }
+
+    if (editingRequest.invitationLetter) {
+      data.append("invitationLetter", editingRequest.invitationLetter);
+    }
+
+    if (editingRequest.torFile) {
+      data.append("torFile", editingRequest.torFile);
+    }
+
+    return data;
+  };
+
   const updateRequest = async () => {
     if (!editingRequest) return;
 
     try {
-      const data = new FormData();
-
-      data.append("travelerCategory", editingRequest.traveler_category || "");
-      data.append("workflowType", editingRequest.workflow_type || "");
-      data.append("organizationName", editingRequest.organization_name || "");
-      data.append("fullName", editingRequest.full_name || "");
-      data.append("position", editingRequest.position || "");
-      data.append("department", editingRequest.department || "");
-      data.append("sector", editingRequest.sector || "");
-      data.append("email", editingRequest.email || "");
-      data.append("phone", editingRequest.phone || "");
-      data.append("country", editingRequest.country || "");
-      data.append("startDate", getInputDate(editingRequest.start_date));
-      data.append("endDate", getInputDate(editingRequest.end_date));
-      data.append("purpose", editingRequest.purpose || "");
-      data.append("sponsor", editingRequest.sponsor || "");
-      data.append("passportNumber", editingRequest.passport_number || "");
-
-      if (editingRequest.passportFile) {
-        data.append("passportFile", editingRequest.passportFile);
-      }
-
-      if (editingRequest.invitationLetter) {
-        data.append("invitationLetter", editingRequest.invitationLetter);
-      }
-
-      if (editingRequest.torFile) {
-        data.append("torFile", editingRequest.torFile);
-      }
-
-      await API.put(`/requests/${editingRequest.id}`, data);
+      await API.put(`/requests/${editingRequest.id}`, buildEditingRequestPayload());
 
       setNotice({
         type: "success",
@@ -604,6 +839,39 @@ function RequestTable() {
         type: "error",
         message: error.response?.data?.error || "Failed to update request",
       });
+    }
+  };
+
+  const saveAndSubmitDraft = async () => {
+    if (!editingRequest || updatingId) return;
+
+    try {
+      setUpdatingId(editingRequest.id);
+
+      await API.put(`/requests/${editingRequest.id}`, buildEditingRequestPayload());
+      await API.put(`/requests/${editingRequest.id}/status`, {
+        action: "submit",
+        role: user.role,
+        actorEmail: user.email,
+        actorId: user.id || null,
+        comment: "Draft completed and submitted by traveler.",
+      });
+
+      setNotice({
+        type: "success",
+        message: "Draft completed and submitted for approval.",
+      });
+      setEditingRequest(null);
+      await fetchRequests();
+    } catch (error) {
+      console.error(error);
+      setNotice({
+        type: "error",
+        message:
+          error.response?.data?.error || "Failed to submit saved draft",
+      });
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -711,6 +979,7 @@ function RequestTable() {
       await API.put(`/requests/${id}/resubmit`, {
         role: user.role,
         actorEmail: user.email,
+        actorId: user.id || null,
       });
 
       await fetchRequests();
@@ -761,8 +1030,8 @@ function RequestTable() {
     window.open(getPdfUrl(id), "_blank");
   };
 
-  const renderSectorDepartment = (request) => (
-    <td className="request-structure-cell">
+  const renderSectorDepartment = (request, label = "Structure") => (
+    <td className="request-structure-cell" data-label={label}>
       <strong>
         {request.traveler_category === "affiliate_institution"
           ? "Affiliate Institute"
@@ -777,85 +1046,86 @@ function RequestTable() {
     </td>
   );
 
-  const renderTripDate = (request) => (
-    <td className="request-date-cell">
-      <div>{formatDate(request.start_date)}</div>
-      <span>to</span>
-      <div>{formatDate(request.end_date)}</div>
+  const renderTripDate = (request, label = "Travel Date") => (
+    <td className="request-date-cell" data-label={label}>
+      <div className="request-date-range">
+        <span>{formatDate(request.start_date)}</span>
+        <em>-</em>
+        <span>{formatDate(request.end_date)}</span>
+      </div>
       <strong>
         {getTripDays(request.start_date, request.end_date)} Days
       </strong>
     </td>
   );
 
-  const renderStatus = (request) => (
-    <span
-      className={`status-badge ${normalizeText(request.status).replace(
-        / /g,
-        "-"
-      )}`}
-    >
-      {request.status || "-"}
-    </span>
-  );
-
-  const renderStage = (request) => (
-    <span
-      className="request-stage-text"
-      style={{
-        "--stage-color": getStageTone(request.current_stage),
-      }}
-    >
-      {formatStage(request.current_stage)}
-    </span>
-  );
-
-  const renderWrappedText = (value, maxWidth = "220px") => (
-    <td
-      className="request-wrap-cell"
-      style={{
-        maxWidth,
-      }}
-    >
-      {value || "-"}
+  const renderCurrentStageCell = (request) => (
+    <td className="request-stage-cell" data-label="Pending At">
+      <span>{formatStage(request.current_stage)}</span>
+      <small>{request.status || "Pending decision"}</small>
     </td>
   );
 
-  const renderTravelerCell = (request) => (
-    <td className="request-traveler-cell">
+  const toggleTextCell = (key) => {
+    setExpandedTextCells((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const renderWrappedText = (
+    value,
+    maxWidth = "220px",
+    label = "Details",
+    textKey = `${label}-${String(value || "").slice(0, 40)}`
+  ) => {
+    const text = String(value || "").trim();
+    const isLongText = text.length > 150;
+    const isExpanded = Boolean(expandedTextCells[textKey]);
+
+    return (
+      <td
+        className="request-wrap-cell"
+        data-label={label}
+        title={text || "-"}
+        style={{
+          maxWidth,
+        }}
+      >
+        <span
+          className={`request-clamped-text ${
+            isExpanded ? "expanded" : ""
+          } ${isLongText ? "has-more" : ""
+          }`}
+        >
+          {text || "-"}
+        </span>
+
+        {isLongText && (
+          <button
+            type="button"
+            className="request-read-more-btn"
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleTextCell(textKey);
+            }}
+          >
+            {isExpanded ? "Show less" : "Read more"}
+          </button>
+        )}
+      </td>
+    );
+  };
+
+  const renderTravelerCell = (request, label = "Traveler") => (
+    <td className="request-traveler-cell" data-label={label}>
       <strong>{request.full_name || "-"}</strong>
       <small>{request.position || "-"}</small>
     </td>
   );
 
-  const renderCommentCell = (request) => (
-    <td
-      className={`request-comment-cell ${
-        request.final_status === "amended" ? "amended" : ""
-      }`}
-    >
-      {getComment(request)}
-    </td>
-  );
-
-  const renderFinalStatus = (request) => {
-    if (request.final_status === "approved") {
-      return <span className="status-badge approved">Approved</span>;
-    }
-
-    if (request.final_status === "rejected") {
-      return <span className="status-badge rejected">Rejected</span>;
-    }
-
-    if (request.final_status === "amended") {
-      return <span className="status-badge amended">Amended</span>;
-    }
-
-    return <span className="status-badge pending">Pending</span>;
-  };
-
   const canActAtStage = (request) => {
-    return canDecideRequest(request);
+    return !isSavedDraftRequest(request) && canDecideRequest(request);
   };
 
   const renderRequestActions = (request) => {
@@ -864,7 +1134,8 @@ function RequestTable() {
       request.current_stage === "completed" ||
       request.final_status === "approved" ||
       request.final_status === "rejected";
-    const isBusy = updatingId === request.id;
+    const isBusy =
+      updatingId === request.id || updatingId === `reminder-${request.id}`;
     const processingLabel = isBusy ? "..." : null;
 
     return (
@@ -875,8 +1146,30 @@ function RequestTable() {
           disabled={isBusy}
           onClick={() => setViewingRequest(request)}
         >
-          {processingLabel || "View"}
+          {processingLabel || "Details"}
         </button>
+
+        {canCompleteSavedDraft(request) && (
+          <button
+            className="edit-btn action-icon-btn action-wide-btn"
+            title="Complete saved draft"
+            disabled={isBusy}
+            onClick={() => setEditingRequest(request)}
+          >
+            Complete Draft
+          </button>
+        )}
+
+        {canSendDecisionReminder(request) && (
+          <button
+            className="reminder-btn action-icon-btn action-wide-btn"
+            title="Send reminder to the current decision maker"
+            disabled={isBusy}
+            onClick={() => sendDecisionReminder(request)}
+          >
+            {processingLabel || "Remind"}
+          </button>
+        )}
 
         {!isCompleted &&
           canActAtStage(request) &&
@@ -908,25 +1201,44 @@ function RequestTable() {
           )}
 
         {!isCompleted && canActAtStage(request) && stage === "protocol_clearance" && (
-          <>
+          <div className="protocol-decision-panel">
             <button
-              className="approve-btn action-icon-btn"
-              title="Clear protocol review"
+              className="protocol-decision-card need-pm"
+              title="Clear protocol review and require PM Office approval"
               disabled={isBusy}
-              onClick={() => updateStatus(request.id, "clear")}
+              onClick={() =>
+                updateStatus(request.id, "clear", "", {
+                  pmApprovalRequired: true,
+                })
+              }
             >
-              {processingLabel || "Clear"}
+              <span>{processingLabel || "PM Required"}</span>
+              <small>Use when the request needs PM Office authorization.</small>
             </button>
 
             <button
-              className="edit-btn action-icon-btn"
+              className="protocol-decision-card no-pm"
+              title="Clear protocol review without PM Office approval"
+              disabled={isBusy}
+              onClick={() =>
+                updateStatus(request.id, "clear", "", {
+                  pmApprovalRequired: false,
+                })
+              }
+            >
+              <span>{processingLabel || "No PM Needed"}</span>
+              <small>Use when Office Head or Minister can finalize.</small>
+            </button>
+
+            <button
+              className="edit-btn action-icon-btn protocol-amend-btn"
               title="Request amendment"
               disabled={isBusy}
               onClick={() => amendRequest(request.id)}
             >
               Amend
             </button>
-          </>
+          </div>
         )}
 
         {!isCompleted && canActAtStage(request) && stage === "office_head_final" && (
@@ -937,7 +1249,16 @@ function RequestTable() {
               disabled={isBusy}
               onClick={() => updateStatus(request.id, "approve")}
             >
-              {processingLabel || "Forward"}
+              {processingLabel || "Approve"}
+            </button>
+
+            <button
+              className="edit-btn action-icon-btn"
+              title="Forward to Minister for decision"
+              disabled={isBusy}
+              onClick={() => updateStatus(request.id, "forward_to_minister")}
+            >
+              Forward to Minister
             </button>
 
             <button
@@ -1019,7 +1340,7 @@ function RequestTable() {
             </>
           )}
 
-        {isTraveler &&
+        {canTravelerEditBeforeAction(request) &&
           request.current_stage === "expert_preparation" &&
           request.final_status === "amended" && (
             <>
@@ -1043,14 +1364,14 @@ function RequestTable() {
             </>
           )}
 
-        {canViewPdf && (
+        {canGenerateSupportLetter(request) && (
           <button
             className="pdf-btn action-icon-btn"
-            title="Open PDF"
+            title="Open PM Office support letter"
             disabled={isBusy}
             onClick={() => openPdf(request.id)}
           >
-            PDF
+            Letter
           </button>
         )}
 
@@ -1072,11 +1393,9 @@ function RequestTable() {
     <div className="table-container request-table-page">
       <div className="table-header request-table-header">
         <div>
-          <span className="request-table-kicker">Travel Workflow</span>
-          <h2>Submitted Requests</h2>
-          <p>
-            Review assigned travel requests, returned corrections, and completed history.
-          </p>
+          <span className="request-table-kicker">Requests</span>
+          <h2>{requestPageTitle}</h2>
+          <p>{requestPageDescription}</p>
         </div>
 
         <div className="request-header-actions">
@@ -1096,9 +1415,7 @@ function RequestTable() {
               onClick={() => setShowHistorical((prev) => !prev)}
             >
               {showHistorical ? "Hide Historical" : "Show Historical"}
-              {historicalRequests.length > 0
-                ? ` (${historicalRequests.length})`
-                : ""}
+              {` (${allHistoricalRequests.length})`}
             </button>
           )}
         </div>
@@ -1123,165 +1440,208 @@ function RequestTable() {
         </div>
       )}
 
-      <div className="request-table-controls">
-        <input
-          type="text"
-          placeholder="Search active requests..."
-          className="search-input"
-          value={activeSearch}
-          onChange={(e) => setActiveSearch(e.target.value)}
-        />
-
-        <select
-          className="search-input request-filter-select"
-          value={activeFilter}
-          onChange={(e) => setActiveFilter(e.target.value)}
-        >
-          <option value="all">All active requests</option>
-          <option value="action">Needs my action</option>
-          <option value="amended">Returned / amended</option>
-          <option value="protocol">Protocol clearance</option>
-          <option value="pm_office">PM Office</option>
-        </select>
-      </div>
-
-      <div className="request-section-card">
-        <div className="request-section-header">
+      {dashboardFilter && (
+        <div className="request-dashboard-filter">
           <div>
-            <h3>Active Request Queue</h3>
-            <p>{filteredSubmittedRequests.length} request{filteredSubmittedRequests.length === 1 ? "" : "s"} in this view</p>
+            <span>Opened from dashboard</span>
+            <strong>{dashboardFilter.label || "Filtered requests"}</strong>
           </div>
 
-          {showBulkActions && (
-            <div className="request-bulk-actions">
-              <label className="request-bulk-select">
-                <input
-                  type="checkbox"
-                  checked={allVisibleActionsSelected}
-                  onChange={toggleAllVisibleActions}
-                />
-                Select actionable requests
-              </label>
-
-              <button
-                type="button"
-                className="approve-btn action-icon-btn request-bulk-submit"
-                disabled={
-                  updatingId === "bulk-approve" ||
-                  selectedVisibleActionIds.length === 0
-                }
-                onClick={() => runBulkWorkflowAction("approve")}
-              >
-                {updatingId === "bulk-approve"
-                  ? "Updating..."
-                  : `Accept (${selectedVisibleActionIds.length})`}
-              </button>
-
-              <button
-                type="button"
-                className="reject-btn action-icon-btn request-bulk-submit"
-                disabled={
-                  updatingId === "bulk-reject" ||
-                  selectedVisibleActionIds.length === 0
-                }
-                onClick={() => runBulkWorkflowAction("reject")}
-              >
-                {updatingId === "bulk-reject"
-                  ? "Updating..."
-                  : `Reject (${selectedVisibleActionIds.length})`}
-              </button>
-            </div>
-          )}
+          <button type="button" onClick={clearDashboardFilter}>
+            Clear filter
+          </button>
         </div>
+      )}
 
-        <div className="request-table-scroll">
-          <table>
-            <thead>
-              <tr>
-                {showBulkActions && <th className="request-select-col">Select</th>}
-                <th>Name</th>
-                <th>Sector / Lead Executive Office</th>
-                <th>Destination</th>
-                <th>Purpose</th>
-                <th>Travel Date</th>
-                <th>Status</th>
-                <th>Current Stage</th>
-                <th>Comment</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
+      {showActiveSection && (
+        <>
+          <div className="request-table-controls">
+            <input
+              type="text"
+              placeholder="Search active requests..."
+              className="search-input"
+              value={activeSearch}
+              onChange={(e) => setActiveSearch(e.target.value)}
+            />
 
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td
-                    className="request-empty-cell"
-                    colSpan={showBulkActions ? "10" : "9"}
+            <select
+              className="search-input request-filter-select"
+              value={activeFilter}
+              onChange={(e) => setActiveFilter(e.target.value)}
+            >
+              <option value="all">All active</option>
+              <option value="action">Needs my decision</option>
+              <option value="amended">Returned</option>
+              <option value="protocol">Protocol</option>
+              <option value="pm_office">PM Office</option>
+            </select>
+          </div>
+
+          <div className="request-section-card">
+            <div className="request-section-header">
+              <div>
+                <h3>Active Requested Travel</h3>
+                <p>{filteredSubmittedRequests.length} request{filteredSubmittedRequests.length === 1 ? "" : "s"} in this view</p>
+              </div>
+
+              {showBulkActions && (
+                <div className="request-bulk-actions">
+                  <label className="request-bulk-select">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleActionsSelected}
+                      onChange={toggleAllVisibleActions}
+                    />
+                    Select requests
+                  </label>
+
+                  <button
+                    type="button"
+                    className="approve-btn action-icon-btn request-bulk-submit"
+                    disabled={
+                      updatingId === "bulk-approve" ||
+                      selectedVisibleActionIds.length === 0
+                    }
+                    onClick={() => runBulkWorkflowAction("approve")}
                   >
-                    <strong>Loading submitted requests...</strong>
-                    <span>Please wait while the request queue refreshes.</span>
-                  </td>
-                </tr>
-              ) : filteredSubmittedRequests.length === 0 ? (
-                <tr>
-                  <td
-                    className="request-empty-cell"
-                    colSpan={showBulkActions ? "10" : "9"}
+                    {updatingId === "bulk-approve"
+                      ? "Updating..."
+                      : `Accept (${selectedVisibleActionIds.length})`}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="reject-btn action-icon-btn request-bulk-submit"
+                    disabled={
+                      updatingId === "bulk-reject" ||
+                      selectedVisibleActionIds.length === 0
+                    }
+                    onClick={() => runBulkWorkflowAction("reject")}
                   >
-                    <strong>No submitted requests found</strong>
-                    <span>Try changing the search text or active request filter.</span>
-                  </td>
-                </tr>
-              ) : (
-                filteredSubmittedRequests.map((request) => (
-                  <tr key={request.id}>
-                    {showBulkActions && (
-                      <td className="request-select-col">
-                        {isBulkActionable(request) ? (
-                          <input
-                            type="checkbox"
-                            checked={selectedActionIds.includes(request.id)}
-                            onChange={() => toggleActionSelection(request.id)}
-                            aria-label={`Select ${request.full_name || "request"} for bulk action`}
-                          />
-                        ) : (
-                          <span className="request-select-placeholder">-</span>
-                        )}
-                      </td>
-                    )}
-
-                    {renderTravelerCell(request)}
-
-                    {renderSectorDepartment(request)}
-
-                    {renderWrappedText(request.country, "110px")}
-
-                    {renderWrappedText(request.purpose, "240px")}
-
-                    {renderTripDate(request)}
-
-                    <td className="request-status-cell">{renderStatus(request)}</td>
-
-                    <td>{renderStage(request)}</td>
-
-                    {renderCommentCell(request)}
-
-                    <td>{renderRequestActions(request)}</td>
-                  </tr>
-                ))
+                    {updatingId === "bulk-reject"
+                      ? "Updating..."
+                      : `Reject (${selectedVisibleActionIds.length})`}
+                  </button>
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </div>
 
-      {canSeeHistorical && showHistorical && (
+            <div className="request-table-scroll">
+              <table className="active-request-table">
+                <colgroup>
+                  {showBulkActions && <col className="request-col-select" />}
+                  <col className="request-col-name" />
+                  <col className="request-col-structure" />
+                  <col className="request-col-destination" />
+                  {showPendingAtColumn && <col className="request-col-stage" />}
+                  <col className="request-col-date" />
+                  <col className="request-col-actions" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    {showBulkActions && <th className="request-select-col">Select</th>}
+                    <th>Name</th>
+                    <th>Sector / Lead Executive Office</th>
+                    <th>Destination</th>
+                    {showPendingAtColumn && <th>Pending At</th>}
+                    <th>Travel Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td
+                        className="request-empty-cell"
+                        colSpan={
+                          (showBulkActions ? 6 : 5) + (showPendingAtColumn ? 1 : 0)
+                        }
+                      >
+                        <strong>Loading requests...</strong>
+                        <span>Please wait while the list refreshes.</span>
+                      </td>
+                    </tr>
+                  ) : filteredSubmittedRequests.length === 0 ? (
+                    <tr>
+                      <td
+                        className="request-empty-cell"
+                        colSpan={
+                          (showBulkActions ? 6 : 5) + (showPendingAtColumn ? 1 : 0)
+                        }
+                      >
+                        <strong>No active requests found</strong>
+                        <span>Try another filter or clear the search box.</span>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSubmittedRequests.map((request) => (
+                      <tr
+                        key={request.id}
+                        className="request-clickable-row"
+                        tabIndex={0}
+                        onClick={() => setViewingRequest(request)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setViewingRequest(request);
+                          }
+                        }}
+                      >
+                        {showBulkActions && (
+                          <td
+                            className="request-select-col"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {isBulkActionable(request) ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedActionIds.includes(request.id)}
+                                onChange={() => toggleActionSelection(request.id)}
+                                aria-label={`Select ${request.full_name || "request"} for bulk action`}
+                              />
+                            ) : (
+                              <span className="request-select-placeholder">-</span>
+                            )}
+                          </td>
+                        )}
+
+                        {renderTravelerCell(request)}
+
+                        {renderSectorDepartment(request, "Structure")}
+
+                        {renderWrappedText(request.country, "110px", "Destination")}
+
+                        {showPendingAtColumn && renderCurrentStageCell(request)}
+
+                        {renderTripDate(request, "Travel Date")}
+
+                        <td data-label="Actions" onClick={(event) => event.stopPropagation()}>
+                          {renderRequestActions(request)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showHistoricalSection && (
         <>
           <div
             className="table-header request-history-header"
           >
             <div>
-              <h2>Historical Travel</h2>
+              <h2>
+                Historical Travel
+                <span className="request-history-count">
+                  {historicalRequests.length}
+                  {search ? ` of ${allHistoricalRequests.length}` : ""} total
+                </span>
+              </h2>
               <p>Approved, rejected, and completed requests visible to your role.</p>
             </div>
 
@@ -1302,10 +1662,7 @@ function RequestTable() {
                     <th>Name</th>
                     <th>Sector / Lead Executive Office</th>
                     <th>Destination</th>
-                    <th>Purpose</th>
                     <th>Travel Date</th>
-                    <th>Final Status</th>
-                    <th>Current Stage</th>
                     {canViewPdf && <th>PDF</th>}
                   </tr>
                 </thead>
@@ -1313,36 +1670,45 @@ function RequestTable() {
                 <tbody>
                   {historicalRequests.length === 0 ? (
                     <tr>
-                      <td className="request-empty-cell" colSpan={canViewPdf ? "8" : "7"}>
+                      <td className="request-empty-cell" colSpan={canViewPdf ? "5" : "4"}>
                         <strong>No historical requests found</strong>
                         <span>Try changing the historical travel search text.</span>
                       </td>
                     </tr>
                   ) : (
                     historicalRequests.map((request) => (
-                      <tr key={request.id}>
+                      <tr
+                        key={request.id}
+                        className="request-clickable-row"
+                        tabIndex={0}
+                        onClick={() => setViewingRequest(request)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setViewingRequest(request);
+                          }
+                        }}
+                      >
                         {renderTravelerCell(request)}
 
-                        {renderSectorDepartment(request)}
+                        {renderSectorDepartment(request, "Structure")}
 
-                        {renderWrappedText(request.country, "110px")}
+                        {renderWrappedText(request.country, "110px", "Destination")}
 
-                        {renderWrappedText(request.purpose, "260px")}
-
-                        {renderTripDate(request)}
-
-                        <td className="request-status-cell">{renderFinalStatus(request)}</td>
-
-                        <td>{renderStage(request)}</td>
+                        {renderTripDate(request, "Travel Date")}
 
                         {canViewPdf && (
-                          <td>
-                            <button
-                              className="pdf-btn"
-                              onClick={() => openPdf(request.id)}
-                            >
-                              PDF
-                            </button>
+                          <td data-label="Letter" onClick={(event) => event.stopPropagation()}>
+                            {canGenerateSupportLetter(request) ? (
+                              <button
+                                className="pdf-btn"
+                                onClick={() => openPdf(request.id)}
+                              >
+                                Letter
+                              </button>
+                            ) : (
+                              <span className="request-muted-text">Pending</span>
+                            )}
                           </td>
                         )}
                       </tr>
@@ -1437,7 +1803,18 @@ function RequestTable() {
               </div>
 
               <div>
-                <strong>Sponsor</strong>
+                <strong>Funding Source</strong>
+                <p>
+                  {viewingRequest.funding_source_type === "government"
+                    ? "Government"
+                    : viewingRequest.funding_source_type === "non_government"
+                    ? "Non-government"
+                    : "-"}
+                </p>
+              </div>
+
+              <div>
+                <strong>Source of Fund</strong>
                 <p>{viewingRequest.sponsor || "-"}</p>
               </div>
 
@@ -1459,6 +1836,17 @@ function RequestTable() {
               <div>
                 <strong>PM Office Status</strong>
                 <p>{viewingRequest.foreign_affairs_status || "-"}</p>
+              </div>
+
+              <div>
+                <strong>Protocol PM Decision</strong>
+                <p>
+                  {viewingRequest.pm_approval_required === true
+                    ? "PM Office approval required"
+                    : viewingRequest.pm_approval_required === false
+                    ? "No PM Office approval required"
+                    : "Not decided yet"}
+                </p>
               </div>
 
               <div className="detail-full">
@@ -1541,7 +1929,22 @@ function RequestTable() {
                     setViewingRequest(null);
                   }}
                 >
-                  Edit Request
+                  {canCompleteSavedDraft(viewingRequest)
+                    ? "Complete Draft"
+                    : "Edit Request"}
+                </button>
+              )}
+
+              {canCompleteSavedDraft(viewingRequest) && (
+                <button
+                  className="approve-btn"
+                  disabled={updatingId === viewingRequest.id}
+                  onClick={async () => {
+                    await updateStatus(viewingRequest.id, "submit");
+                    setViewingRequest(null);
+                  }}
+                >
+                  {updatingId === viewingRequest.id ? "Submitting..." : "Submit Draft"}
                 </button>
               )}
 
@@ -1758,18 +2161,42 @@ function RequestTable() {
               </div>
 
               <div>
-                <strong>Sponsor</strong>
-                <input
+                <strong>Funding Source</strong>
+                <select
                   className="ministry-input"
-                  value={editingRequest.sponsor || ""}
+                  value={editingRequest.funding_source_type || ""}
                   onChange={(e) =>
                     setEditingRequest({
                       ...editingRequest,
-                      sponsor: e.target.value,
+                      funding_source_type: e.target.value,
+                      sponsor:
+                        e.target.value === "government"
+                          ? ""
+                          : editingRequest.sponsor || "",
                     })
                   }
-                />
+                >
+                  <option value="">Select funding source</option>
+                  <option value="government">Government</option>
+                  <option value="non_government">Non-government</option>
+                </select>
               </div>
+
+              {editingRequest.funding_source_type === "non_government" && (
+                <div>
+                  <strong>Source of Fund</strong>
+                  <input
+                    className="ministry-input"
+                    value={editingRequest.sponsor || ""}
+                    onChange={(e) =>
+                      setEditingRequest({
+                        ...editingRequest,
+                        sponsor: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              )}
 
               <div>
                 <strong>Passport Number</strong>
@@ -1861,6 +2288,18 @@ function RequestTable() {
               >
                 Save Changes
               </button>
+
+              {canCompleteSavedDraft(editingRequest) && (
+                <button
+                  className="approve-btn"
+                  disabled={updatingId === editingRequest.id}
+                  onClick={saveAndSubmitDraft}
+                >
+                  {updatingId === editingRequest.id
+                    ? "Submitting..."
+                    : "Save and Submit Draft"}
+                </button>
+              )}
 
               {editingRequest.final_status === "amended" && (
                 <button

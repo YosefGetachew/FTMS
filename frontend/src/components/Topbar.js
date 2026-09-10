@@ -1,6 +1,6 @@
+import ministryLogo from '../assets/ministry-logo.png';
 
 function Topbar({ handleLogout }) {
-
   const user =
     JSON.parse(
       localStorage.getItem('user') || '{}'
@@ -20,6 +20,8 @@ function Topbar({ handleLogout }) {
       protocol: 'Protocol',
 
       pm_office: 'PM Office',
+
+      director_general: 'Director General',
 
       office_head:
         'Office Head',
@@ -52,12 +54,20 @@ function Topbar({ handleLogout }) {
 
       <div className="topbar-left">
 
-        <div className="system-title">
-          MoA Foreign Travel Management System
+        <div className="topbar-logo-tile" aria-hidden="true">
+          <img src={ministryLogo} alt="" />
         </div>
 
-        <div className="system-subtitle">
-          Ministry of Agriculture Foreign Travel Registration Platform
+        <div className="topbar-title-block">
+
+          <div className="system-title">
+            MoA Foreign Travel Management System
+          </div>
+
+          <div className="system-subtitle">
+            Ministry of Agriculture Foreign Travel Registration Platform
+          </div>
+
         </div>
 
       </div>

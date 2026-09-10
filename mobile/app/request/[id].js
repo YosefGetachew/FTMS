@@ -2,16 +2,14 @@ import { useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, EmptyState } from '../../src/components/ui';
-import { useAuth } from '../../src/context/AuthContext';
-import { useRequests } from '../../src/hooks/useRequests';
+import { useRequests } from '../../src/context/RequestsContext';
 import { apiOrigin } from '../../src/services/api';
 import { colors } from '../../src/styles/theme';
 import { formatDate, formatStage, getTripDays } from '../../src/utils/format';
 
 export default function RequestDetailScreen() {
   const { id } = useLocalSearchParams();
-  const { user } = useAuth();
-  const { requests } = useRequests(user);
+  const { requests } = useRequests();
 
   const request = useMemo(
     () => requests.find((item) => String(item.id) === String(id)),
