@@ -38,7 +38,24 @@ const formatReportDate = (value) => {
   });
 };
 
+const useViewportWidth = () => {
+  const getWidth = () =>
+    typeof window === 'undefined' ? 1440 : window.innerWidth;
+
+  const [width, setWidth] = useState(getWidth);
+
+  useEffect(() => {
+    const handleResize = () => setWidth(getWidth());
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return width;
+};
+
 function Reports() {
+  const viewportWidth = useViewportWidth();
   const [statusSummary, setStatusSummary] = useState([]);
   const [monthlyRequests, setMonthlyRequests] = useState([]);
   const [fundingSummary, setFundingSummary] = useState([]);
@@ -67,6 +84,15 @@ function Reports() {
   const userRole = getUserRole();
   const canViewReports = REPORT_ROLES.includes(userRole);
   const canViewOfficeMinisterGraphs = canViewReports;
+  const isMobileChart = viewportWidth < 680;
+  const isTabletChart = viewportWidth >= 680 && viewportWidth < 1180;
+  const compactChartHeight = isMobileChart ? 240 : isTabletChart ? 270 : 300;
+  const abroadChartHeight = isMobileChart ? 190 : 205;
+  const monthlyChartHeight = isMobileChart ? 260 : isTabletChart ? 310 : 350;
+  const organizationAxisWidth = isMobileChart ? 106 : 140;
+  const sectorAxisWidth = isMobileChart ? 142 : isTabletChart ? 190 : 230;
+  const affiliateAxisWidth = isMobileChart ? 132 : 190;
+  const fundingAxisWidth = isMobileChart ? 112 : 145;
 
   const fetchReports = useCallback(async () => {
     if (!canViewReports) return;
@@ -185,6 +211,100 @@ function Reports() {
     },
   ];
 
+  const decisionStatusData = useMemo(
+    () => {
+      const total = Math.max(
+        analytics.approved + analytics.rejected + analytics.pending,
+        1
+      );
+
+      return [
+      {
+        name: 'Needs Decision',
+        count: analytics.pending,
+        fill: '#f59e0b',
+        percent: Math.round((analytics.pending / total) * 100),
+        helper: 'Waiting for approval or rejection',
+      },
+      {
+        name: 'Approved',
+        count: analytics.approved,
+        fill: '#16a34a',
+        percent: Math.round((analytics.approved / total) * 100),
+        helper: 'Approved final decisions',
+      },
+      {
+        name: 'Rejected',
+        count: analytics.rejected,
+        fill: '#dc2626',
+        percent: Math.round((analytics.rejected / total) * 100),
+        helper: 'Rejected final decisions',
+      },
+    ];
+    },
+    [analytics.approved, analytics.pending, analytics.rejected]
+  );
+
+  const decisionInsight = useMemo(() => {
+    if (analytics.pending > 0) {
+      return {
+        tone: 'warning',
+        label: 'Attention needed',
+        title: `${analytics.pending} request${analytics.pending === 1 ? '' : 's'} still need a decision`,
+        detail: `${analytics.approved} approved and ${analytics.rejected} rejected so far.`,
+      };
+    }
+
+    return {
+      tone: 'clear',
+      label: 'No pending decision',
+      title: 'All visible requests have a final decision',
+      detail: `${analytics.approved} approved and ${analytics.rejected} rejected.`,
+    };
+  }, [analytics.approved, analytics.pending, analytics.rejected]);
+
+  const leadershipSummaryCards = useMemo(() => {
+    const getChartCount = (items, name) => {
+      const found = items.find((item) => item.name === name);
+      return Number(found?.count || 0);
+    };
+
+    const moaCount = getChartCount(moaVsAffiliateData, 'MoA');
+    const affiliateCount = getChartCount(moaVsAffiliateData, 'Affiliate Institute');
+    const governmentCount = getChartCount(fundingSummary, 'Government');
+    const nonGovernmentCount = getChartCount(fundingSummary, 'Non-government');
+
+    return [
+      {
+        label: 'Decision Needed',
+        value: analytics.pending,
+        detail: `${analytics.approved} approved / ${analytics.rejected} rejected`,
+      },
+      {
+        label: 'Organization Type',
+        value: `${moaCount} MoA`,
+        detail: `${affiliateCount} affiliate institute request(s)`,
+      },
+      {
+        label: 'Funding Source',
+        value: `${governmentCount} government`,
+        detail: `${nonGovernmentCount} non-government request(s)`,
+      },
+      {
+        label: 'Traveling Today',
+        value: currentlyAbroad.total,
+        detail: 'Approved staff currently abroad',
+      },
+    ];
+  }, [
+    analytics.approved,
+    analytics.pending,
+    analytics.rejected,
+    currentlyAbroad.total,
+    fundingSummary,
+    moaVsAffiliateData,
+  ]);
+
   const currentlyAbroadDepartmentChart = useMemo(
     () =>
       currentlyAbroad.byDepartment.map((item) => ({
@@ -243,130 +363,151 @@ function Reports() {
       <div className="reports-section-heading">
         <h2 className="reports-section-title">Staff Currently Abroad</h2>
         <p>
-          Approved staff traveling today, grouped by sector and department.
+          Approved staff traveling today, summarized by sector, department, and traveler.
         </p>
       </div>
 
-      <div className="reports-currently-abroad">
-        <div className="reports-abroad-summary">
-          <span>Staff Abroad Today</span>
-          <strong>{currentlyAbroad.total}</strong>
-          <small>Approved and within active travel dates</small>
-        </div>
-
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>Staff Abroad by Sector</h3>
-            <p>Active approved staff grouped by owning structure.</p>
+      <div className="reports-card reports-abroad-combo-card">
+        <div className="reports-abroad-combo-top">
+          <div className="reports-abroad-focus">
+            <span>Abroad today</span>
+            <strong>{currentlyAbroad.total}</strong>
+            <small>Approved staff within active travel dates</small>
           </div>
 
-          {currentlyAbroad.bySector.length === 0 ? (
-            <p className="reports-empty">No approved staff are abroad today.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={currentlyAbroad.bySector}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="sector"
-                  angle={-15}
-                  textAnchor="end"
-                  interval={0}
-                  height={90}
-                />
-                <YAxis hide allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#0f766e" radius={[6, 6, 0, 0]}>
-                  <LabelList
-                    dataKey="count"
-                    position="top"
-                    fontWeight={700}
-                    fill="#334155"
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+          <div className="reports-abroad-mini-metrics">
+            <div>
+              <span>Sectors</span>
+              <strong>{currentlyAbroad.bySector.length}</strong>
+            </div>
+            <div>
+              <span>Departments</span>
+              <strong>{currentlyAbroadDepartmentChart.length}</strong>
+            </div>
+            <div>
+              <span>Travelers</span>
+              <strong>{currentlyAbroad.travelers.length}</strong>
+            </div>
+          </div>
         </div>
 
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>Staff Abroad by Department</h3>
-            <p>Active approved staff grouped by department or office.</p>
+        <div className="reports-abroad-body">
+          <div className="reports-abroad-chart-grid">
+            <div className="reports-abroad-mini-card">
+              <div className="reports-card-header">
+                <h3>By Sector</h3>
+                <p>Active approved staff grouped by owning structure.</p>
+              </div>
+
+              {currentlyAbroad.bySector.length === 0 ? (
+                <p className="reports-empty compact">No approved staff are abroad today.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={abroadChartHeight}>
+                  <BarChart data={currentlyAbroad.bySector}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="sector"
+                      angle={-15}
+                      textAnchor="end"
+                      interval={0}
+                      height={70}
+                    />
+                    <YAxis hide allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#0f766e" radius={[6, 6, 0, 0]}>
+                      <LabelList
+                        dataKey="count"
+                        position="top"
+                        fontWeight={700}
+                        fill="#334155"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="reports-abroad-mini-card">
+              <div className="reports-card-header">
+                <h3>By Department</h3>
+                <p>Active approved staff grouped by department or office.</p>
+              </div>
+
+              {currentlyAbroadDepartmentChart.length === 0 ? (
+                <p className="reports-empty compact">No department data available today.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={abroadChartHeight}>
+                  <BarChart data={currentlyAbroadDepartmentChart}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="departmentLabel"
+                      angle={-15}
+                      textAnchor="end"
+                      interval={0}
+                      height={70}
+                    />
+                    <YAxis hide allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]}>
+                      <LabelList
+                        dataKey="count"
+                        position="top"
+                        fontWeight={700}
+                        fill="#334155"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </div>
 
-          {currentlyAbroadDepartmentChart.length === 0 ? (
-            <p className="reports-empty">No department data available today.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={currentlyAbroadDepartmentChart}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="departmentLabel"
-                  angle={-15}
-                  textAnchor="end"
-                  interval={0}
-                  height={90}
-                />
-                <YAxis hide allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]}>
-                  <LabelList
-                    dataKey="count"
-                    position="top"
-                    fontWeight={700}
-                    fill="#334155"
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
+          <div className="reports-abroad-list-panel">
+            <div className="reports-card-header">
+              <h3>Current Staff Abroad List</h3>
+              <p>Names, destinations, sectors, departments, and remaining days abroad.</p>
+            </div>
 
-      <div className="reports-card reports-abroad-table-card">
-        <div className="reports-card-header">
-          <h3>Current Staff Abroad List</h3>
-          <p>Names, destinations, sectors, departments, and remaining days abroad.</p>
-        </div>
-
-        {currentlyAbroad.travelers.length === 0 ? (
-          <p className="reports-empty">No approved staff are abroad today.</p>
-        ) : (
-          <div className="reports-table-wrap">
-            <table className="reports-data-table">
-              <thead>
-                <tr>
-                  <th>Staff Member</th>
-                  <th>Sector</th>
-                  <th>Department</th>
-                  <th>Destination</th>
-                  <th>Travel Dates</th>
-                  <th>Days Abroad</th>
-                  <th>Remaining</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentlyAbroad.travelers.map((traveler) => (
-                  <tr key={traveler.id}>
-                    <td>
-                      <strong>{traveler.full_name}</strong>
-                      <span>{traveler.position || '-'}</span>
-                    </td>
-                    <td>{traveler.sector || 'Unassigned'}</td>
-                    <td>{traveler.department || 'Unassigned'}</td>
-                    <td>{traveler.country || '-'}</td>
-                    <td>
-                      {formatReportDate(traveler.start_date)} to{' '}
-                      {formatReportDate(traveler.end_date)}
-                    </td>
-                    <td>{Number(traveler.days_abroad || 0)}</td>
-                    <td>{Number(traveler.days_remaining || 0)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {currentlyAbroad.travelers.length === 0 ? (
+              <p className="reports-empty compact">No approved staff are abroad today.</p>
+            ) : (
+              <div className="reports-table-wrap">
+                <table className="reports-data-table">
+                  <thead>
+                    <tr>
+                      <th>Staff Member</th>
+                      <th>Sector</th>
+                      <th>Department</th>
+                      <th>Destination</th>
+                      <th>Travel Dates</th>
+                      <th>Days Abroad</th>
+                      <th>Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentlyAbroad.travelers.map((traveler) => (
+                      <tr key={traveler.id}>
+                        <td>
+                          <strong>{traveler.full_name}</strong>
+                          <span>{traveler.position || '-'}</span>
+                        </td>
+                        <td>{traveler.sector || 'Unassigned'}</td>
+                        <td>{traveler.department || 'Unassigned'}</td>
+                        <td>{traveler.country || '-'}</td>
+                        <td>
+                          {formatReportDate(traveler.start_date)} to{' '}
+                          {formatReportDate(traveler.end_date)}
+                        </td>
+                        <td>{Number(traveler.days_abroad || 0)}</td>
+                        <td>{Number(traveler.days_remaining || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* ============================================================
@@ -374,142 +515,248 @@ function Reports() {
       ============================================================ */}
 
       {canViewOfficeMinisterGraphs && (
-        <>
+        <section className="reports-leadership-panel">
           <div className="reports-section-heading">
             <h2 className="reports-section-title">
-              Office Head and Minister Report
+              Office Head and Minister Summary
             </h2>
-            <p>Organization-level reports visible to all report-authorized roles.</p>
+            <p>
+              A leadership view of decisions, organization coverage, sector
+              distribution, affiliate requests, and funding source.
+            </p>
           </div>
 
-          <div className="reports-grid">
-            <div className="reports-card">
+          <div className="reports-leadership-summary">
+            {leadershipSummaryCards.map((item) => (
+              <div key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <small>{item.detail}</small>
+              </div>
+            ))}
+          </div>
+
+          <div className="reports-grid reports-leadership-grid">
+            <div className="reports-card reports-status-dashboard reports-leadership-wide">
               <div className="reports-card-header">
-                <h3>MoA vs Affiliate Institute Count</h3>
-                <p>Compares internal MoA and affiliate institution travel requests.</p>
+                <h3>Decision Status</h3>
+                <p>Shows what needs leadership attention and what already has a final decision.</p>
+              </div>
+
+              <div className={`reports-decision-insight ${decisionInsight.tone}`}>
+                <span>{decisionInsight.label}</span>
+                <strong>{decisionInsight.title}</strong>
+                <small>{decisionInsight.detail}</small>
+              </div>
+
+              <div className="reports-status-graphic">
+                {decisionStatusData.map((item) => (
+                  <div className="reports-status-row" key={item.name}>
+                    <div className="reports-status-row-heading">
+                      <span>{item.name}</span>
+                      <strong>{item.count}</strong>
+                    </div>
+                    <div className="reports-status-track">
+                      <i
+                        style={{
+                          width: `${Math.max(item.percent, item.count > 0 ? 6 : 0)}%`,
+                          backgroundColor: item.fill,
+                        }}
+                      />
+                    </div>
+                    <small>{item.helper} · {item.percent}%</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="reports-card reports-compact-chart">
+              <div className="reports-card-header">
+                <h3>Requests by Organization Type</h3>
+                <p>Compares internal MoA and affiliate institute requests.</p>
               </div>
 
               {moaVsAffiliateData.length === 0 ? (
                 <p className="reports-empty">No MoA or Affiliate Institute data available</p>
               ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={moaVsAffiliateData}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                <ResponsiveContainer width="100%" height={compactChartHeight}>
+                  <BarChart
+                    data={moaVsAffiliateData}
+                    layout="vertical"
+                    margin={{ top: 10, right: 42, left: 8, bottom: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
 
-                    <XAxis dataKey="name" />
+                    <XAxis type="number" hide allowDecimals={false} />
 
                     <YAxis
-                      allowDecimals={false}
-                      tickCount={6}
-                      domain={[0, 'auto']}
+                      type="category"
+                      dataKey="name"
+                      width={organizationAxisWidth}
+                      tickLine={false}
+                      axisLine={false}
                     />
 
                     <Tooltip />
-                    <Legend />
 
                     <Bar
                       dataKey="count"
                       fill="#2563eb"
-                      label={{
-                        position: 'top',
-                        fontWeight: 600,
-                        fill: '#334155',
-                      }}
-                    />
+                      radius={[0, 8, 8, 0]}
+                    >
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        fontWeight={800}
+                        fill="#334155"
+                      />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
 
-            <div className="reports-card">
+            <div className="reports-card reports-compact-chart">
               <div className="reports-card-header">
-                <h3>MoA Travelers by Sector</h3>
+                <h3>MoA Requests by Sector</h3>
                 <p>MoA requests grouped by registered structure.</p>
               </div>
 
               {moaSectorData.length === 0 ? (
                 <p className="reports-empty">No MoA sector data available</p>
               ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={moaSectorData}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                <ResponsiveContainer
+                  width="100%"
+                  height={Math.max(
+                    isMobileChart ? 260 : 280,
+                    moaSectorData.length * (isMobileChart ? 42 : 52)
+                  )}
+                >
+                  <BarChart
+                    data={moaSectorData}
+                    layout="vertical"
+                    margin={{ top: 8, right: 44, left: 12, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
 
-                    <XAxis
-                      dataKey="name"
-                      angle={-10}
-                      textAnchor="end"
-                      interval={0}
-                      height={90}
-                    />
+                    <XAxis type="number" hide allowDecimals={false} />
 
                     <YAxis
-                      allowDecimals={false}
-                      tickCount={6}
-                      domain={[0, 'auto']}
+                      type="category"
+                      dataKey="name"
+                      width={sectorAxisWidth}
+                      tickLine={false}
+                      axisLine={false}
                     />
 
                     <Tooltip />
-                    <Legend />
 
                     <Bar
                       dataKey="count"
                       fill="#16a34a"
-                      label={{
-                        position: 'top',
-                        fontWeight: 600,
-                        fill: '#334155',
-                      }}
-                    />
+                      radius={[0, 8, 8, 0]}
+                    >
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        fontWeight={800}
+                        fill="#334155"
+                      />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
 
-            <div className="reports-card">
+            <div className="reports-card reports-compact-chart">
               <div className="reports-card-header">
-                <h3>Affiliate Institute Travelers by Organization</h3>
-                <p>Affiliate institution requests grouped by organization.</p>
+                <h3>Affiliate Requests by Organization</h3>
+                <p>Affiliate institute requests grouped by organization.</p>
               </div>
 
               {affiliateOrganizationData.length === 0 ? (
                 <p className="reports-empty">No affiliate organization data available</p>
               ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={affiliateOrganizationData}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                <ResponsiveContainer width="100%" height={compactChartHeight}>
+                  <BarChart
+                    data={affiliateOrganizationData}
+                    layout="vertical"
+                    margin={{ top: 10, right: 42, left: 8, bottom: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
 
-                    <XAxis
-                      dataKey="name"
-                      angle={-25}
-                      textAnchor="end"
-                      interval={0}
-                      height={90}
-                    />
+                    <XAxis type="number" hide allowDecimals={false} />
 
                     <YAxis
-                      allowDecimals={false}
-                      tickCount={6}
-                      domain={[0, 'auto']}
+                      type="category"
+                      dataKey="name"
+                      width={affiliateAxisWidth}
+                      tickLine={false}
+                      axisLine={false}
                     />
 
                     <Tooltip />
-                    <Legend />
 
                     <Bar
                       dataKey="count"
                       fill="#f97316"
-                      label={{
-                        position: 'top',
-                        fontWeight: 600,
-                        fill: '#334155',
-                      }}
+                      radius={[0, 8, 8, 0]}
+                    >
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        fontWeight={800}
+                        fill="#334155"
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="reports-card reports-compact-chart">
+              <div className="reports-card-header">
+                <h3>Funding Source</h3>
+                <p>Government and non-government funded requests.</p>
+              </div>
+
+              {fundingSummary.length === 0 ? (
+                <p className="reports-empty">No funding data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={compactChartHeight}>
+                  <BarChart
+                    data={fundingSummary}
+                    layout="vertical"
+                    margin={{ top: 10, right: 42, left: 8, bottom: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+
+                    <XAxis type="number" hide allowDecimals={false} />
+
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={fundingAxisWidth}
+                      tickLine={false}
+                      axisLine={false}
                     />
+
+                    <Tooltip />
+
+                    <Bar dataKey="count" fill="#0f766e" radius={[0, 8, 8, 0]}>
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        fontWeight={800}
+                        fill="#334155"
+                      />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
           </div>
-        </>
+        </section>
       )}
 
       {/* ============================================================
@@ -517,39 +764,6 @@ function Reports() {
       ============================================================ */}
 
       <div className="reports-grid">
-        <div className="reports-card">
-          <div className="reports-card-header">
-            <h3>Funding Source Summary</h3>
-            <p>Government vs non-government funding across travel requests.</p>
-          </div>
-
-          {fundingSummary.length === 0 ? (
-            <p className="reports-empty">No funding data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={fundingSummary}>
-                <CartesianGrid strokeDasharray="3 3" />
-
-                <XAxis dataKey="name" />
-
-                <YAxis hide allowDecimals={false} />
-
-                <Tooltip />
-                <Legend />
-
-                <Bar dataKey="count" fill="#0f766e" radius={[6, 6, 0, 0]}>
-                  <LabelList
-                    dataKey="count"
-                    position="top"
-                    fontWeight={700}
-                    fill="#334155"
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
         <div className="reports-card reports-card-wide">
           <div className="reports-card-header">
             <h3>Monthly Travel Trend</h3>
@@ -559,7 +773,7 @@ function Reports() {
           {monthlyRequests.length === 0 ? (
             <p className="reports-empty">No monthly travel data available</p>
           ) : (
-            <ResponsiveContainer width="100%" height={350}>
+            <ResponsiveContainer width="100%" height={monthlyChartHeight}>
               <LineChart data={monthlyRequests}>
                 <CartesianGrid strokeDasharray="3 3" />
 

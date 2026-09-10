@@ -2988,6 +2988,449 @@ table tbody tr:hover {
   }
 }
 
+/* ============================================================
+   SYSTEM-WIDE RESPONSIVE COMPATIBILITY
+   Final layer for desktop, large screen, tablet, and mobile.
+============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+.main-content,
+.dashboard-page,
+.reports-page,
+.request-table-page,
+.travel-status-page,
+.form-container,
+.organization-settings-page,
+.user-management-page,
+.pending-users-page,
+.audit-trail-page,
+.notifications-page,
+.reset-password-page {
+  min-width: 0;
+}
+
+.dashboard-page,
+.reports-page,
+.request-table-page,
+.travel-status-page,
+.organization-settings-page,
+.user-management-page,
+.pending-users-page,
+.audit-trail-page,
+.notifications-page,
+.reset-password-page,
+.form-container {
+  width: min(100%, 1920px);
+  margin-inline: auto;
+}
+
+.dashboard-panel,
+.reports-card,
+.request-section-card,
+.travel-status-request-panel,
+.travel-status-diagram-card,
+.travel-status-detail-card,
+.organization-settings-page .settings-container,
+.user-management-section,
+.pending-users-section,
+.audit-trail-section,
+.notifications-panel,
+.reset-password-card,
+.ministry-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-kpi-grid,
+.dashboard-structure-strip,
+.reports-summary-grid,
+.reports-currently-abroad,
+.reports-grid,
+.reports-leadership-grid,
+.reports-leadership-summary,
+.travel-status-summary-grid,
+.travel-status-layout,
+.travel-status-controls,
+.request-summary-grid,
+.request-table-controls,
+.organization-settings-summary-grid,
+.user-management-grid,
+.pending-users-grid,
+.workflow-approver-grid,
+.affiliate-institution-grid,
+.moa-structure-grid,
+.lead-executive-office-grid {
+  min-width: 0;
+}
+
+.table-container,
+.report-table-container,
+.request-table-scroll,
+.reports-table-wrap,
+.settings-table-wrap,
+.user-management-table-wrap,
+.pending-users-table-wrap,
+.audit-trail-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-container table,
+.report-table-container table,
+.request-table-scroll table,
+.reports-data-table {
+  width: 100%;
+}
+
+.modal-content,
+.large-modal,
+.user-management-modal,
+.edit-modal,
+.affiliate-edit-modal,
+.delete-modal {
+  width: min(96vw, 980px);
+  max-height: min(88vh, 920px);
+  overflow: auto;
+}
+
+@media (min-width: 1600px) {
+  .main-content {
+    padding-inline: 22px;
+  }
+
+  .dashboard-page,
+  .reports-page,
+  .request-table-page,
+  .travel-status-page,
+  .organization-settings-page,
+  .user-management-page,
+  .pending-users-page,
+  .audit-trail-page,
+  .notifications-page,
+  .reset-password-page,
+  .form-container {
+    padding-inline: 24px;
+  }
+
+  .dashboard-kpi-grid,
+  .reports-summary-grid,
+  .request-summary-grid,
+  .travel-status-summary-grid,
+  .organization-settings-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1280px) {
+  .dashboard-page .dashboard-smart-panel,
+  .travel-status-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-page .dashboard-smart-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .reports-currently-abroad,
+  .user-management-grid,
+  .workflow-approver-grid,
+  .affiliate-institution-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .request-table-page table.active-request-table {
+    min-width: 980px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .main-content {
+    padding: 12px;
+  }
+
+  .dashboard-page,
+  .reports-page,
+  .request-table-page,
+  .travel-status-page,
+  .organization-settings-page,
+  .user-management-page,
+  .pending-users-page,
+  .audit-trail-page,
+  .notifications-page,
+  .reset-password-page,
+  .form-container {
+    padding: 14px;
+  }
+
+  .dashboard-header,
+  .reports-hero,
+  .request-table-header,
+  .travel-status-header,
+  .organization-settings-header,
+  .user-management-header,
+  .pending-users-header,
+  .audit-trail-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .dashboard-kpi-grid,
+  .dashboard-structure-strip,
+  .reports-summary-grid,
+  .reports-leadership-summary,
+  .request-summary-grid,
+  .travel-status-summary-grid,
+  .organization-settings-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reports-grid,
+  .reports-leadership-grid,
+  .travel-status-controls,
+  .request-table-controls,
+  .settings-table-filter {
+    grid-template-columns: 1fr;
+  }
+
+  .travel-status-search-field {
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .dashboard-refresh-btn,
+  .reports-hero button,
+  .travel-status-refresh,
+  .request-refresh-btn,
+  .request-history-toggle {
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-size: 13px;
+  }
+
+  .main-content {
+    padding: 8px;
+  }
+
+  .dashboard-page,
+  .reports-page,
+  .request-table-page,
+  .travel-status-page,
+  .organization-settings-page,
+  .user-management-page,
+  .pending-users-page,
+  .audit-trail-page,
+  .notifications-page,
+  .reset-password-page,
+  .form-container {
+    padding: 10px;
+  }
+
+  .dashboard-header h2,
+  .reports-title,
+  .request-table-header h2,
+  .travel-status-header h2,
+  .organization-settings-header h2,
+  .user-management-header h2,
+  .pending-users-header h2,
+  .audit-trail-header h2,
+  .request-hero-content h1 {
+    font-size: clamp(1.12rem, 5vw, 1.35rem);
+    line-height: 1.18;
+  }
+
+  .dashboard-header p,
+  .reports-hero p,
+  .request-table-header p,
+  .travel-status-header p,
+  .organization-settings-header p,
+  .user-management-header p,
+  .pending-users-header p,
+  .audit-trail-header p {
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+
+  .dashboard-kpi-grid,
+  .dashboard-structure-strip,
+  .reports-summary-grid,
+  .reports-leadership-summary,
+  .request-summary-grid,
+  .travel-status-summary-grid,
+  .organization-settings-summary-grid,
+  .dashboard-page .dashboard-smart-metrics,
+  .dashboard-page .dashboard-smart-actions,
+  .reports-status-graphic,
+  .travel-status-filter-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-panel,
+  .reports-card,
+  .request-section-card,
+  .travel-status-request-panel,
+  .travel-status-diagram-card,
+  .travel-status-detail-card,
+  .organization-settings-page .settings-container,
+  .user-management-section,
+  .pending-users-section,
+  .audit-trail-section,
+  .notifications-panel,
+  .reset-password-card,
+  .ministry-card {
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .request-section-header,
+  .reports-card-header,
+  .travel-status-card-header,
+  .dashboard-panel-header,
+  .user-management-section-header,
+  .pending-users-section-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  button,
+  input,
+  select,
+  textarea,
+  .action-icon-btn,
+  .dashboard-action-tile,
+  .travel-status-filter-card {
+    min-height: 40px;
+  }
+
+  .request-action-group,
+  .table-action-group,
+  .workflow-approver-actions,
+  .modal-actions,
+  .request-header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .request-action-group button,
+  .table-action-group button,
+  .workflow-approver-actions button,
+  .modal-actions button,
+  .request-header-actions button {
+    width: 100%;
+  }
+
+  .request-table-page table.active-request-table,
+  .reports-data-table,
+  .table-container table,
+  .report-table-container table {
+    min-width: 720px;
+  }
+
+  .modal-overlay {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .modal-content,
+  .large-modal,
+  .user-management-modal,
+  .edit-modal,
+  .affiliate-edit-modal,
+  .delete-modal {
+    width: 100%;
+    max-height: calc(100vh - 20px);
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: 6px;
+  }
+
+  .dashboard-page,
+  .reports-page,
+  .request-table-page,
+  .travel-status-page,
+  .organization-settings-page,
+  .user-management-page,
+  .pending-users-page,
+  .audit-trail-page,
+  .notifications-page,
+  .reset-password-page,
+  .form-container {
+    padding: 8px 6px;
+  }
+
+  .dashboard-panel,
+  .reports-card,
+  .request-section-card,
+  .travel-status-request-panel,
+  .travel-status-diagram-card,
+  .travel-status-detail-card,
+  .organization-settings-page .settings-container,
+  .user-management-section,
+  .pending-users-section,
+  .audit-trail-section,
+  .notifications-panel,
+  .reset-password-card,
+  .ministry-card,
+  .reports-hero,
+  .dashboard-header {
+    padding: 10px;
+  }
+
+  .dashboard-page .dashboard-smart-panel {
+    padding: 6px;
+  }
+
+  .dashboard-page .dashboard-smart-main,
+  .dashboard-page .dashboard-smart-metrics div,
+  .dashboard-page .dashboard-smart-actions .dashboard-action-tile,
+  .reports-stat-card,
+  .reports-leadership-summary div,
+  .reports-status-row,
+  .travel-status-summary-card,
+  .request-summary-card {
+    padding: 9px;
+  }
+
+  .request-table-page table.active-request-table,
+  .reports-data-table,
+  .table-container table,
+  .report-table-container table {
+    min-width: 640px;
+  }
+
+  .sidebar-menu-btn,
+  .mobile-home-actions button,
+  .mobile-bottom-nav button {
+    min-height: 44px;
+  }
+}
+
 /* Final compact dashboard workspace panel */
 .dashboard-page .dashboard-smart-panel {
   grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1fr) minmax(420px, 1.25fr);

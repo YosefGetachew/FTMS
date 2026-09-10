@@ -1197,7 +1197,7 @@ export default function RequestForm() {
             <div>
               <h1 className="text-2xl font-extrabold text-slate-900">New Travel Request</h1>
               <p className="mt-2 text-sm text-slate-600">
-                Prepare the traveler profile, trip plan, and optional supporting documents for approval routing.
+                Complete the traveler details, trip plan, and documents. FTMS will choose the approval route.
               </p>
             </div>
             <div className="request-hero-badge">
@@ -1250,7 +1250,7 @@ export default function RequestForm() {
             <div>
               <span>Current Step</span>
               <strong>
-                {step === 1 ? "Traveler Information" : step === 2 ? "Trip Details" : "Attachments and Review"}
+                {step === 1 ? "Traveler" : step === 2 ? "Trip" : "Documents"}
               </strong>
             </div>
           </div>
@@ -1263,11 +1263,11 @@ export default function RequestForm() {
                 <SectionHeader
                   eyebrow="Step 1"
                   title="Traveler Information"
-                  subtitle="Select the traveler source, then complete the structure and contact details."
+                  subtitle="Tell us who is traveling and where they belong."
                 />
                 <ChoicePanel
                   title="Request Source"
-                  description="Choose where the traveler belongs before selecting the approval path."
+                  description="Choose the traveler organization."
                 >
                   <Field name="organizationType" label="Organization Type" required touched={touched} errors={errors}>
                     <RadioCards
@@ -1279,12 +1279,12 @@ export default function RequestForm() {
                         {
                           value: "moa",
                           label: "Ministry of Agriculture",
-                          description: "Sector, CEO, Office Head, or Minister structure",
+                          description: "MoA staff and leadership",
                         },
                         {
                           value: "affiliate",
                           label: "Affiliate Institute",
-                          description: "Starts with Director General review",
+                          description: "Affiliate institute traveler",
                         },
                       ]}
                     />
@@ -1296,7 +1296,7 @@ export default function RequestForm() {
                 <>
                   <ChoicePanel
                     title="Traveler Role"
-                    description="This determines whether Lead Executive Office selection is required."
+                    description="Choose the role that best matches this traveler."
                   >
                     <Field name="travelerType" label="Traveler Type" required touched={touched} errors={errors}>
                       <RadioCards
@@ -1312,7 +1312,7 @@ export default function RequestForm() {
                   {formData.travelerType && (
                     <ChoicePanel
                       title="MoA Structure"
-                      description="Select the leadership structure that owns this travel request."
+                      description="Select the office responsible for this traveler."
                     >
                       <Field
                         name="workflowType"
@@ -1338,10 +1338,10 @@ export default function RequestForm() {
                       title={isAdvisorTraveler ? "Advisor Routing" : "Structure Assignment"}
                       description={
                         isAdvisorTraveler
-                          ? "Advisors skip Lead Executive Office selection."
+                          ? "Advisors go directly through their assigned structure."
                           : isProjectTraveler
-                          ? "Select the accountable structure and enter the project coordinator office."
-                          : "Select the exact structure and Lead Executive Office for routing."
+                          ? "Select the project. The structure is linked automatically."
+                          : "Select the structure and lead office."
                       }
                     >
                       <div className="workflow-preview">
